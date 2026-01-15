@@ -1,0 +1,635 @@
+<!DOCTYPE html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>TOPIK II - Master Pro 2026</title>
+    <link rel="manifest" href="manifest.json">
+    <link rel="icon" href="./favicon.svg" type="image/svg+xml">
+    <meta name="theme-color" content="#6c5ce7">
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+    <link rel="stylesheet" href="style.css" />
+    <audio id="music-player-a" loop preload="auto"></audio>
+    <audio id="music-player-b" loop preload="auto"></audio>
+  </head>
+  <body>
+    <!-- Main App Wrapper -->
+    <div id="app-container">
+    
+    <!-- Exit Focus Mode Button -->
+    <button id="exit-focus-btn" class="btn" onclick="toggleFocusMode()">✕ Выйти из фокуса</button>
+
+    <!-- Toast Notifications -->
+    <div
+      id="toast-container"
+      style="
+        position: fixed;
+        right: 16px;
+        bottom: 16px;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        z-index: 20000;
+      "
+    ></div>
+
+    <!-- Critical Error Overlay -->
+    <div id="error-overlay">
+      <div>
+        <h2>Ошибка Supabase</h2>
+        <p id="error-msg"></p>
+        <button class="btn" onclick="location.reload()">Обновить</button>
+      </div>
+    </div>
+
+    <!-- Main Header with XP Bar -->
+    <div id="main-header">
+      <div class="header-top-row">
+        <div id="profile-button" onclick="openProfileModal()">
+          <div class="avatar" id="profile-avatar">👤</div>
+          <div class="profile-info-col">
+            <div id="profile-name">Гость</div>
+            <div class="level-badge-header">LVL <span id="user-level">1</span></div>
+          </div>
+        </div>
+        <div class="header-actions">
+          <button class="coin-pill" onclick="openShopModal()"><span id="coins-count-header">0</span> 💰</button>
+          <button id="header-dark-mode-toggle" class="theme-btn-header" onclick="toggleDarkMode()">☀️</button>
+        </div>
+      </div>
+      <div id="xp-level-widget" onclick="openModal('stats-modal')">
+        <div class="xp-track"><div class="xp-bar-fill" id="xp-fill"></div></div>
+        <div class="xp-label" id="xp-text">0 / 100 XP</div>
+      </div>
+    </div>
+
+    <!-- Main Content Area -->
+    <main id="main-content">
+
+      <!-- Search and Filter Toolbar -->
+      <div class="content-toolbar">
+        <div class="search-container">
+            <input type="text" id="searchInput" class="search-input" placeholder="Поиск..." />
+            <div class="search-icon">🔍</div>
+        </div>
+        <div class="toolbar-actions">
+            <div class="view-toggles">
+                <button class="view-btn active" data-mode="grid" onclick="toggleViewMode('grid')">▦</button>
+                <button class="view-btn" data-mode="list" onclick="toggleViewMode('list')">☰</button>
+            </div>
+            <button class="tool-btn fire-btn" onclick="startDailyChallenge()">🔥</button>
+            <button class="tool-btn" onclick="toggleFilterPanel()">
+              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="21" x2="4" y2="14"></line><line x1="4" y1="10" x2="4" y2="3"></line><line x1="12" y1="21" x2="12" y2="12"></line><line x1="12" y1="8" x2="12" y2="3"></line><line x1="20" y1="21" x2="20" y2="16"></line><line x1="20" y1="12" x2="20" y2="3"></line><line x1="1" y1="14" x2="7" y2="14"></line><line x1="9" y1="8" x2="15" y2="8"></line><line x1="17" y1="16" x2="23" y2="16"></line></svg>
+            </button>
+            <button id="focus-mode-btn" class="tool-btn" onclick="toggleFocusMode(this)">👁️</button>
+        </div>
+      </div>
+
+      <div id="vocabulary-grid" class="grid"></div>
+    </main>
+
+    <!-- Floating Action Button for Adding Words -->
+    <button class="fab-btn" onclick="openModal('add-word-modal')" title="Предложить слово">+</button>
+
+    </div> <!-- End of #app-container -->
+
+    <!-- Filter Panel (hidden by default) -->
+    <div id="filter-panel">
+      <div class="filter-panel-header">
+        <h3>🔍 Фильтры</h3>
+        <button class="btn btn-icon close-modal-btn" onclick="toggleFilterPanel()">✕</button>
+      </div>
+      <div class="filter-panel-content">
+        <div class="filter-section">
+          <div class="filter-label">Тип контента</div>
+          <div class="segment-control" id="type-filters">
+              <button class="segment-btn active" onclick="setTypeFilter('word', this)">📖 Слова</button>
+              <button class="segment-btn" onclick="setTypeFilter('grammar', this)">📘 Грамматика</button>
+          </div>
+        </div>
+        <div class="filter-section">
+          <div class="filter-label">Уровень сложности</div>
+          <div class="filter-chips" id="level-filters">
+              <button class="filter-chip active" data-lvl="all" onclick="setStarFilter('all', this)">Все</button>
+              <button class="filter-chip" data-lvl="★★★" onclick="setStarFilter('★★★', this)">★★★</button>
+              <button class="filter-chip" data-lvl="★★☆" onclick="setStarFilter('★★☆', this)">★★☆</button>
+              <button class="filter-chip" data-lvl="★☆☆" onclick="setStarFilter('★☆☆', this)">★☆☆</button>
+              <button class="filter-chip fav-chip" data-lvl="favorites" onclick="setStarFilter('favorites', this)">❤️ Избранное</button>
+          </div>
+        </div>
+        <div class="filter-section">
+          <div class="filter-label">Тема</div>
+          <div id="topicSelect" class="custom-select-container"></div>
+        </div>
+        <div class="filter-section">
+          <div class="filter-label">Категория</div>
+          <div class="custom-select-wrapper">
+            <select id="categorySelect" class="custom-select" onchange="handleCategoryChange(this.value)">
+                <option value="all">Все категории</option>
+            </select>
+            <div class="select-arrow">▼</div>
+          </div>
+        </div>
+        <div class="filter-section">
+          <div class="filter-label">Сортировка</div>
+          <div class="sort-actions">
+            <button class="sort-btn" onclick="sortByWeakWords()">
+                <span class="sort-icon">💪</span>
+                <span>Слабые</span>
+            </button>
+            <button class="sort-btn" onclick="shuffleWords()">
+                <span class="sort-icon">🔀</span>
+                <span>Перемешать</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div id="filter-panel-overlay" onclick="toggleFilterPanel()"></div>
+
+    <!-- Bottom Navigation Bar -->
+    <div id="bottom-nav">
+      <button class="nav-btn active" onclick="document.getElementById('main-content').scrollTo({top: 0});">
+        <span class="nav-icon">🏠</span><span class="nav-label">Главная</span>
+      </button>
+      <button class="nav-btn" onclick="openModal('quiz-modal')">
+        <span class="nav-icon">🎮</span><span class="nav-label">Тренировка</span>
+      </button>
+      <button class="nav-btn" onclick="openReviewMode()">
+        <span class="nav-icon">🔁</span><span class="nav-label">Повторение</span>
+        <span id="srs-badge" class="badge-count">0</span>
+      </button>
+      <button class="nav-btn" onclick="openModal('stats-modal')">
+        <span class="nav-icon">📊</span><span class="nav-label">Статистика</span>
+      </button>
+      <button class="nav-btn" onclick="openProfileModal()">
+        <span class="nav-icon">👤</span><span class="nav-label">Профиль</span>
+      </button>
+    </div>
+
+    <!-- Stats Modal -->
+    <div
+      id="stats-modal"
+      class="modal"
+      role="dialog"
+      aria-modal="true"
+      tabindex="-1"
+      onclick="if(event.target === this) closeModal('stats-modal')"
+    >
+      <div class="modal-content">
+        <div class="modal-body-container wide">
+          <div class="modal-header">
+            <h3>📊 Статистика</h3>
+            <div class="header-actions">
+              <div id="stats-theme-picker" style="display:flex; gap:6px; margin-right:10px; align-items: center;">
+                  <button class="stats-color-btn" data-color="purple" style="background:#6c5ce7" onclick="this.parentElement.querySelectorAll('.stats-color-btn').forEach(b=>b.classList.remove('active')); this.classList.add('active')"></button>
+                  <button class="stats-color-btn" data-color="blue" style="background:#0984e3" onclick="this.parentElement.querySelectorAll('.stats-color-btn').forEach(b=>b.classList.remove('active')); this.classList.add('active')"></button>
+                  <button class="stats-color-btn" data-color="green" style="background:#00b894" onclick="this.parentElement.querySelectorAll('.stats-color-btn').forEach(b=>b.classList.remove('active')); this.classList.add('active')"></button>
+                  <button class="stats-color-btn" data-color="orange" style="background:#e17055" onclick="this.parentElement.querySelectorAll('.stats-color-btn').forEach(b=>b.classList.remove('active')); this.classList.add('active')"></button>
+                  <button class="stats-color-btn" data-color="pink" style="background:#e84393" onclick="this.parentElement.querySelectorAll('.stats-color-btn').forEach(b=>b.classList.remove('active')); this.classList.add('active')"></button>
+              </div>
+              <button class="btn" onclick="const t=document.querySelector('#stats-theme-picker .active')?.dataset.color; import('./js/ui/ui_share.js').then(m => m.shareStats(t))" style="padding: 6px 12px; font-size: 13px; display: flex; align-items: center; gap: 6px;">📤 Поделиться</button>
+              <button class="btn btn-icon close-modal-btn" onclick="closeModal('stats-modal')">✕</button>
+            </div>
+          </div>
+
+        <div id="stats-strip" class="stats-strip"></div>
+
+        <div id="stats-details"></div>
+        <div id="topic-mastery"></div>
+        <div style="font-weight: 600; margin-top: 20px">
+          📈 Активность (последние 7 дней)
+        </div>
+        <div id="activity-chart" class="chart-container"></div>
+        <div style="font-weight: 600; margin-top: 20px">
+          📅 Изучено слов (активность)
+        </div>
+        <div id="learned-chart" class="chart-container"></div>
+        <div style="font-weight: 600; margin-top: 20px">
+          📉 Прогноз забывания (когда повторять)
+        </div>
+        <div id="forgetting-chart" class="chart-container" style="grid-template-columns: repeat(15, 1fr);"></div>
+        <div style="font-weight: 600; margin-top: 20px">
+          📊 Распределение SRS
+        </div>
+        <div id="srs-distribution-chart" class="chart-container"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Hanja Explorer Modal -->
+    <div
+      id="hanja-modal"
+      class="modal"
+      role="dialog"
+      aria-modal="true"
+      tabindex="-1"
+      onclick="if(event.target === this) closeModal('hanja-modal')"
+    >
+      <div class="modal-content">
+        <div class="modal-header">
+          <h3 id="hanja-title">Hanja</h3>
+          <div class="header-actions">
+            <button class="btn btn-icon close-modal-btn" onclick="closeModal('hanja-modal')">✕</button>
+          </div>
+        </div>
+        <div id="hanja-list" class="hanja-list"></div>
+      </div>
+    </div>
+
+    <!-- Shop Modal -->
+    <div
+      id="shop-modal"
+      class="modal"
+      role="dialog"
+      aria-modal="true"
+      tabindex="-1"
+      onclick="if(event.target === this) closeModal('shop-modal')"
+    >
+      <div class="modal-content">
+        <div class="modal-header">
+          <h3>🛒 Магазин <span id="shop-balance" class="coin-balance">0</span></h3>
+          <div class="header-actions">
+            <button class="btn btn-icon close-modal-btn" onclick="closeModal('shop-modal')">✕</button>
+          </div>
+        </div>
+        <div id="shop-items" class="shop-grid"></div>
+      </div>
+    </div>
+
+    <!-- Grammar Detail Modal -->
+    <div
+      id="grammar-modal"
+      class="modal"
+      role="dialog"
+      aria-modal="true"
+      tabindex="-1"
+      onclick="if(event.target === this) closeModal('grammar-modal')"
+    >
+      <div class="modal-content">
+        <div class="modal-header">
+          <h3 id="grammar-title">Грамматика</h3>
+          <div class="header-actions">
+            <button class="btn btn-icon close-modal-btn" onclick="closeModal('grammar-modal')">✕</button>
+          </div>
+        </div>
+        <div id="grammar-content" class="grammar-content"></div>
+      </div>
+    </div>
+
+    <!-- Achievements Modal -->
+    <div
+      id="achievements-modal"
+      class="modal"
+      role="dialog"
+      aria-modal="true"
+      tabindex="-1"
+      onclick="if(event.target === this) closeModal('achievements-modal')"
+    >
+      <div class="modal-content">
+        <div class="modal-body-container">
+          <div class="modal-header">
+            <h3>🏆 Достижения</h3>
+            <div class="header-actions">
+              <button class="btn btn-icon close-modal-btn" onclick="closeModal('achievements-modal')">✕</button>
+            </div>
+          </div>
+          <div id="achievements-header" style="text-align: center; margin-bottom: 20px;">
+            <!-- Progress will be injected here -->
+          </div>
+        <div id="achievements-list" class="achievement-grid"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Confirm Modal (replaces window.confirm) -->
+    <div
+      id="confirm-modal"
+      class="modal"
+      role="dialog"
+      aria-modal="true"
+      tabindex="-1"
+      onclick="if(event.target === this) closeConfirm()"
+    >
+      <div class="modal-content" style="text-align: center; position: relative;">
+        <button class="btn btn-icon close-modal-btn" onclick="closeConfirm()" style="position: absolute; top: 15px; right: 15px; z-index: 1;">✕</button>
+        <div style="font-size: 20px; font-weight: 800; margin-bottom: 10px;">⚠️ Подтверждение</div>
+        <div style="margin-bottom: 20px; color: var(--text-sub); line-height: 1.5;" id="confirm-message">Вы уверены?</div>
+        <div id="confirm-input-container" style="display: none; margin-bottom: 15px;">
+            <input type="password" id="confirm-password" class="search-box" placeholder="Введите пароль" style="width: 100%; text-align: center;">
+        </div>
+        <div style="display: flex; gap: 10px;">
+          <button class="btn" id="confirm-no" onclick="closeConfirm()" style="flex: 1; justify-content: center;">
+            Отмена
+          </button>
+          <button class="btn btn-quiz" id="confirm-yes" style="flex: 1; justify-content: center;">Подтвердить</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Quiz Modal -->
+    <div
+      id="quiz-modal"
+      class="modal"
+      role="dialog"
+      aria-modal="true"
+      tabindex="-1"
+      onclick="if(event.target === this) closeModal('quiz-modal')"
+    >
+      <div class="modal-content">
+        <div class="modal-body-container">
+          <div class="modal-header">
+            <h3>🎮 Режимы тренировки</h3>
+            <div class="header-actions">
+              <button class="btn btn-icon close-modal-btn" onclick="closeModal('quiz-modal')">✕</button>
+            </div>
+          </div>
+        <input type="text" id="quiz-search-input" class="search-box" placeholder="🔍 Поиск слов для тренировки..." style="width: 100%; margin-bottom: 12px; box-sizing: border-box; padding: 10px 15px;">
+        <div
+          id="quiz-filters"
+          style="margin-bottom: 12px; display: flex; gap: 8px"
+        >
+          <select
+            id="quiz-topic-select"
+            class="search-box"
+            style="padding: 8px; font-size: 13px; flex: 1"
+          ></select>
+          <select
+            id="quiz-category-select"
+            class="search-box"
+            style="padding: 8px; font-size: 13px; flex: 1"
+          ></select>
+        </div>
+        <div
+          id="quiz-difficulty"
+          style="margin-bottom: 12px; display: flex; gap: 8px; flex-wrap: wrap"
+        ></div>
+        <div
+          id="quiz-count"
+          style="margin-bottom: 12px; color: var(--text-sub); font-weight: 600"
+        >
+          Слов: 0
+        </div>
+        <div class="quiz-modes" id="quiz-mode-selector"></div>
+        <div id="quiz-game">
+          <div class="quiz-header">
+            <div id="quiz-score" class="quiz-meta-item">Вопрос 1/10</div>
+            <div class="quiz-progress-container">
+              <div class="quiz-progress-fill" id="quiz-progress-fill"></div>
+            </div>
+            <div id="quiz-timer-display" class="quiz-meta-item">00:00</div>
+          </div>
+          <div class="quiz-body">
+            <div class="quiz-question" id="quiz-q"></div>
+            <div class="quiz-options" id="quiz-opts"></div>
+          </div>
+          <div class="quiz-footer"><button class="btn btn-text-only" onclick="quitQuiz()">Завершить тренировку</button></div>
+        </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Custom PWA Install Banner -->
+    <div id="install-banner" class="install-banner">
+        <div class="install-content">
+            <div class="install-icon">📲</div>
+            <div class="install-text">
+                <div class="install-title">Установите приложение</div>
+                <div class="install-desc">Занимайтесь офлайн и получайте уведомления</div>
+            </div>
+        </div>
+        <div class="install-actions">
+            <button class="btn-text" onclick="dismissInstallBanner()">Позже</button>
+            <button class="btn btn-quiz" onclick="installApp()">Установить</button>
+        </div>
+    </div>
+
+    <!-- Level Up Overlay -->
+    <div id="level-up-overlay" class="level-up-overlay">
+        <div class="level-up-content">
+            <div class="level-up-icon">🎉</div>
+            <div class="level-up-title">НОВЫЙ УРОВЕНЬ!</div>
+            <div class="level-up-val" id="level-up-val">5</div>
+            <button class="btn btn-quiz" onclick="document.getElementById('level-up-overlay').classList.remove('active')">Продолжить</button>
+        </div>
+    </div>
+
+    <!-- Add Word Modal -->
+    <div id="add-word-modal" class="modal" role="dialog" aria-modal="true" tabindex="-1" onclick="if(event.target === this) closeModal('add-word-modal')">
+      <div class="modal-content modal-centered">
+        <div class="modal-header">
+          <h3>➕ Добавить слово</h3>
+          <div class="header-actions">
+            <button class="btn btn-icon close-modal-btn" onclick="closeModal('add-word-modal')">✕</button>
+          </div>
+        </div>
+        <div style="margin-bottom: 20px; color: var(--text-sub); font-size: 14px; line-height: 1.5;">
+          Введите слово на корейском. Наш AI найдет перевод, примеры и озвучку, после чего добавит его в общую базу.
+        </div>
+        <input type="text" id="new-word-input" class="search-box" placeholder="Например: 학교" style="width: 100%; margin-bottom: 20px;">
+        <button class="btn btn-quiz" onclick="import('./js/ui/ui_custom_words.js').then(m => m.submitWordRequest())" style="width: 100%;">Отправить заявку</button>
+      </div>
+    </div>
+
+    <!-- Login Modal -->
+    <div id="login-modal" class="modal" role="dialog" aria-modal="true" tabindex="-1" onclick="if(event.target === this) closeModal('login-modal')">
+      <div class="modal-content modal-centered" style="text-align: center;">
+        <div style="margin: auto; width: 100%; max-width: 400px;">
+        <div class="modal-header">
+          <h3 id="auth-title">🔐 Профиль</h3>
+          <div class="header-actions">
+            <button class="btn btn-icon close-modal-btn" onclick="closeModal('login-modal')">✕</button>
+          </div>
+        </div>
+        <div id="auth-desc" style="margin-bottom: 20px; color: var(--text-sub); font-size: 14px; line-height: 1.5;">
+          Войдите, чтобы сохранить прогресс в облаке и синхронизировать устройства.
+        </div>
+        <input type="email" id="auth-email" class="search-box" placeholder="Email" style="width: 100%; margin-bottom: 10px; box-sizing: border-box;">
+        
+        <div id="auth-password-container" style="position: relative; margin-bottom: 20px;">
+            <input type="password" id="auth-password" class="search-box" placeholder="Пароль" style="width: 100%; box-sizing: border-box; padding-right: 40px;">
+            <span onclick="togglePasswordVisibility()" id="toggle-password-btn" style="position: absolute; right: 12px; top: 50%; transform: translateY(-50%); cursor: pointer; font-size: 18px; user-select: none; opacity: 0.6;" title="Показать пароль">👁️</span>
+            <div class="password-strength"><div id="strength-bar"></div></div>
+        </div>
+        
+        <div id="auth-buttons" style="display: flex; gap: 10px;">
+          <button class="btn btn-quiz" onclick="handleAuth('login')" style="flex: 1;">Войти</button>
+          <button class="btn" onclick="handleAuth('signup')" style="flex: 1;">Регистрация</button>
+        </div>
+        <div id="auth-reset-buttons" style="display: none;">
+            <button class="btn btn-quiz" onclick="handleAuth('reset')" style="width: 100%;">Отправить ссылку</button>
+        </div>
+        
+        <div id="auth-social" style="margin-top: 20px;">
+            <div class="auth-separator"><span>ИЛИ</span></div>
+            <button class="btn google-btn" onclick="signInWithGoogle()">
+                <img src="https://www.svgrepo.com/show/475656/google-color.svg" alt="G">
+                <span>Войти через Google</span>
+            </button>
+        </div>
+
+        <div style="margin-top: 15px; font-size: 13px;">
+          <a href="#" id="auth-forgot-link" onclick="event.preventDefault(); toggleResetMode(true)" style="color: var(--primary); text-decoration: none; border-bottom: 1px dashed var(--primary);">Забыли пароль?</a>
+          <a href="#" id="auth-back-link" onclick="event.preventDefault(); toggleResetMode(false)" style="color: var(--text-sub); text-decoration: none; border-bottom: 1px dashed var(--text-sub); display: none;">← Назад ко входу</a>
+        </div>
+        <div id="auth-error" style="color: var(--danger); margin-top: 15px; font-size: 13px; display: none; font-weight: bold;"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Profile Modal -->
+    <div id="profile-modal" class="modal" role="dialog" aria-modal="true" tabindex="-1" onclick="if(event.target === this) closeModal('profile-modal')">
+      <div class="modal-content modal-centered" style="text-align: center;">
+        <div class="modal-body-container">
+        <div class="modal-header">
+          <h3>⚙️ Настройки</h3>
+          <div class="header-actions">
+            <button class="btn btn-icon close-modal-btn" onclick="closeModal('profile-modal')">✕</button>
+          </div>
+        </div>
+        
+        <!-- User Info -->
+        <div style="text-align: center; margin-bottom: 20px;">
+            <div class="avatar" id="profile-avatar-large" style="width: 80px; height: 80px; font-size: 40px; margin: 0 auto 10px;">👤</div>
+            <div id="profile-email" style="font-weight: 800; font-size: 18px;">guest@example.com</div>
+            <div style="font-size: 13px; color: var(--text-sub); margin-top: 5px;">Студент</div>
+        </div>
+
+        <!-- Appearance -->
+        <div class="settings-group">
+            <div class="setting-item">
+                <span class="setting-icon">🌙</span>
+                <span class="setting-label">Ночной режим</span>
+                <label class="switch">
+                    <input type="checkbox" id="dark-mode-toggle-switch" onchange="toggleDarkMode()">
+                    <span class="slider"></span>
+                </label>
+            </div>
+            <div class="setting-item" style="flex-direction: column; align-items: flex-start; gap: 10px;">
+                <div style="display: flex; align-items: center; width: 100%;">
+                    <span class="setting-icon">🎨</span>
+                    <span class="setting-label">Цветовая тема</span>
+                </div>
+                <div style="display: flex; gap: 12px; width: 100%; justify-content: space-between; padding: 0 5px;">
+                <button class="color-option" data-color="purple" onclick="import('./js/ui/ui_settings.js').then(m => m.setAccentColor('purple'))" style="background: #6c5ce7;"></button>
+                <button class="color-option" data-color="blue" onclick="import('./js/ui/ui_settings.js').then(m => m.setAccentColor('blue'))" style="background: #0984e3;"></button>
+                <button class="color-option" data-color="green" onclick="import('./js/ui/ui_settings.js').then(m => m.setAccentColor('green'))" style="background: #00b894;"></button>
+                <button class="color-option" data-color="orange" onclick="import('./js/ui/ui_settings.js').then(m => m.setAccentColor('orange'))" style="background: #e17055;"></button>
+                <button class="color-option" data-color="pink" onclick="import('./js/ui/ui_settings.js').then(m => m.setAccentColor('pink'))" style="background: #e84393;"></button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Learning -->
+        <div class="settings-group">
+            <div class="setting-item">
+                <span class="setting-icon">🉐</span>
+                <span class="setting-label">Показывать Hanja</span>
+                <label class="switch">
+                  <input type="checkbox" id="hanja-setting-check" onchange="toggleHanjaMode(this)">
+                  <span class="slider"></span>
+                </label>
+            </div>
+            <div class="setting-item">
+                <span class="setting-icon">🗣️</span>
+                <span class="setting-label">Голос озвучки</span>
+                <button id="voice-setting-btn" class="btn" onclick="toggleVoice(this)" style="padding: 6px 12px; font-size: 13px;">👩 Женский</button>
+            </div>
+            <div class="setting-item" style="flex-direction: column; align-items: flex-start; gap: 10px;">
+                <div style="display: flex; align-items: center; width: 100%;">
+                    <span class="setting-icon">⏩</span>
+                    <span class="setting-label">Скорость озвучки</span>
+                    <span id="speed-val" style="font-weight: bold; font-size: 14px; color: var(--primary);">1.0x</span>
+                </div>
+                <div style="display: flex; align-items: center; gap: 10px; width: 100%;">
+                    <span style="font-size: 14px;">🐢</span>
+                    <input type="range" id="speed-slider" min="0.5" max="1.5" step="0.1" value="0.9" style="flex: 1;" oninput="import('./js/ui/ui_settings.js').then(m => m.setAudioSpeed(this.value))">
+                    <span style="font-size: 14px;">🐇</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Audio -->
+        <div class="settings-group">
+            <div class="setting-item">
+                <span class="setting-icon">🎵</span>
+                <span class="setting-label">Фоновая музыка</span>
+                <label class="switch">
+                  <input type="checkbox" id="background-music-check" onchange="toggleBackgroundMusic(this)">
+                  <span class="slider"></span>
+                </label>
+            </div>
+            <div class="setting-item" style="padding-top: 5px;">
+                <span class="setting-icon">🔊</span>
+                <input type="range" id="background-music-volume-slider" min="0" max="1" step="0.05" value="0.3" style="flex: 1; margin: 0 10px;" oninput="window.setBackgroundMusicVolume(this.value)">
+                <span id="background-music-volume-val" style="font-weight: bold; font-size: 13px; width: 35px; text-align: right;">30%</span>
+            </div>
+        </div>
+        
+        <!-- System -->
+        <div class="settings-group">
+            <button id="install-app-btn" class="btn" onclick="installApp()" style="width: calc(100% - 30px); margin: 15px; background: var(--primary); color: white; display: none; justify-content: center;">📲 Установить приложение</button>
+            <div class="setting-item">
+                <span class="setting-icon">🔄</span>
+                <span class="setting-label">Автообновление</span>
+                <label class="switch">
+                  <input type="checkbox" id="auto-update-check" onchange="toggleAutoUpdate(this)">
+                  <span class="slider"></span>
+                </label>
+            </div>
+            <div class="setting-item" onclick="openModal('achievements-modal')" style="cursor: pointer;">
+                <span class="setting-icon">🏆</span>
+                <span class="setting-label">Достижения</span>
+                <span style="color: var(--text-sub);">›</span>
+            </div>
+        </div>
+
+        <!-- Data Actions -->
+        <div class="settings-group">
+            <div class="setting-item" onclick="exportProgress()" style="cursor: pointer;">
+                <span class="setting-icon">💾</span>
+                <span class="setting-label">Экспорт данных</span>
+            </div>
+            <div class="setting-item" onclick="document.getElementById('import-file').click()" style="cursor: pointer;">
+                <span class="setting-icon">📂</span>
+                <span class="setting-label">Импорт данных</span>
+            </div>
+            <div class="setting-item" onclick="clearData()" style="cursor: pointer;">
+                <span class="setting-icon">🗑</span>
+                <span class="setting-label" style="color: var(--danger);">Сброс прогресса</span>
+            </div>
+        </div>
+
+        <!-- Account -->
+        <div class="settings-group">
+            <div class="setting-item" onclick="handleLogout()" style="cursor: pointer;">
+                <span class="setting-icon">🚪</span>
+                <span class="setting-label" style="color: var(--danger);">Выйти из аккаунта</span>
+            </div>
+        </div>
+        
+        <!-- Password Change -->
+        <div class="settings-group">
+             <div class="setting-item" style="flex-direction: column; align-items: stretch;">
+                <div style="font-size: 13px; font-weight: 600; margin-bottom: 10px;">🔐 Смена пароля</div>
+                <div style="display: flex; gap: 10px;">
+                    <input type="password" id="new-password" class="search-box" placeholder="Новый пароль" style="flex: 1; padding: 8px 12px; font-size: 14px;">
+                    <button class="btn" onclick="handleChangePassword()" style="padding: 8px 12px;">OK</button>
+                </div>
+                <div class="password-strength" id="new-strength-container" style="margin-top: 5px;"><div id="new-strength-bar"></div></div>
+             </div>
+        </div>
+
+        <div id="app-version" style="text-align: center; font-size: 11px; color: var(--text-sub); margin-top: 10px; opacity: 0.5;"></div>
+        </div>
+      </div>
+    </div>
+
+    <div id="scroll-indicator"></div>
+
+    <input type="file" id="import-file" style="display: none" onchange="importProgress(event)" />
+
+    <script type="module" src="js/app.js"></script>
+  </body>
+</html>
