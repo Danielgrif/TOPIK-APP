@@ -168,7 +168,7 @@ export const QuizStrategies = {
                 txt.innerHTML += `<br><span style="font-size:14px; color:var(--text-sub); font-weight:normal;">(${word.my_notes.replace(/</g, "&lt;")})</span>`;
             }
             qEl.appendChild(txt);
-            if (this._renderInput) this._renderInput(word, container, onAnswer);
+            if (typeof this._renderInput === 'function') this._renderInput(word, container, onAnswer);
         },
         _renderInput(word, container, onAnswer) {
             container.innerHTML = '';
@@ -193,7 +193,7 @@ export const QuizStrategies = {
                     container.appendChild(feedback); autoAdvance = false;
                 }
                 onAnswer(isRight, autoAdvance);
-                if (!autoAdvance) this._addNextBtn(container, onAnswer);
+                if (!autoAdvance && this._addNextBtn) this._addNextBtn(container, onAnswer);
             };
             input.addEventListener('keydown', (e) => { if (e.key === 'Enter') check(); });
             btn.onclick = check;
@@ -237,7 +237,7 @@ export const QuizStrategies = {
 
                 const feedback = document.createElement('div');
                 feedback.className = 'essay-feedback';
-                const diffHtml = generateDiffHtml(textarea.value, word.example_kr);
+                const diffHtml = generateDiffHtml(textarea.value, word.example_kr || '');
                 const audioBtn = word.example_audio ? `<button class="speak-btn" onclick="window.speak(null, '${word.example_audio}')">🔊</button>` : '';
                 feedback.innerHTML = `
                     <div style="font-weight:bold; margin-bottom:5px;">Правильный ответ:</div>
@@ -324,7 +324,7 @@ export const QuizStrategies = {
             const url = (currentVoice === 'male' && word.audio_male) ? word.audio_male : word.audio_url;
             const play = () => {
                 btn.style.transform = 'scale(0.95)'; setTimeout(() => btn.style.transform = '', 150);
-                speak(word.word_kr, url);
+                speak(word.word_kr, url || null);
             };
             btn.onclick = play;
             
@@ -358,7 +358,7 @@ export const QuizStrategies = {
             const dialogueText = qEl.querySelector('#dialogue-text');
             if (dialogueText) dialogueText.textContent = maskedText;
 
-            setTimeout(() => speak('', word.example_audio), 400);
+            setTimeout(() => speak('', word.example_audio || null), 400);
             QuizStrategies['multiple-choice'].render(word, container, onAnswer, qEl);
         }
     },
@@ -411,7 +411,7 @@ export const QuizStrategies = {
                                 feedback.innerHTML = `<div style="font-weight:bold; margin-bottom:5px;">Правильный ответ:</div><div style="font-size:18px; display:flex; align-items:center;"><span>${sentence}</span> ${audioBtn}</div>`;
                                 container.appendChild(feedback);
                             }
-                            onAnswer(isCorrect, false); QuizStrategies.typing._addNextBtn(container, onAnswer); } 
+                            onAnswer(isCorrect, false); if (QuizStrategies.typing._addNextBtn) QuizStrategies.typing._addNextBtn(container, onAnswer); } 
                     }; 
                     if (sourceEl) sourceEl.appendChild(chip); 
                 });
@@ -430,7 +430,7 @@ export const QuizStrategies = {
             container.innerHTML = '';
             
             // Находим группу похожих слов для текущего слова
-            const allGroups = findConfusingWords();
+            const allGroups = /** @type {Array<Array<Word>>} */ (findConfusingWords());
             const group = allGroups.find(g => g.find(w => w.id === word.id)) || [word];
             
             // Используем похожие слова как варианты ответа
@@ -530,7 +530,7 @@ export const QuizStrategies = {
             qEl.innerHTML = `<div style="font-size:18px; margin-bottom:15px;">Соедините слово с переводом</div>`;
             container.innerHTML = '';
             
-            const pairs = findAssociations();
+            const pairs = /** @type {Array<{left: Word, right: Word}>} */ (findAssociations());
             if (pairs.length < 5) {
                 qEl.innerText = "Недостаточно слов для этого режима.";
                 setTimeout(() => quitQuiz(), 1500);

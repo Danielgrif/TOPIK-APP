@@ -257,9 +257,9 @@ export async function loadFromSupabase(user) {
                     correct: row.correct,
                     lastReview: row.last_review ? new Date(row.last_review).getTime() : null, // Convert ISO to timestamp
                     sm2: {
-                        interval: row.sm2_interval,
-                        repetitions: row.sm2_repetitions,
-                        ef: row.sm2_ef,
+                        interval: row.sm2_interval ?? 0,
+                        repetitions: row.sm2_repetitions ?? 0,
+                        ef: row.sm2_ef ?? 2.5,
                         nextReview: row.sm2_next_review ? new Date(row.sm2_next_review).getTime() : null // Convert ISO to timestamp
                     }
                 };

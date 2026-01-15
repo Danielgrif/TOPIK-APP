@@ -43,6 +43,7 @@ export function checkPronunciation(correctWord, btn, onResult) {
     showToast('🎤 Говорите...');
 
     rec.onresult = (event) => {
+        if (!event.results || !event.results[0] || !event.results[0][0]) return;
         const spokenText = event.results[0][0].transcript.trim();
         
         const normalize = (s) => s.replace(/[.,\/#!$%\^&\*;:{}=\-_`~()]/g,"").replace(/\s+/g, "");

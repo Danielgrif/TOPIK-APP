@@ -12,7 +12,7 @@ const THEME_COLORS = {
 };
 
 /**
- * @param {HTMLInputElement} el
+ * @param {HTMLInputElement} [el]
  */
 export function toggleHanjaMode(el) { 
     const s = /** @type {any} */ (state);
@@ -24,7 +24,7 @@ export function toggleHanjaMode(el) {
 }
 
 /**
- * @param {HTMLElement} btn
+ * @param {HTMLElement} [btn]
  */
 export function toggleVoice(btn) { 
     const s = /** @type {any} */ (state);
@@ -113,7 +113,7 @@ export function applyAccentColor() {
 }
 
 /**
- * @param {HTMLInputElement} el
+ * @param {HTMLInputElement} [el]
  */
 export function toggleFocusMode(el) {
     const s = /** @type {any} */ (state);
@@ -185,32 +185,35 @@ let volumeAnimationInterval = null; // Единый интервал для вс
  */
 export function applyBackgroundMusic(forcePlay = false) {
     const s = /** @type {any} */ (state);
+    const playerA = /** @type {HTMLAudioElement | null} */ (document.getElementById('music-player-a'));
+    const playerB = /** @type {HTMLAudioElement | null} */ (document.getElementById('music-player-b'));
+    if (!playerA || !playerB) return;
+
+    const activePlayer = activePlayerId === 'a' ? playerA : playerB;
+    const inactivePlayer = activePlayerId === 'a' ? playerB : playerA;
+
     // Плавное включение громкости при первом взаимодействии
     if (!hasInteracted && s.backgroundMusicEnabled && forcePlay) {
         hasInteracted = true; // Флаг, чтобы это сработало только один раз
-        const activePlayer = /** @type {HTMLAudioElement} */ (document.getElementById(activePlayerId === 'a' ? 'music-player-a' : 'music-player-b'));
-        if (activePlayer && activePlayer.volume < s.backgroundMusicVolume) {
+        if (activePlayer.volume < s.backgroundMusicVolume) {
             crossfade(activePlayer, null, s.backgroundMusicVolume, activePlayer.volume);
         }
     }
-    const playerA = /** @type {HTMLAudioElement} */ (document.getElementById('music-player-a'));
-    const playerB = /** @type {HTMLAudioElement} */ (document.getElementById('music-player-b'));
-    if (!playerA || !playerB) return;
 
     // Определяем, какой трек должен играть
     let trackId = 'default';
-    const isQuizActive = document.getElementById('quiz-game') && document.getElementById('quiz-game').style.display === 'block';
+    const quizGame = document.getElementById('quiz-game');
+    const isQuizActive = quizGame && quizGame.style.display === 'block';
 
     if (isQuizActive) {
         trackId = 'quiz';
     }
     
-    const targetTrackFilename = s.MUSIC_TRACKS.find((/** @type {any} */ t) => t.id === trackId)?.filename;
-    if (!targetTrackFilename) return console.warn(`Музыкальный трек для ID "${trackId}" не найден.`);
+    const targetTrack = s.MUSIC_TRACKS.find((/** @type {any} */ t) => t.id === trackId);
+    if (!targetTrack) return console.warn(`Музыкальный трек для ID "${trackId}" не найден.`);
+    const targetTrackFilename = targetTrack.filename;
     
     const targetSrc = `./audio/${targetTrackFilename}`;
-    const activePlayer = activePlayerId === 'a' ? playerA : playerB;
-    const inactivePlayer = activePlayerId === 'a' ? playerB : playerA;
 
     // Если музыка выключена, просто останавливаем оба плеера
     if (!s.backgroundMusicEnabled && !forcePlay) {
@@ -310,7 +313,7 @@ export function setBackgroundMusicVolume(val) {
  */
 export function duckBackgroundMusic(duck) {
     const s = /** @type {any} */ (state);
-    const activePlayer = /** @type {HTMLAudioElement} */ (document.getElementById(activePlayerId === 'a' ? 'music-player-a' : 'music-player-b'));
+    const activePlayer = /** @type {HTMLAudioElement | null} */ (document.getElementById(activePlayerId === 'a' ? 'music-player-a' : 'music-player-b'));
     if (!activePlayer || !s.backgroundMusicEnabled || activePlayer.paused) return;
 
     if (volumeAnimationInterval) {

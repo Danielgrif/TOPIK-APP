@@ -44,7 +44,7 @@ export const Scheduler = {
      * @returns {ReviewResult}
      */
     calculate(grade, item, lastReviewTime = null) {
-        let { interval, repetitions, ef } = item;
+        let { interval = 0, repetitions = 0, ef = 2.5 } = item || {};
 
         // Clamp grade to valid range 0-5
         grade = Math.max(0, Math.min(5, grade));

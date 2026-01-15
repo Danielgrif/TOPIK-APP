@@ -54,6 +54,7 @@ export const state = {
     audioSpeed: Number(localStorage.getItem('audio_speed_v1')) || 0.9,
     darkMode: localStorage.getItem('dark_mode_v1') === 'true',
     focusMode: localStorage.getItem('focus_mode_v1') === 'true',
+    zenMode: localStorage.getItem('zen_mode_v1') === 'true',
     viewMode: localStorage.getItem('view_mode_v1') || 'grid',
     themeColor: localStorage.getItem('theme_color_v1') || 'purple', // purple, blue, green, orange, pink
     autoUpdate: localStorage.getItem('auto_update_v1') !== 'false', // По умолчанию включено
@@ -93,10 +94,14 @@ try {
     state.mistakes = new Set(load('mistakes_v5', []));
     state.favorites = new Set(load('favorites_v5', []));
     state.wordHistory = load('word_history_v5', state.wordHistory);
-    state.streak = load('streak_v5', state.streak);
+    state.streak = load('streak_v5', { count: 0, lastDate: null });
+    if (state.streak.count === undefined) state.streak.count = 0;
+    if (state.streak.lastDate === undefined) state.streak.lastDate = null;
     state.sessions = load('sessions_v5', state.sessions);
     state.achievements = load('achievements_v5', state.achievements);
-    state.dailyChallenge = load('daily_challenge_v1', state.dailyChallenge);
+    state.dailyChallenge = load('daily_challenge_v1', { lastDate: null, completed: false, streak: 0 });
+    if (state.dailyChallenge.lastDate === undefined) state.dailyChallenge.lastDate = null;
+    if (state.dailyChallenge.completed === undefined) state.dailyChallenge.completed = false;
     if (state.dailyChallenge.streak === undefined) state.dailyChallenge.streak = 0; // Миграция для старых данных
     state.searchHistory = load('search_history_v1', []);
     state.studyGoal = load('study_goal_v1', { type: 'words', target: 10 });

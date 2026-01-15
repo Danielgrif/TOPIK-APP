@@ -18,6 +18,10 @@ export async function shareStats(themeOverride) {
     
     const canvas = document.createElement('canvas');
     const ctx = canvas.getContext('2d');
+    if (!ctx) {
+        showToast('❌ Ошибка: Не удалось создать холст для изображения.');
+        return;
+    }
     // Увеличиваем разрешение в 2 раза для четкости (Retina/High DPI)
     const width = 1600;
     const height = 1200;

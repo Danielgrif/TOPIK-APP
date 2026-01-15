@@ -36,8 +36,10 @@ function renderOnboarding() {
         `;
         document.body.appendChild(overlay);
         
-        document.getElementById('ob-skip-btn').onclick = finishOnboarding;
-        document.getElementById('ob-next-btn').onclick = nextOnboardingStep;
+        const skipBtn = document.getElementById('ob-skip-btn');
+        if (skipBtn) skipBtn.onclick = finishOnboarding;
+        const nextBtn = document.getElementById('ob-next-btn');
+        if (nextBtn) nextBtn.onclick = nextOnboardingStep;
     }
     
     currentStep = 0;

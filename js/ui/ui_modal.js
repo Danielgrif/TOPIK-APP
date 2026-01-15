@@ -1,48 +1,54 @@
 import { state } from '../core/state.js';
 import { updateVoiceUI } from './ui_settings.js';
 
+/** @type {HTMLElement | null} */
 let lastFocusedElement = null;
+/** @type {((e: Event) => void) | null} */
 let _confirmHandler = null;
 
+/** @param {string} modalId */
 export function openModal(modalId) {
     const modalEl = document.getElementById(modalId);
     if (!modalEl) return;
     
+    const s = /** @type {any} */ (state);
+    
     // Init speed slider if settings modal
     if (modalId === 'profile-modal') {
-        const slider = document.getElementById('speed-slider');
+        const slider = /** @type {HTMLInputElement} */ (document.getElementById('speed-slider'));
         if (slider) { 
-            slider.value = state.audioSpeed || 0.9; 
-            document.getElementById('speed-val').textContent = slider.value + 'x'; 
+            slider.value = String(s.audioSpeed || 0.9); 
+            const speedVal = document.getElementById('speed-val');
+            if (speedVal) speedVal.textContent = slider.value + 'x'; 
         }
-        const hanjaCheck = document.getElementById('hanja-setting-check');
-        if (hanjaCheck) hanjaCheck.checked = state.hanjaMode;
-        const darkModeCheck = document.getElementById('dark-mode-toggle-switch');
-        if (darkModeCheck) darkModeCheck.checked = state.darkMode;
-        const autoUpdateCheck = document.getElementById('auto-update-check');
-        if (autoUpdateCheck) autoUpdateCheck.checked = state.autoUpdate;
+        const hanjaCheck = /** @type {HTMLInputElement} */ (document.getElementById('hanja-setting-check'));
+        if (hanjaCheck) hanjaCheck.checked = s.hanjaMode;
+        const darkModeCheck = /** @type {HTMLInputElement} */ (document.getElementById('dark-mode-toggle-switch'));
+        if (darkModeCheck) darkModeCheck.checked = s.darkMode;
+        const autoUpdateCheck = /** @type {HTMLInputElement} */ (document.getElementById('auto-update-check'));
+        if (autoUpdateCheck) autoUpdateCheck.checked = s.autoUpdate;
         
-        const musicCheck = document.getElementById('background-music-check');
-        if (musicCheck) musicCheck.checked = state.backgroundMusicEnabled;
-        const musicVolumeSlider = document.getElementById('background-music-volume-slider');
-        if (musicVolumeSlider) musicVolumeSlider.value = state.backgroundMusicVolume;
+        const musicCheck = /** @type {HTMLInputElement} */ (document.getElementById('background-music-check'));
+        if (musicCheck) musicCheck.checked = s.backgroundMusicEnabled;
+        const musicVolumeSlider = /** @type {HTMLInputElement} */ (document.getElementById('background-music-volume-slider'));
+        if (musicVolumeSlider) musicVolumeSlider.value = String(s.backgroundMusicVolume);
         
         // FIX: Не вызываем setBackgroundMusicVolume, так как это триггерит логику аудио и сохранение.
         // Просто обновляем текст.
         const volText = document.getElementById('background-music-volume-val');
-        if (volText) volText.textContent = `${Math.round(state.backgroundMusicVolume * 100)}%`;
+        if (volText) volText.textContent = `${Math.round(s.backgroundMusicVolume * 100)}%`;
         
         updateVoiceUI();
     }
     
-    try { lastFocusedElement = document.activeElement; } catch (e) { lastFocusedElement = null; }
+    try { lastFocusedElement = /** @type {HTMLElement} */ (document.activeElement); } catch (e) { lastFocusedElement = null; }
     if (modalId === 'stats-modal') {
         // Init stats color picker based on current theme
         const picker = document.getElementById('stats-theme-picker');
         if (picker) {
             const btns = picker.querySelectorAll('.stats-color-btn');
             btns.forEach(b => b.classList.remove('active'));
-            const activeBtn = picker.querySelector(`[data-color="${state.themeColor}"]`) || btns[0];
+            const activeBtn = picker.querySelector(`[data-color="${s.themeColor}"]`) || btns[0];
             if (activeBtn) activeBtn.classList.add('active');
         }
         import('../core/stats.js').then(m => {
@@ -52,7 +58,8 @@ export function openModal(modalId) {
             m.renderActivityChart();
             m.renderLearnedChart();
             m.renderForgettingCurve();
-            m.renderSRSDistributionChart();
+            // @ts-ignore
+            if (typeof m.renderSRSDistributionChart === 'function') m.renderSRSDistributionChart();
         });
     }
     if (modalId === 'achievements-modal') {
@@ -67,6 +74,7 @@ export function openModal(modalId) {
     modalEl.classList.add('active');
 }
 
+/** @param {string} modalId */
 export function closeModal(modalId) {
     const modalEl = document.getElementById(modalId);
     if (modalEl) {
@@ -83,7 +91,10 @@ export function closeModal(modalId) {
         if (modalId === 'stats-modal') {
              // Также очищаем обработчик подтверждения на всякий случай, если он был открыт поверх
              if (_confirmHandler) {
-                try { document.getElementById('confirm-yes').removeEventListener('click', _confirmHandler); } catch(e){}
+                try { 
+                    const yesBtn = document.getElementById('confirm-yes');
+                    if (yesBtn) yesBtn.removeEventListener('click', /** @type {EventListener} */ (_confirmHandler)); 
+                } catch(e){}
                 _confirmHandler = null;
              }
              import('../core/stats.js').then(m => m.renderDetailedStats());
@@ -92,6 +103,11 @@ export function closeModal(modalId) {
     try { if (lastFocusedElement && typeof lastFocusedElement.focus === 'function') lastFocusedElement.focus(); } catch (e) {}
 }
 
+/**
+ * @param {string} message
+ * @param {Function} onYes
+ * @param {{showInput?: boolean, inputPlaceholder?: string, onValidate?: (val: string) => Promise<boolean>}} options
+ */
 export function openConfirm(message, onYes, options = {}) {
     const modal = document.getElementById('confirm-modal');
     if (!modal) { if (typeof onYes === 'function') onYes(); return; }
@@ -99,7 +115,7 @@ export function openConfirm(message, onYes, options = {}) {
     const msgEl = document.getElementById('confirm-message');
     const yesBtn = document.getElementById('confirm-yes');
     const inputContainer = document.getElementById('confirm-input-container');
-    const input = document.getElementById('confirm-password');
+    const input = /** @type {HTMLInputElement} */ (document.getElementById('confirm-password'));
 
     if (msgEl) msgEl.textContent = message || 'Вы уверены?';
     
@@ -108,7 +124,7 @@ export function openConfirm(message, onYes, options = {}) {
             inputContainer.style.display = 'block';
             input.value = '';
             input.placeholder = options.inputPlaceholder || '';
-            input.onkeydown = (e) => { if (e.key === 'Enter') yesBtn.click(); };
+            input.onkeydown = (e) => { if (e.key === 'Enter' && yesBtn) yesBtn.click(); };
             setTimeout(() => input.focus(), 100);
         } else {
             inputContainer.style.display = 'none';
@@ -119,12 +135,14 @@ export function openConfirm(message, onYes, options = {}) {
     if (yesBtn) {
         // Удаляем старый обработчик, если он остался
         if (_confirmHandler) {
-            yesBtn.removeEventListener('click', _confirmHandler);
+            yesBtn.removeEventListener('click', /** @type {EventListener} */ (_confirmHandler));
             _confirmHandler = null;
         }
+        // @ts-ignore
         _confirmHandler = async () => { 
             if (options.showInput && options.onValidate) {
-                const isValid = await options.onValidate(input.value);
+                const val = input ? input.value : '';
+                const isValid = await options.onValidate(val);
                 if (!isValid) {
                     if (input) { input.classList.add('shake'); setTimeout(() => input.classList.remove('shake'), 500); }
                     return;
@@ -133,7 +151,7 @@ export function openConfirm(message, onYes, options = {}) {
             closeConfirm(); 
             if (typeof onYes === 'function') onYes(); 
         };
-        yesBtn.addEventListener('click', _confirmHandler);
+        yesBtn.addEventListener('click', /** @type {EventListener} */ (_confirmHandler));
     }
     modal.classList.add('active');
 }
@@ -143,5 +161,5 @@ export function closeConfirm() {
     if (!modal) return;
     modal.classList.remove('active');
     const yesBtn = document.getElementById('confirm-yes');
-    if (yesBtn && _confirmHandler) { try { yesBtn.removeEventListener('click', _confirmHandler); } catch(e){} _confirmHandler = null; }
+    if (yesBtn && _confirmHandler) { try { yesBtn.removeEventListener('click', /** @type {EventListener} */ (_confirmHandler)); } catch(e){} _confirmHandler = null; }
 }

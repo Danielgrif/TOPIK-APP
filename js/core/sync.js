@@ -19,7 +19,6 @@ async function _syncGlobalStats() {
             survival_record: state.userStats.survivalRecord || 0,
             coins: state.userStats.coins || 0,
             streak_freeze: state.userStats.streakFreeze || 0,
-            streak_count: state.streak ? state.streak.count : 0,
             achievements: state.achievements || [],
             sessions: state.sessions || [],
             settings: {
@@ -31,7 +30,7 @@ async function _syncGlobalStats() {
                 studyGoal: state.studyGoal,
                 lastDailyReward: state.userStats.lastDailyReward,
                 themeColor: state.themeColor,
-                streakLastDate: state.streak ? state.streak.lastDate : null
+                streakLastDate: state.streak.lastDate
             },
             updated_at: new Date().toISOString()
         };

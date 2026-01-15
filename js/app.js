@@ -112,8 +112,11 @@ async function init() {
     const searchInput = document.getElementById('searchInput');
     if (searchInput) {
         searchInput.addEventListener('input', debounce((e) => {
-            const val = e.target.value.trim().toLowerCase();
-            searchWorker.postMessage({ type: 'SEARCH', query: val });
+            const target = e.target;
+            if (target instanceof HTMLInputElement) {
+                const val = target.value.trim().toLowerCase();
+                searchWorker.postMessage({ type: 'SEARCH', query: val });
+            }
         }, 200));
 
         // История поиска

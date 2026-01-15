@@ -40,7 +40,8 @@ export function updateXPUI() {
     const lvl = state.userStats.level;
     const xp = state.userStats.xp;
     const denom = getXPForNextLevel(lvl);
-    document.getElementById('user-level').innerText = lvl;
+    const userLevel = document.getElementById('user-level');
+    if(userLevel) userLevel.innerText = String(lvl);
     const xpText = document.getElementById('xp-text');
     if (xpText) xpText.innerText = `${xp}/${denom}`;
     
@@ -57,9 +58,10 @@ export function updateXPUI() {
  * Updates the stats display in the main UI strip.
  */
 export function updateStats() {
+    const s = /** @type {any} */ (state);
     // Update header coin count
     const headerCoins = document.getElementById('coins-count-header');
-    if (headerCoins) headerCoins.innerText = state.userStats.coins;
+    if (headerCoins) headerCoins.innerText = String(state.userStats.coins);
 
     // Update stats strip inside the modal
     const strip = document.getElementById('stats-strip');
@@ -67,11 +69,11 @@ export function updateStats() {
 
     const accuracy = calculateOverallAccuracy();
     const stats = [
-        { label: 'Серия', value: state.streak.count, icon: '🔥', color: 'var(--danger)' },
+        { label: 'Серия', value: s.streak.count, icon: '🔥', color: 'var(--danger)' },
         { label: 'Изучено', value: state.learned.size, icon: '📚', color: 'var(--success)' },
         { label: 'Точность', value: accuracy, icon: '🎯', color: 'var(--primary)', isChart: true },
         { label: 'Ошибок', value: state.mistakes.size, icon: '⚠️', color: 'var(--warning)' },
-        { label: 'Сессии', value: state.sessions.length, icon: '⏱', color: 'var(--info)' },
+        { label: 'Сессии', value: s.sessions.length, icon: '⏱', color: 'var(--info)' },
     ];
 
     strip.innerHTML = stats.map(s => {
@@ -108,7 +110,7 @@ export function updateSRSBadge() {
         Scheduler.init({ dataStore: state.dataStore, wordHistory: state.wordHistory });
         const q = Scheduler.getQueue({ limit: 999 });
         const badge = document.getElementById('srs-badge');
-        if (badge) { badge.textContent = q.length; badge.style.display = q.length > 0 ? 'inline-block' : 'none'; }
+        if (badge) { badge.textContent = String(q.length); badge.style.display = q.length > 0 ? 'inline-block' : 'none'; }
         
         const reviewBtn = document.querySelector('.nav-btn[onclick="openReviewMode()"]');
         if (reviewBtn) {
@@ -139,11 +141,12 @@ export function calculateOverallAccuracy() {
 /**
  * Sets the daily study goal.
  * @param {'words'|'time'} type 
- * @param {number} target 
+ * @param {string|number} target 
  */
 export function setStudyGoal(type, target) {
-    state.studyGoal = { type, target: parseInt(target) };
-    localStorage.setItem('study_goal_v1', JSON.stringify(state.studyGoal));
+    const s = /** @type {any} */ (state);
+    s.studyGoal = { type, target: parseInt(String(target)) };
+    localStorage.setItem('study_goal_v1', JSON.stringify(s.studyGoal));
     scheduleSaveState();
     renderDetailedStats(); // Re-render to show updates
     showToast('Цель обновлена! 🎯');
@@ -154,36 +157,38 @@ export function setStudyGoal(type, target) {
  * @returns {{current: number, target: number, percent: number}}
  */
 function getGoalProgress() {
+    const s = /** @type {any} */ (state);
     const today = new Date().toDateString();
     let current = 0;
     
-    if (state.studyGoal.type === 'words') {
+    if (s.studyGoal.type === 'words') {
         // Count words learned today based on wordHistory lastReview
         // Note: This is an approximation. Ideally we'd track "learnedDate".
         // Using 'learned' set size change is hard without history.
         // Instead, let's count unique words reviewed today in sessions.
         // Or simpler: count sessions wordsReviewed for today.
-        state.sessions.forEach(s => {
-            if (new Date(s.date).toDateString() === today) {
-                current += (s.wordsReviewed || 0);
+        s.sessions.forEach((/** @type {any} */ session) => {
+            if (new Date(session.date).toDateString() === today) {
+                current += (session.wordsReviewed || 0);
             }
         });
     } else {
-        state.sessions.forEach(s => {
-            if (new Date(s.date).toDateString() === today) {
-                current += Math.round((s.duration || 0) / 60); // Minutes
+        s.sessions.forEach((/** @type {any} */ session) => {
+            if (new Date(session.date).toDateString() === today) {
+                current += Math.round((session.duration || 0) / 60); // Minutes
             }
         });
     }
     
-    const percent = Math.min(100, Math.round((current / state.studyGoal.target) * 100));
-    return { current, target: state.studyGoal.target, percent };
+    const percent = Math.min(100, Math.round((current / s.studyGoal.target) * 100));
+    return { current, target: s.studyGoal.target, percent };
 }
 
 /**
  * Renders detailed statistics into the stats modal.
  */
 export function renderDetailedStats() {
+    const s = /** @type {any} */ (state);
     // FIX: Memory Leak. Отписываемся от обновлений лидерборда при возврате к статистике или закрытии окна
     if (leaderboardSubscription) {
         client.removeChannel(leaderboardSubscription);
@@ -193,10 +198,10 @@ export function renderDetailedStats() {
     const container = document.getElementById('stats-details');
     if (!container) return;
     
-    const totalTimeSeconds = state.sessions.reduce((acc, s) => acc + (s.duration || 0), 0);
+    const totalTimeSeconds = s.sessions.reduce((/** @type {number} */ acc, /** @type {any} */ s) => acc + (s.duration || 0), 0);
     const totalHours = Math.floor(totalTimeSeconds / 3600);
     const totalMinutes = Math.floor((totalTimeSeconds % 3600) / 60);
-    const totalReviews = state.sessions.reduce((acc, s) => acc + (s.wordsReviewed || 0), 0);
+    const totalReviews = s.sessions.reduce((/** @type {number} */ acc, /** @type {any} */ s) => acc + (s.wordsReviewed || 0), 0);
     
     // Count Mastered Words (>90% accuracy)
     const masteredCount = Object.values(state.wordHistory).filter(h => {
@@ -247,13 +252,13 @@ export function renderDetailedStats() {
                 <div class="goal-progress-bar" style="width:${goal.percent}%; background: ${goal.percent >= 100 ? 'var(--success)' : 'var(--primary)'}"></div>
             </div>
             <div class="goal-footer">
-                <span class="goal-status">${goal.current} / ${goal.target} ${state.studyGoal.type === 'words' ? 'слов' : 'мин'}</span>
+                <span class="goal-status">${goal.current} / ${goal.target} ${s.studyGoal.type === 'words' ? 'слов' : 'мин'}</span>
                 <select id="goal-select" class="goal-select" onchange="import('./js/core/stats.js').then(m => m.setStudyGoal(this.value.split(':')[0], this.value.split(':')[1]))">
-                    <option value="words:10" ${state.studyGoal.type === 'words' && state.studyGoal.target === 10 ? 'selected' : ''}>10 слов</option>
-                    <option value="words:30" ${state.studyGoal.type === 'words' && state.studyGoal.target === 30 ? 'selected' : ''}>30 слов</option>
-                    <option value="words:50" ${state.studyGoal.type === 'words' && state.studyGoal.target === 50 ? 'selected' : ''}>50 слов</option>
-                    <option value="time:10" ${state.studyGoal.type === 'time' && state.studyGoal.target === 10 ? 'selected' : ''}>10 мин</option>
-                    <option value="time:30" ${state.studyGoal.type === 'time' && state.studyGoal.target === 30 ? 'selected' : ''}>30 мин</option>
+                    <option value="words:10" ${s.studyGoal.type === 'words' && s.studyGoal.target === 10 ? 'selected' : ''}>10 слов</option>
+                    <option value="words:30" ${s.studyGoal.type === 'words' && s.studyGoal.target === 30 ? 'selected' : ''}>30 слов</option>
+                    <option value="words:50" ${s.studyGoal.type === 'words' && s.studyGoal.target === 50 ? 'selected' : ''}>50 слов</option>
+                    <option value="time:10" ${s.studyGoal.type === 'time' && s.studyGoal.target === 10 ? 'selected' : ''}>10 мин</option>
+                    <option value="time:30" ${s.studyGoal.type === 'time' && s.studyGoal.target === 30 ? 'selected' : ''}>30 мин</option>
                 </select>
             </div>
         </div>
@@ -290,6 +295,7 @@ export function renderDetailedStats() {
  * Renders topic mastery progress bars.
  */
 export function renderTopicMastery() {
+    /** @type {Record<string, {total: number, learned: number, display: string}>} */
     const topics = {};
     state.dataStore.forEach(word => {
         let parsed;
@@ -330,7 +336,9 @@ export function renderTopicMastery() {
  * Renders the activity chart (sessions per day).
  */
 export function renderActivityChart() {
+    const s = /** @type {any} */ (state);
     const last7Days = [];
+    /** @type {Record<string, number>} */
     const sessionsByDay = {};
 
     // Инициализация последних 7 дней с корректным расчетом дат
@@ -342,7 +350,7 @@ export function renderActivityChart() {
         sessionsByDay[dateKey] = 0;
     }
 
-    state.sessions.forEach(s => {
+    s.sessions.forEach((/** @type {any} */ s) => {
         const key = new Date(s.date).toDateString();
         if (sessionsByDay[key] !== undefined) sessionsByDay[key]++;
     });
@@ -369,7 +377,9 @@ export function renderActivityChart() {
  * Renders the learned words chart.
  */
 export function renderLearnedChart() {
+    const s = /** @type {any} */ (state);
     const last7Days = [];
+    /** @type {Record<string, number>} */
     const learnedByDay = {};
     
     // Инициализация последних 7 дней
@@ -382,7 +392,7 @@ export function renderLearnedChart() {
     }
 
     // FIX: Используем данные сессий для точного отображения активности за день
-    state.sessions.forEach(s => {
+    s.sessions.forEach((/** @type {any} */ s) => {
         const d = new Date(s.date).toDateString();
         if (learnedByDay[d] !== undefined) {
             learnedByDay[d] += (s.wordsReviewed || 0);
@@ -423,7 +433,7 @@ export function renderForgettingCurve() {
 
     // FIX: Учитываем все слова с историей (включая ошибки), а не только learned
     state.dataStore.forEach(word => {
-        const id = word.id; // <--- ДОБАВЛЕНО: Объявляем id, чтобы исправить ошибку
+        const id = word.id;
         const h = state.wordHistory[id];
         if (!h || (!h.lastReview && !h.sm2)) return;
 
@@ -459,12 +469,14 @@ export function renderForgettingCurve() {
 }
 
 
+/** @type {any} */
 let leaderboardSubscription = null;
 
 /**
  * Returns the list of all available achievements.
  */
 export function getAchievementDefinitions() {
+    const s = /** @type {any} */ (state);
     // Helper to count mastered words
     const getMasteredCount = () => Object.values(state.wordHistory).filter(h => h.attempts >= 3 && (h.correct / h.attempts) >= 0.9).length;
 
@@ -479,9 +491,9 @@ export function getAchievementDefinitions() {
         { id: 'zero_mistakes', title: 'Перфекционист', description: 'Выучить 5 слов без единой ошибки', emoji: '✨', progress: () => (state.mistakes.size === 0 && state.learned.size >= 5) ? 1 : 0, max: 1 },
         
         // Streak & Sessions
-        { id: 'streak_3', title: 'Начало положено', description: 'Серия занятий 3 дня подряд', emoji: '🌱', progress: () => state.streak.count, max: 3 },
-        { id: 'streak_7', title: 'Марафонец', description: 'Серия занятий 7 дней подряд', emoji: '🏆', progress: () => state.streak.count, max: 7 },
-        { id: 'sessions_5', title: 'Регулярность', description: 'Завершить 5 учебных сессий', emoji: '📚', progress: () => state.sessions.length, max: 5 },
+        { id: 'streak_3', title: 'Начало положено', description: 'Серия занятий 3 дня подряд', emoji: '🌱', progress: () => s.streak.count, max: 3 },
+        { id: 'streak_7', title: 'Марафонец', description: 'Серия занятий 7 дней подряд', emoji: '🏆', progress: () => s.streak.count, max: 7 },
+        { id: 'sessions_5', title: 'Регулярность', description: 'Завершить 5 учебных сессий', emoji: '📚', progress: () => s.sessions.length, max: 5 },
         
         // Quiz & Economy
         { id: 'sprint_20', title: 'Спринтер', description: 'Набрать 20 очков в Спринте', emoji: '⚡', progress: () => state.userStats.sprintRecord || 0, max: 20 },
@@ -504,16 +516,19 @@ export function getAchievementDefinitions() {
  * @param {boolean} [showAlert=true] 
  */
 export function checkAchievements(showAlert = true) {
+    const s = /** @type {any} */ (state);
     const defs = getAchievementDefinitions();
     defs.forEach(ach => {
-        if (state.achievements.find(a => a.id === ach.id)) return;
+        if (s.achievements.find((/** @type {any} */ a) => a.id === ach.id)) return;
         // Use progress and max for condition
         if (ach.progress() >= ach.max) {
-            state.achievements.push({ id: ach.id, date: Date.now() });
+            s.achievements.push({ id: ach.id, date: Date.now() });
             if (showAlert) {
                 showToast(`🎉 Новое достижение: ${ach.emoji} ${ach.title}`);
                 // Запуск конфетти
+                // @ts-ignore
                 if (typeof confetti === 'function') {
+                    // @ts-ignore
                     confetti({
                         particleCount: 150,
                         spread: 70,
@@ -524,30 +539,33 @@ export function checkAchievements(showAlert = true) {
             }
         }
     });
-    localStorage.setItem('achievements_v5', JSON.stringify(state.achievements));
+    localStorage.setItem('achievements_v5', JSON.stringify(s.achievements));
 }
 
 /**
  * Renders the achievements list in the modal.
  */
 export function renderAchievements() {
+    const s = /** @type {any} */ (state);
     const container = document.getElementById('achievements-list');
     const header = document.getElementById('achievements-header');
     if (!container) return;
 
     container.innerHTML = '';
     const defs = getAchievementDefinitions();
-    const unlockedIds = new Set(state.achievements.map(a => a.id));
+    const unlockedIds = new Set(s.achievements.map((/** @type {any} */ a) => a.id));
     const unlockedCount = unlockedIds.size;
     const totalCount = defs.length;
 
     // Render header
-    header.innerHTML = `
-        <div style="font-size: 14px; color: var(--text-sub); margin-bottom: 8px;">Открыто ${unlockedCount} из ${totalCount}</div>
-        <div class="xp-bar-container" style="height: 8px; max-width: 300px; margin: 0 auto;">
-            <div class="xp-bar-fill" style="width: ${(unlockedCount / totalCount) * 100}%; background: var(--gold);"></div>
-        </div>
-    `;
+    if (header) {
+        header.innerHTML = `
+            <div style="font-size: 14px; color: var(--text-sub); margin-bottom: 8px;">Открыто ${unlockedCount} из ${totalCount}</div>
+            <div class="xp-bar-container" style="height: 8px; max-width: 300px; margin: 0 auto;">
+                <div class="xp-bar-fill" style="width: ${(unlockedCount / totalCount) * 100}%; background: var(--gold);"></div>
+            </div>
+        `;
+    }
 
     defs.forEach(ach => {
         const isUnlocked = unlockedIds.has(ach.id);
@@ -626,7 +644,7 @@ export async function renderLeaderboard() {
 
         const currentUserId = (await client.auth.getUser()).data.user?.id;
 
-        data.forEach((user, idx) => {
+        data.forEach((/** @type {any} */ user, /** @type {number} */ idx) => {
             const isMe = user.user_id === currentUserId;
             const medal = idx === 0 ? '🥇' : (idx === 1 ? '🥈' : (idx === 2 ? '🥉' : `#${idx + 1}`));
             const bg = isMe ? 'var(--bg-learned)' : 'var(--surface-1)';
@@ -641,13 +659,13 @@ export async function renderLeaderboard() {
         // Подписка на обновления в реальном времени
         leaderboardSubscription = client
             .channel('public:user_global_stats')
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'user_global_stats' }, (payload) => {
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'user_global_stats' }, (/** @type {any} */ payload) => {
                 // При любом изменении просто перезагружаем список
                 renderLeaderboard();
             })
             .subscribe();
 
-    } catch (e) {
+    } catch (/** @type {any} */ e) {
         console.error(e);
         container.innerHTML = `<div style="color:var(--danger); text-align:center;">Ошибка загрузки: ${e.message}</div><button class="btn" style="width:100%; margin-top:10px;" onclick="import('./js/core/stats.js').then(m => m.renderDetailedStats())">Назад</button>`;
     }

@@ -100,7 +100,13 @@ export function buildQuizModes() {
     const sInput = document.getElementById('quiz-search-input');
     if (sInput) {
         sInput.value = '';
-        sInput.oninput = (e) => { quizSearch = e.target.value.trim().toLowerCase(); updateQuizCount(); };
+        sInput.oninput = (e) => { 
+            const target = e.target;
+            if (target instanceof HTMLInputElement) {
+                quizSearch = target.value.trim().toLowerCase(); 
+                updateQuizCount();
+            }
+        };
     }
 
     populateQuizFilters();
@@ -120,14 +126,16 @@ export function buildQuizModes() {
 }
 
 function populateQuizFilters() {
-    const tSelect = document.getElementById('quiz-topic-select');
+    const tSelect = /** @type {HTMLSelectElement} */ (document.getElementById('quiz-topic-select'));
     if (!tSelect) return;
 
     const topics = new Set();
     state.dataStore.forEach(w => { if (w.type === state.currentType) topics.add(w.topic || w.topic_ru || w.topic_kr); });
     tSelect.innerHTML = '<option value="all">Все темы</option>';
     Array.from(topics).sort().forEach(t => {
-        const opt = document.createElement('option'); opt.value = t; opt.textContent = parseBilingualString(t).ru; tSelect.appendChild(opt);
+        if(t) {
+            const opt = document.createElement('option'); opt.value = t; opt.textContent = parseBilingualString(t).ru; tSelect.appendChild(opt);
+        }
     });
     tSelect.value = quizTopic;
     tSelect.onchange = () => { 
@@ -143,7 +151,7 @@ function populateQuizFilters() {
 }
 
 function populateQuizCategories() {
-    const cSelect = document.getElementById('quiz-category-select');
+    const cSelect = /** @type {HTMLSelectElement} */ (document.getElementById('quiz-category-select'));
     if (!cSelect) return;
     const categories = new Set();
     state.dataStore.forEach(w => {
@@ -155,7 +163,9 @@ function populateQuizCategories() {
     });
     cSelect.innerHTML = '<option value="all">Все категории</option>';
     Array.from(categories).sort().forEach(c => {
-        const opt = document.createElement('option'); opt.value = c; opt.textContent = parseBilingualString(c).ru; cSelect.appendChild(opt);
+        if(c) {
+            const opt = document.createElement('option'); opt.value = c; opt.textContent = parseBilingualString(c).ru; cSelect.appendChild(opt);
+        }
     });
     cSelect.value = quizCategory;
     cSelect.onchange = () => { 
@@ -474,9 +484,10 @@ export function nextQuizQuestion() {
 
     preloadNextAudio();
     const word = quizWords[quizIndex];
-    document.getElementById('quiz-score').innerText = `Вопрос ${quizIndex + 1} / ${quizWords.length}`;
+    const scoreEl = document.getElementById('quiz-score');
+    if(scoreEl) scoreEl.innerText = `Вопрос ${quizIndex + 1} / ${quizWords.length}`;
     if (currentQuizMode === 'survival') {
-        document.getElementById('quiz-score').innerText = `❤️ ${survivalLives}`;
+        if(scoreEl) scoreEl.innerText = `❤️ ${survivalLives}`;
     }
     
     const qEl = document.getElementById('quiz-q');
@@ -666,15 +677,21 @@ function endQuiz() {
         scheduleSaveState(); // FIX: Синхронизируем сессию с облаком
     }
     
-    document.getElementById('quiz-game').style.display = 'none';
-    document.getElementById('quiz-mode-selector').style.display = 'grid';
-    document.getElementById('quiz-difficulty').style.display = 'flex';
-    document.getElementById('quiz-filters').style.display = 'flex';
+    const quizGameEl = document.getElementById('quiz-game');
+    if (quizGameEl) quizGameEl.style.display = 'none';
+    const quizModeSelectorEl = document.getElementById('quiz-mode-selector');
+    if (quizModeSelectorEl) quizModeSelectorEl.style.display = 'grid';
+    const quizDifficultyEl = document.getElementById('quiz-difficulty');
+    if (quizDifficultyEl) quizDifficultyEl.style.display = 'flex';
+    const quizFiltersEl = document.getElementById('quiz-filters');
+    if (quizFiltersEl) quizFiltersEl.style.display = 'flex';
     applyBackgroundMusic(); // Обновляем трек (возврат к меню/дзену)
     
     // RESTORE UI (Возвращаем скрытые элементы)
-    document.getElementById('quiz-search-input').style.display = 'block';
-    document.getElementById('quiz-count').style.display = 'block';
+    const searchInputEl = document.getElementById('quiz-search-input');
+    if (searchInputEl) searchInputEl.style.display = 'block';
+    const quizCountEl = document.getElementById('quiz-count');
+    if (quizCountEl) quizCountEl.style.display = 'block';
     const header = document.querySelector('#quiz-modal .modal-header');
     if (header) header.style.display = 'flex';
 
@@ -793,7 +810,7 @@ function updateResetButton() {
                 quizStar = 'all'; state.quizDifficulty = 'all'; localStorage.setItem('quiz_difficulty_v1', 'all');
                 
                 quizSearch = '';
-                const sInput = document.getElementById('quiz-search-input');
+                const sInput = /** @type {HTMLInputElement} */ (document.getElementById('quiz-search-input'));
                 if(sInput) sInput.value = '';
 
                 populateQuizFilters(); populateQuizDifficulty(); updateQuizCount();

@@ -23,37 +23,44 @@ export function updateAuthUI(user) {
 
 export function openLoginModal() {
     openModal('login-modal');
-    document.getElementById('auth-email').value = '';
+    const emailInput = document.getElementById('auth-email');
+    if (emailInput) emailInput.value = '';
     const passInput = document.getElementById('auth-password');
+    if (!passInput) return;
     passInput.value = '';
     passInput.type = 'password';
     const toggleBtn = document.getElementById('toggle-password-btn');
     if(toggleBtn) toggleBtn.textContent = '👁️';
     
     const bar = document.getElementById('strength-bar');
-    if(bar) { bar.style.width = '0%'; bar.parentElement.style.display = 'none'; }
+    if(bar && bar.parentElement) { bar.style.width = '0%'; bar.parentElement.style.display = 'none'; }
 
-    document.getElementById('auth-error').style.display = 'none';
+    const authError = document.getElementById('auth-error');
+    if (authError) authError.style.display = 'none';
     toggleResetMode(false);
     
     passInput.onkeydown = (e) => { if (e.key === 'Enter') handleAuth('login'); };
     
     passInput.oninput = (e) => {
-        const val = e.target.value;
+        const target = e.target;
+        if (!target) return;
+        const val = target.value;
         const meter = document.getElementById('strength-bar');
         const container = document.querySelector('.password-strength');
-        if (!val) { container.style.display = 'none'; return; }
-        container.style.display = 'block';
+        if (!val) { if(container) container.style.display = 'none'; return; }
+        if(container) container.style.display = 'block';
         let score = 0;
         if (val.length > 5) score += 20;
         if (val.length > 8) score += 20;
         if (/[A-Z]/.test(val)) score += 20;
         if (/[0-9]/.test(val)) score += 20;
         if (/[^A-Za-z0-9]/.test(val)) score += 20;
-        meter.style.width = score + '%';
-        if (score < 40) meter.style.backgroundColor = 'var(--danger)';
-        else if (score < 80) meter.style.backgroundColor = 'var(--warning)';
-        else meter.style.backgroundColor = 'var(--success)';
+        if(meter) {
+            meter.style.width = score + '%';
+            if (score < 40) meter.style.backgroundColor = 'var(--danger)';
+            else if (score < 80) meter.style.backgroundColor = 'var(--warning)';
+            else meter.style.backgroundColor = 'var(--success)';
+        }
     };
 }
 
@@ -79,7 +86,9 @@ export function openProfileModal() {
                 if (bar) bar.style.width = '0%';
                 
                 input.oninput = (e) => {
-                    const val = e.target.value;
+                    const target = e.target;
+                    if(!target) return;
+                    const val = target.value;
                     if (!val) { if (container) container.style.display = 'none'; return; }
                     if (container) container.style.display = 'block';
                     
@@ -117,8 +126,12 @@ export function openProfileModal() {
 }
 
 export async function handleAuth(type) {
-    const email = document.getElementById('auth-email').value.trim();
-    const password = document.getElementById('auth-password').value.trim();
+    const emailInput = /** @type {HTMLInputElement} */ (document.getElementById('auth-email'));
+    const passwordInput = /** @type {HTMLInputElement} */ (document.getElementById('auth-password'));
+    if(!emailInput || !passwordInput) return;
+
+    const email = emailInput.value.trim();
+    const password = passwordInput.value.trim();
     
     // Сброс ошибок перед началом
     const errEl = document.getElementById('auth-error');
@@ -224,7 +237,9 @@ export async function signInWithGoogle() {
 }
 
 export async function handleChangePassword() {
-    const newPass = document.getElementById('new-password').value.trim();
+    const newPassInput = /** @type {HTMLInputElement} */ (document.getElementById('new-password'));
+    if(!newPassInput) return;
+    const newPass = newPassInput.value.trim();
     if (!newPass) { alert('Введите новый пароль'); return; }
     if (newPass.length < 6) { alert('Пароль должен содержать минимум 6 символов'); return; }
     showToast('⏳ Обновление...');
@@ -233,7 +248,7 @@ export async function handleChangePassword() {
         console.error('Update Password Error:', error);
         alert('Ошибка: ' + error.message);
     }
-    else { showToast('✅ Пароль изменен'); document.getElementById('new-password').value = ''; closeModal('profile-modal'); }
+    else { showToast('✅ Пароль изменен'); newPassInput.value = ''; closeModal('profile-modal'); }
 }
 
 export async function handleLogout() {

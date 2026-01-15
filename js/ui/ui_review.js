@@ -41,6 +41,7 @@ export function buildReviewModal(queue) {
     }
 
     const container = modalEl.querySelector('#review-container');
+    if (!container) return;
     container.innerHTML = '';
     let idx = 0;
     let stats = { remembered: 0, forgotten: 0 };

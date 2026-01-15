@@ -6,6 +6,7 @@ import { parseBilingualString, speak, showToast, debounce } from '../utils/utils
 import { scheduleSaveState, recordAttempt } from '../core/db.js';
 import { addXP, checkAchievements } from '../core/stats.js';
 import { ensureSessionStarted } from '../core/session.js';
+import { saveAndRender } from './ui.js';
 
 // --- Virtual Scroll Constants (for List View) ---
 const ITEM_HEIGHT_LIST = 72;  // Приблизительная высота элемента списка в пикселях
@@ -528,7 +529,7 @@ export function markLearned(id) {
     const s = /** @type {any} */ (state);
     s.learned.add(id); s.mistakes.delete(id);
     recordAttempt(id, true); s.dirtyWordIds.add(id);
-    addXP(10); checkAchievements(); if(/** @type {any} */ (window).saveAndRender) /** @type {any} */ (window).saveAndRender();
+    addXP(10); checkAchievements(); saveAndRender();
 }
 
 /**
@@ -540,7 +541,7 @@ export function markMistake(id) {
     const s = /** @type {any} */ (state);
     s.mistakes.add(id); s.learned.delete(id);
     recordAttempt(id, false); s.dirtyWordIds.add(id);
-    addXP(-5); if(/** @type {any} */ (window).saveAndRender) /** @type {any} */ (window).saveAndRender();
+    addXP(-5); saveAndRender();
 }
 
 /**
@@ -565,7 +566,7 @@ export function resetProgress(id) {
     const s = /** @type {any} */ (state);
     s.learned.delete(id); s.mistakes.delete(id);
     delete s.wordHistory[id]; s.dirtyWordIds.add(id);
-    scheduleSaveState(); if(/** @type {any} */ (window).saveAndRender) /** @type {any} */ (window).saveAndRender();
+    scheduleSaveState(); saveAndRender();
 }
 
 /**
