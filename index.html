@@ -120,6 +120,7 @@
               <button class="filter-chip" data-action="set-star-filter" data-value="★★☆">★★☆</button>
               <button class="filter-chip" data-action="set-star-filter" data-value="★☆☆">★☆☆</button>
               <button class="filter-chip fav-chip" data-action="set-star-filter" data-value="favorites">❤️ Избранное</button>
+              <button class="filter-chip mistake-chip" data-action="set-star-filter" data-value="mistakes">⚠️ Ошибки</button>
           </div>
         </div>
         <div class="filter-section">
@@ -210,6 +211,10 @@
           📅 Изучено слов (активность)
         </div>
         <div id="learned-chart" class="chart-container"></div>
+        <div style="font-weight: 600; margin-top: 20px">
+          🎯 Точность (за неделю)
+        </div>
+        <div id="accuracy-chart" class="chart-container"></div>
         <div style="font-weight: 600; margin-top: 20px">
           📉 Прогноз забывания (когда повторять)
         </div>
@@ -634,6 +639,6 @@
 
     <input type="file" id="import-file" style="display: none" onchange="importProgress(event)" />
 
-    <script type="module" src="js/app.js"></script>
+    <script type="module" src="/src/app.ts"></script>
   </body>
 </html>

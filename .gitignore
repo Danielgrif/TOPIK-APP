@@ -1,35 +1,45 @@
+# Dependencies
 node_modules/
-.DS_Store
-Thumbs.db
-.vscode/
-*.log
+
+# Environment Variables
 .env
-.env.*.local
-env
+.env.*
+env/
+
+# Build Output
 dist/
-coverage/
 
 # Logs
+*.log
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
-# Python (так как в проекте есть content_worker.py)
+# Python
 __pycache__/
 *.py[cod]
 venv/
 .venv/
+.pytest_cache/
 
 # TypeScript
 *.tsbuildinfo
 
-# Editor directories and files
+# IDE & OS
+.vscode/
 .idea/
-*.swp
-*.swo
-
-# OS generated files
+.DS_Store
+Thumbs.db
 ehthumbs.db
 Desktop.ini
+*.swp
+*.swo
 .spotlight-V100
 .trashes
+
+# Testing
+coverage/
+
+# Project Specific
+# Временные файлы генератора контента
+temp_*.mp3
