@@ -13,7 +13,7 @@ import {
 import { checkAndShowOnboarding } from './ui/ui_onboarding.js';
 import { render, renderSkeletons, resetSearchHandler, setupGridEffects } from './ui/ui_card.js';
 import { openModal, closeModal, openConfirm, closeConfirm } from './ui/ui_modal.js';
-import { toggleHanjaMode, toggleVoice, updateVoiceUI, toggleDarkMode, toggleAutoUpdate, applyTheme, toggleFocusMode, applyFocusMode, toggleBackgroundMusic, setBackgroundMusicVolume, applyBackgroundMusic } from './ui/ui_settings.js';
+import { toggleHanjaMode, toggleVoice, updateVoiceUI, toggleDarkMode, toggleAutoUpdate, applyTheme, toggleFocusMode, applyFocusMode, toggleBackgroundMusic, setBackgroundMusicVolume, applyBackgroundMusic, setAccentColor, setAudioSpeed } from './ui/ui_settings.js';
 
 import { 
     handleAuth, openProfileModal, handleChangePassword, 
@@ -21,14 +21,14 @@ import {
     signInWithGoogle, updateAuthUI, openLoginModal, cleanAuthUrl 
 } from './core/auth.js'; 
 import { debounce, showToast, speak } from './utils/utils.js';
-import { renderTopicMastery, updateXPUI, updateStats, updateSRSBadge } from './core/stats.js';
+import { renderTopicMastery, updateXPUI, updateStats, updateSRSBadge, renderDetailedStats } from './core/stats.js';
 import { startDailyChallenge, updateDailyChallengeUI, checkSuperChallengeNotification, quitQuiz } from './ui/quiz.js';
 
 // --- Инициализация ---
 
 const searchWorker = new Worker('js/workers/searchWorker.js');
 const APP_VERSION = 'v56'; // Синхронизировано с sw.js
-let deferredPrompt;
+/** @type {any} */ let deferredPrompt;
 
 // --- Глобальный перехват ошибок ---
 window.onerror = function(msg, url, line, col, error) {
@@ -38,6 +38,123 @@ window.onerror = function(msg, url, line, col, error) {
 window.onunhandledrejection = function(event) {
     console.error('🚨 Unhandled Rejection:', event.reason);
 };
+
+/**
+ * Настройка глобального делегирования событий.
+ * Заменяет множество inline onclick обработчиков.
+ */
+function setupGlobalListeners() {
+    document.body.addEventListener('click', (e) => {
+        const target = /** @type {HTMLElement} */ (e.target);
+        
+        // 1. Обработка data-modal-target (Открытие модалок)
+        const modalTrigger = target.closest('[data-modal-target]');
+        if (modalTrigger) {
+            const modalId = modalTrigger.getAttribute('data-modal-target');
+            if (modalId) openModal(modalId);
+            return;
+        }
+
+        // 2. Обработка data-close-modal (Закрытие модалок)
+        const closeTrigger = target.closest('[data-close-modal]');
+        if (closeTrigger) {
+            const modalId = closeTrigger.getAttribute('data-close-modal');
+            if (modalId) closeModal(modalId);
+            return;
+        }
+
+        // 3. Обработка data-action (Различные действия)
+        const actionTrigger = target.closest('[data-action]');
+        if (actionTrigger) {
+            const action = actionTrigger.getAttribute('data-action');
+            const value = actionTrigger.getAttribute('data-value');
+
+            switch (action) {
+                case 'toggle-focus': toggleFocusMode(/** @type {HTMLInputElement} */ (/** @type {unknown} */ (actionTrigger))); break;
+                case 'reload': location.reload(); break;
+                case 'toggle-dark-mode': toggleDarkMode(); break;
+                case 'toggle-view': if (value) toggleViewMode(value); break;
+                case 'start-daily-challenge': startDailyChallenge(); break;
+                case 'toggle-filter-panel': toggleFilterPanel(); break;
+                case 'set-type-filter': if (value) setTypeFilter(value, /** @type {HTMLInputElement} */ (/** @type {unknown} */ (actionTrigger))); break;
+                case 'set-star-filter': if (value) setStarFilter(value, /** @type {HTMLInputElement} */ (/** @type {unknown} */ (actionTrigger))); break;
+                case 'sort-weak': sortByWeakWords(); break;
+                case 'shuffle': shuffleWords(); break;
+                case 'open-review': import('./ui/ui_review.js').then(m => m.openReviewMode()); break;
+                case 'set-accent': 
+                    if (actionTrigger.parentElement) actionTrigger.parentElement.querySelectorAll('.stats-color-btn, .color-option').forEach(b=>b.classList.remove('active')); 
+                    actionTrigger.classList.add('active');
+                    if (value) setAccentColor(value); 
+                    break;
+                case 'share-stats': 
+                    const activeColorBtn = document.querySelector('#stats-theme-picker .active');
+                    const color = activeColorBtn ? activeColorBtn.getAttribute('data-value') : 'purple';
+                    import('./ui/ui_share.js').then(m => m.shareStats(color ?? undefined)); 
+                    break;
+                case 'install-app': 
+                    // @ts-ignore
+                    if (window.installApp) (/** @type {any} */ (window)).installApp();
+                    break;
+                case 'dismiss-banner': dismissInstallBanner(); break;
+                case 'close-level-up': document.getElementById('level-up-overlay')?.classList.remove('active'); break;
+                case 'submit-word-request': import('./ui/ui_custom_words.js').then(m => m.submitWordRequest()); break;
+                case 'toggle-password': togglePasswordVisibility(); break;
+                case 'auth': if (value) handleAuth(value); break;
+                case 'auth-google': signInWithGoogle(); break;
+                case 'toggle-reset-mode': toggleResetMode(value === 'true'); break;
+                case 'toggle-hanja': toggleHanjaMode(/** @type {HTMLInputElement} */ (/** @type {any} */ (actionTrigger.querySelector('input') || actionTrigger))); break;
+                case 'toggle-voice': toggleVoice(/** @type {HTMLInputElement} */ (/** @type {any} */ (actionTrigger.querySelector('input') || actionTrigger))); break;
+                case 'toggle-music': toggleBackgroundMusic(/** @type {HTMLInputElement} */ (/** @type {any} */ (actionTrigger.querySelector('input') || actionTrigger))); break;
+                case 'toggle-auto-update': 
+                    const el = /** @type {HTMLInputElement} */ (/** @type {any} */ (actionTrigger.querySelector('input') || actionTrigger));
+                    toggleAutoUpdate(el);
+                    if (state.autoUpdate && 'serviceWorker' in navigator) {
+                        navigator.serviceWorker.getRegistration().then(reg => {
+                            if (reg && reg.waiting) reg.waiting.postMessage({ type: 'SKIP_WAITING' });
+                        });
+                    }
+                    break;
+                case 'export-data': import('./ui/ui_data.js').then(m => m.exportProgress()); break;
+                case 'clear-data': import('./ui/ui_data.js').then(m => m.clearData()); break;
+                case 'logout': handleLogout(); break;
+                case 'change-password': handleChangePassword(); break;
+                case 'close-confirm': closeConfirm(); break;
+                case 'quit-quiz': quitQuiz(); break;
+            }
+        }
+    });
+
+    // Обработчики input событий (range sliders)
+    document.body.addEventListener('input', (e) => {
+        const target = /** @type {HTMLInputElement} */ (e.target);
+        const action = target.getAttribute('data-action');
+        
+        if (action === 'set-speed') {
+            setAudioSpeed(target.value);
+        } else if (action === 'set-music-volume') {
+            setBackgroundMusicVolume(target.value);
+        }
+    });
+    
+    // Обработчики change событий (для некоторых свитчей, если клик не сработал корректно)
+    document.body.addEventListener('change', (e) => {
+        const target = /** @type {HTMLInputElement} */ (e.target);
+        const action = target.getAttribute('data-action');
+        
+        // Дублируем логику для надежности (иногда change надежнее click для checkbox)
+        if (action === 'toggle-dark-mode') toggleDarkMode();
+        if (action === 'toggle-hanja') toggleHanjaMode(target);
+        if (action === 'toggle-music') toggleBackgroundMusic(target);
+        if (action === 'toggle-auto-update') {
+             toggleAutoUpdate(target);
+             if (state.autoUpdate && 'serviceWorker' in navigator) {
+                navigator.serviceWorker.getRegistration().then(reg => {
+                    if (reg && reg.waiting) reg.waiting.postMessage({ type: 'SKIP_WAITING' });
+                });
+            }
+        }
+    });
+}
 
 async function init() {
     const loader = document.getElementById('loading-overlay');
@@ -59,7 +176,7 @@ async function init() {
     };
 
     // 2. Настройка Auth слушателя
-    client.auth.onAuthStateChange(async (event, session) => {
+    client.auth.onAuthStateChange(async (/** @type {string} */ event, /** @type {any} */ session) => {
         if (session) {
             updateAuthUI(session.user);
             if (event === 'SIGNED_IN' || event === 'INITIAL_SESSION') {
@@ -103,21 +220,22 @@ async function init() {
     setupGestures(); // Включаем поддержку свайпов
     setupScrollBehavior(); // Скрываем навигацию при скролле
     setupGridEffects(); // Включаем 3D эффекты (делегирование)
+    setupGlobalListeners(); // Включаем глобальное делегирование событий
 
     // Отображение версии приложения в настройках
     const verEl = document.getElementById('app-version');
     if (verEl) verEl.textContent = `TOPIK Master ${APP_VERSION}`;
 
     // 4. Поиск
-    const searchInput = document.getElementById('searchInput');
+    const searchInput = /** @type {HTMLInputElement} */ (document.getElementById('searchInput'));
     if (searchInput) {
-        searchInput.addEventListener('input', debounce((e) => {
-            const target = e.target;
-            if (target instanceof HTMLInputElement) {
+        searchInput.addEventListener('input', /** @type {EventListener} */ (debounce((/** @type {Event} */ e) => {
+            const target = /** @type {HTMLInputElement} */ (/** @type {any} */ (e.target));
+            if (target) {
                 const val = target.value.trim().toLowerCase();
                 searchWorker.postMessage({ type: 'SEARCH', query: val });
             }
-        }, 200));
+        }, 200)));
 
         // История поиска
         searchInput.addEventListener('focus', () => showSearchHistory(searchInput));
@@ -139,7 +257,7 @@ async function init() {
                 showToast('✅ Приложение готово к работе офлайн!');
             }
 
-            const handleUpdate = (worker) => {
+            const handleUpdate = (/** @type {ServiceWorker} */ worker) => {
                 if (state.autoUpdate) {
                     worker.postMessage({ type: 'SKIP_WAITING' });
                 } else {
@@ -152,7 +270,7 @@ async function init() {
 
             reg.addEventListener('updatefound', () => {
                 const newWorker = reg.installing;
-                newWorker.addEventListener('statechange', () => {
+                if (newWorker) newWorker.addEventListener('statechange', () => {
                     if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
                         handleUpdate(newWorker);
                     }
@@ -160,7 +278,7 @@ async function init() {
             });
         }).catch(err => console.error('SW Registration Failed:', err));
 
-        let refreshing;
+        /** @type {boolean} */ let refreshing;
         navigator.serviceWorker.addEventListener('controllerchange', () => {
             if (refreshing) return;
             window.location.reload();
@@ -169,7 +287,7 @@ async function init() {
     }
 
     // 6. PWA Install Prompt
-    window.addEventListener('beforeinstallprompt', (e) => {
+    window.addEventListener('beforeinstallprompt', (/** @type {any} */ e) => {
         e.preventDefault();
         deferredPrompt = e;
         const btn = document.getElementById('install-app-btn');
@@ -199,7 +317,7 @@ Object.assign(window, {
     closeConfirm,
     exportProgress: () => import('./ui/ui_data.js').then(m => m.exportProgress()),
     saveAndRender,
-    importProgress: (event) => import('./ui/ui_data.js').then(m => m.importProgress(event)),
+    importProgress: (/** @type {Event} */ event) => import('./ui/ui_data.js').then(m => m.importProgress(event)),
     clearData: () => import('./ui/ui_data.js').then(m => m.clearData()),
     toggleSessionTimer,
     sortByWeakWords,
@@ -212,7 +330,7 @@ Object.assign(window, {
     toggleVoice,
     toggleFilterPanel,
     toggleDarkMode,
-    toggleAutoUpdate: (el) => {
+    toggleAutoUpdate: (/** @type {HTMLInputElement} */ el) => {
         toggleAutoUpdate(el);
         // Если пользователь включил автообновление и есть ждущий апдейт — применяем сразу
         if (state.autoUpdate && 'serviceWorker' in navigator) {
@@ -225,7 +343,7 @@ Object.assign(window, {
     },
     toggleFocusMode,
     toggleViewMode,
-    toggleBackgroundMusic: (el) => {
+    toggleBackgroundMusic: (/** @type {HTMLInputElement} */ el) => {
         toggleBackgroundMusic(el);
     },
     setBackgroundMusicVolume,
@@ -235,7 +353,7 @@ Object.assign(window, {
     handleLogout,
     toggleResetMode,
     togglePasswordVisibility,
-    setAudioSpeed: (val) => import('./ui/ui_settings.js').then(m => m.setAudioSpeed(val)),
+    setAudioSpeed: (/** @type {string|number} */ val) => import('./ui/ui_settings.js').then(m => m.setAudioSpeed(val)),
     signInWithGoogle,
     speak,
     openLoginModal,
@@ -243,7 +361,7 @@ Object.assign(window, {
     openShopModal: () => import('./ui/ui_shop.js').then(m => m.openShopModal()),
     startDailyChallenge,
     quitQuiz,
-    checkPronunciation: (word, btn) => import('./core/speech.js').then(m => m.checkPronunciation(word, btn)),
+    checkPronunciation: (/** @type {string} */ word, /** @type {HTMLElement} */ btn) => import('./core/speech.js').then(m => m.checkPronunciation(word, btn)),
     resetSearchHandler,
     runTests: () => import('../tests.js').then(m => m.runTests()),
     forceUpdateSW: async () => {

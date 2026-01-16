@@ -19,5 +19,5 @@
     "esModuleInterop": true,
     "forceConsistentCasingInFileNames": true
   },
-  "include": ["js/**/*.js", "js/**/*.ts", "*.js"]
+  "include": ["js/**/*.js", "js/**/*.ts", "*.js", "types.d.ts"]
 }

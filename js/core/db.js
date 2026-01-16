@@ -4,12 +4,13 @@ import { showToast, parseBilingualString } from '../utils/utils.js';
 import { syncGlobalStats } from './sync.js';
 import { Scheduler } from './scheduler.js';
 
+/** @type {any} */
 let _saveTimer = null;
 
 /**
  * Validates that the fetched data contains expected columns.
  * Warns in console and UI if critical fields are missing.
- * @param {Array<Object>} data - The vocabulary data fetched from DB.
+ * @param {Array<any>} data - The vocabulary data fetched from DB.
  */
 function validateSchema(data) {
     if (!data || data.length === 0) return;
@@ -124,7 +125,7 @@ export async function fetchVocabulary() {
         
         // FIX: Удаление дубликатов из dataStore по ID
         const uniqueMap = new Map();
-        state.dataStore.forEach(w => {
+        state.dataStore.forEach((/** @type {any} */ w) => {
             if (w.id && !uniqueMap.has(w.id)) uniqueMap.set(w.id, w);
         });
         state.dataStore = Array.from(uniqueMap.values());
@@ -142,11 +143,11 @@ export async function fetchVocabulary() {
         
         // Очистка локального состояния от несуществующих слов (синхронизация счетчиков)
         // FIX: Используем String для надежного сравнения ID (числа vs строки)
-        const validIds = new Set(state.dataStore.map(w => String(w.id)));
+        const validIds = new Set(/** @type {any[]} */ (state.dataStore).map(w => String(w.id)));
         
-        const cleanSet = (s) => {
+        const cleanSet = (/** @type {Set<any>} */ s) => {
             const newSet = new Set();
-            s.forEach(id => { 
+            s.forEach((/** @type {any} */ id) => { 
                 if (validIds.has(String(id))) newSet.add(id);
             });
             return newSet;
@@ -172,7 +173,7 @@ export async function fetchVocabulary() {
 
 /**
  * Loads and merges user progress from Supabase into the local state.
- * @param {Object} user - Объект пользователя Supabase Auth
+ * @param {any} user - Объект пользователя Supabase Auth
  * @returns {Promise<void>}
  */
 export async function loadFromSupabase(user) {
@@ -202,7 +203,7 @@ export async function loadFromSupabase(user) {
             
             if (globalData.achievements && Array.isArray(globalData.achievements)) {
                 const localIds = new Set(state.achievements.map(a => a.id));
-                globalData.achievements.forEach(a => {
+                globalData.achievements.forEach((/** @type {any} */ a) => {
                     if (!localIds.has(a.id)) state.achievements.push(a);
                 });
             }
@@ -230,9 +231,9 @@ export async function loadFromSupabase(user) {
 
             // 1.2 Sync Sessions (Merge)
             if (globalData.sessions && Array.isArray(globalData.sessions)) {
-                const localDates = new Set(state.sessions.map(s => s.date));
-                globalData.sessions.forEach(s => { if (!localDates.has(s.date)) state.sessions.push(s); });
-                state.sessions.sort((a, b) => new Date(a.date) - new Date(b.date));
+                const localDates = new Set(state.sessions.map((/** @type {any} */ s) => s.date));
+                globalData.sessions.forEach((/** @type {any} */ s) => { if (!localDates.has(s.date)) state.sessions.push(s); });
+                state.sessions.sort((/** @type {any} */ a, /** @type {any} */ b) => new Date(a.date).getTime() - new Date(b.date).getTime());
             }
         }
 
@@ -240,10 +241,10 @@ export async function loadFromSupabase(user) {
         const { data: wordData } = await client.from('user_progress').select('*').eq('user_id', user.id);
         
         // Создаем Set валидных ID для фильтрации мусора из облака
-        const validIds = new Set(state.dataStore.map(w => String(w.id)));
+        const validIds = new Set(/** @type {any[]} */ (state.dataStore).map(w => String(w.id)));
 
         if (wordData) {
-            wordData.forEach(row => {
+            wordData.forEach((/** @type {any} */ row) => {
                 const id = row.word_id;
                 // FIX: Пропускаем слова, которых нет в актуальном словаре
                 if (!validIds.has(String(id))) return;
@@ -260,7 +261,7 @@ export async function loadFromSupabase(user) {
                         interval: row.sm2_interval ?? 0,
                         repetitions: row.sm2_repetitions ?? 0,
                         ef: row.sm2_ef ?? 2.5,
-                        nextReview: row.sm2_next_review ? new Date(row.sm2_next_review).getTime() : null // Convert ISO to timestamp
+                        nextReview: row.sm2_next_review ? new Date(row.sm2_next_review).getTime() : undefined // Convert ISO to timestamp
                     }
                 };
             });
@@ -270,9 +271,9 @@ export async function loadFromSupabase(user) {
         // Удаляем из памяти любые записи, ID которых нет в текущем словаре.
         
         // 1. Очистка множеств
-        const cleanSet = (s) => {
+        const cleanSet = (/** @type {Set<any>} */ s) => {
             const newSet = new Set();
-            s.forEach(id => { 
+            s.forEach((/** @type {any} */ id) => { 
                 if (validIds.has(String(id))) newSet.add(id);
             });
             return newSet;

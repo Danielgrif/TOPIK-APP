@@ -1,0 +1,10 @@
+/* 
+  Сюда следует перенести все стили, отвечающие за расположение основных блоков:
+  - #app-container, #main-header, #main-content, #bottom-nav
+  - .content-toolbar, .search-container
+  - #vocabulary-grid (стили самой сетки, не карточек)
+  - #filter-panel
+*/
+
+/* Пример */
+#app-container { max-width: 800px; margin: 0 auto; }

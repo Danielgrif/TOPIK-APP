@@ -22,14 +22,16 @@
  * - Calculates next interval based on previous performance and Ease Factor (EF)
  */
 export const Scheduler = {
+    /** @type {Array<any>} */
     _data: [],
-    _history: {},
+    /** @type {Record<string | number, import('./state.js').WordHistoryItem>} */
+    _history: {}, // Use WordHistoryItem type
 
     /**
      * Initialize the scheduler with current app data
-     * @param {Object} context
-     * @param {Array} context.dataStore - Массив слов
-     * @param {Object} context.wordHistory - История слов { [id]: { sm2: ... } }
+     * @param {object} context
+     * @param {Array<any>} context.dataStore - Массив слов
+     * @param {Record<string | number, import('./state.js').WordHistoryItem>} context.wordHistory - История слов { [id]: { sm2: ... } }
      */
     init({ dataStore, wordHistory }) {
         this._data = dataStore || [];
@@ -39,7 +41,7 @@ export const Scheduler = {
     /**
      * Core SM-2 Calculation
      * @param {number} grade - 0 to 5 (0=Fail, 3=Pass, 5=Easy)
-     * @param {SM2State} item - Previous SM-2 state
+     * @param {SM2State} item - Previous SM-2 state (can be null/undefined for new words)
      * @param {number|null} lastReviewTime - Timestamp of last review (for late review logic)
      * @returns {ReviewResult}
      */
@@ -117,6 +119,7 @@ export const Scheduler = {
      */
     getQueue({ limit = 50 } = {}) {
         const now = Date.now();
+        /** @type {Array<any>} */
         const due = [];
         const seen = new Set(); // Защита от дубликатов
 
@@ -137,8 +140,8 @@ export const Scheduler = {
                 return;
             }
 
-            // Check if due date has passed
-            if (h.sm2.nextReview <= now) {
+            // Check if due date has passed (and sm2 exists)
+            if (h.sm2 && h.sm2.nextReview !== undefined && h.sm2.nextReview <= now) {
                 due.push({ ...word, nextReview: h.sm2.nextReview });
                 seen.add(key);
             }
@@ -187,8 +190,8 @@ export const Scheduler = {
         if (grade >= 3) entry.correct++;
 
         // Trigger save in main app
-        if (typeof window.scheduleSaveState === 'function') {
-            window.scheduleSaveState();
+        if (typeof /** @type {any} */ (window).scheduleSaveState === 'function') {
+            /** @type {any} */ (window).scheduleSaveState();
         }
 
         return result;

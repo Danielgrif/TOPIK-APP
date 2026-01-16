@@ -23,7 +23,7 @@ export function saveAndRender() {
 
 /**
  * Plays audio for a word and handles TTS fallback.
- * @param {Object} word 
+ * @param {any} word 
  * @returns {Promise<void>}
  */
 export function playAndSpeak(word) { 
@@ -47,14 +47,19 @@ export function toggleViewMode(mode) {
     state.viewMode = mode;
     localStorage.setItem('view_mode_v1', mode);
     
-    document.querySelectorAll('.view-btn').forEach(btn => btn.classList.toggle('active', btn.dataset.mode === mode));
+    document.querySelectorAll('.view-btn').forEach(btn => btn.classList.toggle('active', /** @type {HTMLElement} */ (btn).dataset.mode === mode));
     render();
 }
 
 export function shuffleWords() { state.dataStore.sort(() => Math.random() - 0.5); render(); }
 
 /** @param {string} m */
-export function showError(m) { document.getElementById('error-msg').innerText = m; document.getElementById('error-overlay').style.display = 'flex'; }
+export function showError(m) { 
+    const msg = document.getElementById('error-msg');
+    if (msg) msg.innerText = m; 
+    const overlay = document.getElementById('error-overlay');
+    if (overlay) overlay.style.display = 'flex'; 
+}
 
 /**
  * Enables keyboard navigation for quiz options.
@@ -64,17 +69,17 @@ export function enableQuizKeyboard(container) {
     if (!container) return;
     
     // FIX: Удаляем старый слушатель, чтобы избежать дублирования событий
-    if (container._keyHandler) {
-        container.removeEventListener('keydown', container._keyHandler);
-        container._keyHandler = null;
+    if (/** @type {any} */ (container)._keyHandler) {
+        container.removeEventListener('keydown', /** @type {any} */ (container)._keyHandler);
+        /** @type {any} */ (container)._keyHandler = null;
     }
 
-    const options = Array.from(container.querySelectorAll('.quiz-option'));
+    const options = Array.from(container.querySelectorAll('.quiz-option')).map(el => /** @type {HTMLElement} */ (el));
     // if (!options.length) return; // Allow keyboard even if no options (for text inputs)
     let idx = -1;
-    options.forEach((o,i) => { o.tabIndex = 0; o.dataset._qi = i; o.classList.remove('selected'); });
+    options.forEach((o,i) => { o.tabIndex = 0; o.dataset._qi = String(i); o.classList.remove('selected'); });
     function update() { options.forEach((o,i) => o.classList.toggle('selected', i === idx)); try { if (idx >= 0) options[idx].focus(); } catch(e){} }
-    function onKey(e) {
+    function onKey(/** @type {KeyboardEvent} */ e) {
         if (e.key === 'ArrowRight' || e.key === 'ArrowDown') { idx = idx < 0 ? 0 : (idx + 1) % options.length; update(); e.preventDefault(); }
         else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') { idx = idx < 0 ? options.length - 1 : (idx - 1 + options.length) % options.length; update(); e.preventDefault(); }
         else if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); if (idx >= 0) options[idx].click(); }
@@ -84,7 +89,7 @@ export function enableQuizKeyboard(container) {
         return;
     }
     container.addEventListener('keydown', onKey);
-    container._keyHandler = onKey; // Сохраняем ссылку для удаления
+    /** @type {any} */ (container)._keyHandler = onKey; // Сохраняем ссылку для удаления
     options.forEach((o) => o.addEventListener('click', () => { options.forEach(x => x.classList.remove('selected')); }));
     container.tabIndex = 0;
 }
@@ -94,7 +99,7 @@ export function enableQuizKeyboard(container) {
  */
 export function sortByWeakWords() {
     const sortedCopy = [...state.dataStore].sort((a, b) => {
-        const getAcc = (id) => {
+        const getAcc = (/** @type {string|number} */ id) => {
              const stats = state.wordHistory[id] || { attempts: 0, correct: 0 };
              if (stats.attempts === 0) return 0;
              return (stats.correct / stats.attempts);

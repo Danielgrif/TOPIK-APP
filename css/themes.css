@@ -1,0 +1,44 @@
+body.dark-mode {
+    --bg: #18191a;
+    --surface-1: #1e1e1e;
+    --surface-2: #2d2d2d;
+    --text-main: #ffffff;
+    --text-sub: #b0b0b0;
+    --border-color: #404040;
+    --input-bg: #2d2d2d;
+
+    --primary: #9d7eff;
+    --success: #69f0ae;
+    --danger: #ff8a80;
+    --warning: #ffd180;
+    --info: #80d8ff;
+
+    --bg-learned: rgba(0, 184, 148, 0.15);
+    --bg-mistake: rgba(214, 48, 49, 0.15);
+    --bg-note: rgba(253, 203, 110, 0.1);
+    --text-note: #ffeaa7;
+    --border-note: #b7892b;
+}
+
+/* Flash Effects */
+body.correct-flash { background: #d1fae5 !important; }
+body.wrong-flash { background: #fee2e2 !important; }
+
+/* Focus Mode */
+html.focus-mode {
+    scroll-snap-type: y mandatory;
+}
+body.focus-mode { background: #000000; }
+body.focus-mode #main-header,
+body.focus-mode .content-toolbar,
+body.focus-mode .install-banner,
+body.focus-mode #bottom-nav { display: none; }
+body.focus-mode .card {
+    scroll-margin-top: 20px;
+    scroll-snap-align: center;
+}
+
+/* Red Pulse for losing a life */
+body.pulse-red-effect {
+    animation: pulse-red-anim 0.7s ease-out forwards;
+}

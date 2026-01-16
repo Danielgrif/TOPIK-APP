@@ -3,7 +3,7 @@ import { state } from './state.js';
 /**
  * Finds pairs of words for the matching game.
  * Currently implements "Word <-> Translation" matching.
- * @returns {Array<{left: Object, right: Object}>}
+ * @returns {Array<{left: any, right: any}>}
  */
 export function findAssociations() {
     // Filter valid words
@@ -30,11 +30,11 @@ export function findAssociations() {
 
 /**
  * Checks if two words are a valid pair.
- * @param {Object} w1 
- * @param {Object} w2 
+ * @param {any} w1 
+ * @param {any} w2 
  * @returns {boolean}
  */
 export function checkAssociation(w1, w2) {
-    if (!w1 || !w2) return false;
-    return String(w1.id) === String(w2.id);
+    if (!w1 || !w2 || !('id' in w1) || !('id' in w2)) return false;
+    return String(w1.id) === String(w2.id); // Cast to string for robust comparison
 }

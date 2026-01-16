@@ -20,7 +20,7 @@ export function openReviewMode() {
 
 /**
  * Builds and displays the review modal content.
- * @param {Array} queue 
+ * @param {Array<any>} queue 
  */
 export function buildReviewModal(queue) {
     const modalId = 'review-modal';
@@ -32,15 +32,17 @@ export function buildReviewModal(queue) {
     }
     
     // Гарантируем наличие счетчика (если модальное окно уже было создано ранее)
-    let counter = modalEl.querySelector('#review-counter');
+    let counter = /** @type {HTMLElement | null} */ (modalEl.querySelector('#review-counter'));
     if (!counter) {
         const header = modalEl.querySelector('.modal-header');
-        counter = document.createElement('span'); counter.id = 'review-counter'; counter.style.cssText = 'font-size:0.6em; opacity:0.7; margin-left:10px;';
-        const btn = header.querySelector('.close-modal');
-        if (btn) header.insertBefore(counter, btn); else header.appendChild(counter);
+        if (header) {
+            counter = document.createElement('span'); counter.id = 'review-counter'; counter.style.cssText = 'font-size:0.6em; opacity:0.7; margin-left:10px;';
+            const btn = header.querySelector('.close-modal');
+            if (btn) header.insertBefore(counter, btn); else header.appendChild(counter);
+        }
     }
 
-    const container = modalEl.querySelector('#review-container');
+    const container = /** @type {HTMLElement | null} */ (modalEl.querySelector('#review-container'));
     if (!container) return;
     container.innerHTML = '';
     let idx = 0;
@@ -49,13 +51,13 @@ export function buildReviewModal(queue) {
     function renderOne() {
         const w = queue[idx];
         if (counter) counter.textContent = `(Осталось: ${queue.length - idx})`;
-        container.innerHTML = '';
+        if (container) container.innerHTML = '';
         const title = document.createElement('div'); title.className = 'quiz-question'; title.textContent = w.word_kr || w.word || '—';
         const info = document.createElement('div'); info.style.margin = '8px 0'; info.textContent = w.translation || '';
         const actions = document.createElement('div'); actions.style.display = 'flex'; actions.style.gap = '8px';
         const previews = Scheduler.previewNextIntervals(w.id);
-        const fmt = (d) => { if (d === 0) return 'сейчас'; if (d >= 365) return (d/365).toFixed(1) + ' г'; if (d >= 30) return (d/30).toFixed(1) + ' мес'; return d + ' д'; };
-        const handleReview = (grade) => {
+        const fmt = (/** @type {number} */ d) => { if (d === 0) return 'сейчас'; if (d >= 365) return (d/365).toFixed(1) + ' г'; if (d >= 30) return (d/30).toFixed(1) + ' мес'; return d + ' д'; };
+        const handleReview = (/** @type {number} */ grade) => {
             ensureSessionStarted();
             const res = Scheduler.submitReview(w.id, grade);
             
@@ -82,19 +84,22 @@ export function buildReviewModal(queue) {
             if (d > 1) showToast(`📅 Увидимся через ${d} дн.`, 1000);
             setTimeout(next, 50);
         };
-        const mkBtn = (text, sub, cls, grade) => {
+        const mkBtn = (/** @type {string} */ text, /** @type {string} */ sub, /** @type {string} */ cls, /** @type {number} */ grade) => {
             const b = document.createElement('button'); b.className = cls; b.innerHTML = `${text}<br><span style="font-size:10px; opacity:0.7; font-weight:normal">${sub}</span>`; b.style.lineHeight = '1.2'; b.onclick = () => handleReview(grade); return b;
         };
         actions.appendChild(mkBtn('Знаю', fmt(previews.easy), 'btn btn-quiz', 5));
         actions.appendChild(mkBtn('Сомневаюсь', fmt(previews.hard), 'btn', 3));
         actions.appendChild(mkBtn('Забыл', fmt(previews.fail), 'btn action-mistake', 0));
-        container.appendChild(title); container.appendChild(info); container.appendChild(actions);
+        if (container) {
+            container.appendChild(title); container.appendChild(info); container.appendChild(actions);
+        }
     }
     function next() { idx++; updateSRSBadge(); if (idx >= queue.length) { renderSummary(); return; } renderOne(); }
     
     function renderSummary() {
         if (counter) counter.textContent = '';
-        container.innerHTML = `
+        if (container) {
+            container.innerHTML = `
             <div style="text-align:center; padding: 20px; animation: fadeIn 0.5s;">
                 <div style="font-size: 50px; margin-bottom: 10px;">🎉</div>
                 <div style="font-size: 22px; font-weight: 800; margin-bottom: 20px;">Сессия завершена!</div>
@@ -105,7 +110,8 @@ export function buildReviewModal(queue) {
                 <button class="btn btn-quiz" style="width:100%; padding:15px; font-size:16px;" onclick="closeModal('${modalId}')">Закрыть</button>
             </div>
         `;
-        if (stats.remembered > stats.forgotten && typeof confetti === 'function') confetti({ particleCount: 100, spread: 70, origin: { y: 0.6 }, zIndex: 20005 });
+        }
+        if (stats.remembered > stats.forgotten && typeof /** @type {any} */ (window).confetti === 'function') /** @type {any} */ (window).confetti({ particleCount: 100, spread: 70, origin: { y: 0.6 }, zIndex: 20005 });
     }
 
     renderOne();

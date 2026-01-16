@@ -10,7 +10,16 @@ import { applyBackgroundMusic } from './ui_settings.js';
 import { QuizStrategies } from './quiz_strategies.js';
 import { findConfusingWords } from '../core/confusing_words.js';
 
-let currentQuizMode, quizWords, quizIndex, quizStart, quizStar = 'all', quizTopic = 'all', quizCategory = 'all', quizSearch = '';
+/** @type {string} */
+let currentQuizMode;
+/** @type {any[]} */
+let quizWords;
+/** @type {number} */
+let quizIndex;
+/** @type {number} */
+let quizStart;
+let quizStar = 'all', quizTopic = 'all', quizCategory = 'all', quizSearch = '';
+/** @type {any} */
 let quizInterval = null, quizCorrectCount = 0, quizSecondsElapsed = 0; 
 let quizTimerValue = 0;
 let survivalLives = 0;
@@ -20,7 +29,7 @@ let isQuizPaused = false; // Флаг паузы для таймера
  * Updates the visual indicator on the Daily Challenge button.
  */
 export function updateDailyChallengeUI() {
-    const btn = document.querySelector('.fire-btn');
+    const btn = /** @type {HTMLElement} */ (document.querySelector('.fire-btn'));
     if (!btn) return;
     
     const today = new Date().toDateString();
@@ -61,14 +70,20 @@ export function checkSuperChallengeNotification() {
  */
 export function buildQuizModes() {
     // RESET UI STATE (Восстанавливаем элементы при открытии окна)
-    document.getElementById('quiz-search-input').style.display = 'block';
-    document.getElementById('quiz-count').style.display = 'block';
-    const header = document.querySelector('#quiz-modal .modal-header');
+    const searchInput = document.getElementById('quiz-search-input');
+    if (searchInput) searchInput.style.display = 'block';
+    const quizCount = document.getElementById('quiz-count');
+    if (quizCount) quizCount.style.display = 'block';
+    const header = /** @type {HTMLElement} */ (document.querySelector('#quiz-modal .modal-header'));
     if (header) header.style.display = 'flex';
-    document.getElementById('quiz-game').style.display = 'none';
-    document.getElementById('quiz-mode-selector').style.display = 'grid';
-    document.getElementById('quiz-difficulty').style.display = 'flex';
-    document.getElementById('quiz-filters').style.display = 'flex';
+    const quizGame = document.getElementById('quiz-game');
+    if (quizGame) quizGame.style.display = 'none';
+    const modeSelector = document.getElementById('quiz-mode-selector');
+    if (modeSelector) modeSelector.style.display = 'grid';
+    const quizDiff = document.getElementById('quiz-difficulty');
+    if (quizDiff) quizDiff.style.display = 'flex';
+    const quizFilters = document.getElementById('quiz-filters');
+    if (quizFilters) quizFilters.style.display = 'flex';
 
     const modes = [
         { id: 'mix', emoji: '🔀', label: 'Микс (Все режимы)', mode: 'mix' },
@@ -92,17 +107,17 @@ export function buildQuizModes() {
         { id: 'pronunciation', emoji: '🎤', label: 'Произношение', mode: 'pronunciation' }
     ];
     
-    quizTopic = state.quizTopic;
-    quizCategory = state.quizCategory;
-    quizStar = state.quizDifficulty;
+    quizTopic = state.quizTopic || 'all';
+    quizCategory = state.quizCategory || 'all';
+    quizStar = state.quizDifficulty || 'all';
     quizSearch = '';
 
-    const sInput = document.getElementById('quiz-search-input');
+    const sInput = /** @type {HTMLInputElement} */ (document.getElementById('quiz-search-input'));
     if (sInput) {
         sInput.value = '';
         sInput.oninput = (e) => { 
-            const target = e.target;
-            if (target instanceof HTMLInputElement) {
+            const target = /** @type {HTMLInputElement} */ (e.target);
+            if (target) {
                 quizSearch = target.value.trim().toLowerCase(); 
                 updateQuizCount();
             }
@@ -113,21 +128,23 @@ export function buildQuizModes() {
     populateQuizDifficulty();
 
     const selector = document.getElementById('quiz-mode-selector');
-    selector.innerHTML = '';
-    modes.forEach(m => {
-        const btn = document.createElement('button');
-        btn.className = 'quiz-mode-btn';
-        btn.dataset.mode = m.mode;
-        btn.innerHTML = `<span class="mode-icon">${m.emoji}</span><span class="mode-label">${m.label}</span>`;
-        btn.onclick = () => startQuizMode(m.mode);
-        selector.appendChild(btn);
-    });
+    if (selector) {
+        selector.innerHTML = '';
+        modes.forEach(m => {
+            const btn = document.createElement('button');
+            btn.className = 'quiz-mode-btn';
+            btn.dataset.mode = m.mode;
+            btn.innerHTML = `<span class="mode-icon">${m.emoji}</span><span class="mode-label">${m.label}</span>`;
+            btn.onclick = () => startQuizMode(m.mode);
+            selector.appendChild(btn);
+        });
+    }
     updateQuizCount();
 }
 
 function populateQuizFilters() {
     const tSelect = /** @type {HTMLSelectElement} */ (document.getElementById('quiz-topic-select'));
-    if (!tSelect) return;
+    if (!tSelect || !state.dataStore) return;
 
     const topics = new Set();
     state.dataStore.forEach(w => { if (w.type === state.currentType) topics.add(w.topic || w.topic_ru || w.topic_kr); });
@@ -152,7 +169,7 @@ function populateQuizFilters() {
 
 function populateQuizCategories() {
     const cSelect = /** @type {HTMLSelectElement} */ (document.getElementById('quiz-category-select'));
-    if (!cSelect) return;
+    if (!cSelect || !state.dataStore) return;
     const categories = new Set();
     state.dataStore.forEach(w => {
         if (w.type !== state.currentType) return;
@@ -206,8 +223,8 @@ function populateQuizDifficulty() {
 export function startQuizMode(mode) {
     currentQuizMode = mode;
     ensureSessionStarted();
-    
-    const filterFn = (w) => {
+
+    const filterFn = (/** @type {any} */ w) => {
         if (w.type !== state.currentType) return false;
         const wTopic = w.topic || w.topic_ru || w.topic_kr;
         const matchTopic = (quizTopic === 'all' || wTopic === quizTopic);
@@ -281,7 +298,7 @@ export function startQuizMode(mode) {
     if (mode === 'sprint' || mode === 'survival') if (bar) bar.style.transition = 'width 1s linear, background-color 1s linear';
 
     if (quizInterval) clearInterval(quizInterval);
-    quizInterval = setInterval(() => {
+    quizInterval = setInterval((/** @type {any} */ args) => {
         if (isQuizPaused) return; // Пауза таймера
         if (currentQuizMode === 'sprint') {
             quizTimerValue--;
@@ -305,17 +322,23 @@ export function startQuizMode(mode) {
         }
     }, 1000);
 
-    document.getElementById('quiz-difficulty').style.display = 'none';
-    document.getElementById('quiz-filters').style.display = 'none';
-    document.getElementById('quiz-mode-selector').style.display = 'none';
+    const quizDiff = document.getElementById('quiz-difficulty');
+    if (quizDiff) quizDiff.style.display = 'none';
+    const quizFilters = document.getElementById('quiz-filters');
+    if (quizFilters) quizFilters.style.display = 'none';
+    const modeSelector = document.getElementById('quiz-mode-selector');
+    if (modeSelector) modeSelector.style.display = 'none';
     
     // HIDE EXTRA UI (Скрываем поиск, счетчик и шапку с крестиком)
-    document.getElementById('quiz-search-input').style.display = 'none';
-    document.getElementById('quiz-count').style.display = 'none';
-    const header = document.querySelector('#quiz-modal .modal-header');
+    const searchInput = document.getElementById('quiz-search-input');
+    if (searchInput) searchInput.style.display = 'none';
+    const quizCount = document.getElementById('quiz-count');
+    if (quizCount) quizCount.style.display = 'none';
+    const header = /** @type {HTMLElement} */ (document.querySelector('#quiz-modal .modal-header'));
     if (header) header.style.display = 'none';
 
-    document.getElementById('quiz-game').style.display = 'flex';
+    const quizGame = document.getElementById('quiz-game');
+    if (quizGame) quizGame.style.display = 'flex';
     applyBackgroundMusic(true); // Включаем музыку при старте квиза
 
     nextQuizQuestion();
@@ -380,15 +403,21 @@ export function startDailyChallenge() {
         quizCorrectCount = 0;
         
         // UI Setup
-        document.getElementById('quiz-difficulty').style.display = 'none';
-        document.getElementById('quiz-filters').style.display = 'none';
-        document.getElementById('quiz-mode-selector').style.display = 'none';
-        document.getElementById('quiz-search-input').style.display = 'none';
-        document.getElementById('quiz-count').style.display = 'none';
-        const header = document.querySelector('#quiz-modal .modal-header');
+        const quizDiff = document.getElementById('quiz-difficulty');
+        if (quizDiff) quizDiff.style.display = 'none';
+        const quizFilters = document.getElementById('quiz-filters');
+        if (quizFilters) quizFilters.style.display = 'none';
+        const modeSelector = document.getElementById('quiz-mode-selector');
+        if (modeSelector) modeSelector.style.display = 'none';
+        const searchInput = document.getElementById('quiz-search-input');
+        if (searchInput) searchInput.style.display = 'none';
+        const quizCount = document.getElementById('quiz-count');
+        if (quizCount) quizCount.style.display = 'none';
+        const header = /** @type {HTMLElement} */ (document.querySelector('#quiz-modal .modal-header'));
         if (header) header.style.display = 'none';
 
-        document.getElementById('quiz-game').style.display = 'flex';
+        const quizGame = document.getElementById('quiz-game');
+        if (quizGame) quizGame.style.display = 'flex';
         applyBackgroundMusic(true); // Включаем музыку при старте квиза
 
         nextQuizQuestion();
@@ -396,7 +425,7 @@ export function startDailyChallenge() {
     };
 
     // FIX: Если окно закрыто, открываем и ждем инициализации, чтобы не сбить UI
-    const modal = document.getElementById('quiz-modal');
+    const modal = /** @type {HTMLElement} */ (document.getElementById('quiz-modal'));
     if (!modal.classList.contains('active')) {
         openModal('quiz-modal');
         setTimeout(launch, 300);
@@ -408,7 +437,7 @@ export function startDailyChallenge() {
 function openDailyStatusModal() {
     const now = new Date();
     const tomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
-    const diff = tomorrow - now;
+    const diff = tomorrow.getTime() - now.getTime();
     const h = Math.floor(diff / (1000 * 60 * 60));
     const m = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
     
@@ -472,28 +501,28 @@ function openDailyStatusModal() {
  */
 export function nextQuizQuestion() {
     if (quizIndex >= quizWords.length) { endQuiz(); return; }
-    const container = document.getElementById('quiz-opts');
+    const container = /** @type {HTMLElement} */ (document.getElementById('quiz-opts'));
     
     // Очищаем доп. информацию от предыдущего вопроса
     const infoEl = document.getElementById('quiz-extra-info');
     if (infoEl) infoEl.remove();
 
-    if (container) container.querySelectorAll('.quiz-option').forEach(btn => btn.disabled = false);
+    if (container) container.querySelectorAll('.quiz-option').forEach(btn => /** @type {HTMLButtonElement} */ (btn).disabled = false);
     const progressEl = document.getElementById('quiz-progress-fill');
     if (progressEl) progressEl.style.backgroundColor = '';
 
     preloadNextAudio();
-    const word = quizWords[quizIndex];
+    const word = /** @type {any} */ (quizWords[quizIndex]);
     const scoreEl = document.getElementById('quiz-score');
     if(scoreEl) scoreEl.innerText = `Вопрос ${quizIndex + 1} / ${quizWords.length}`;
     if (currentQuizMode === 'survival') {
         if(scoreEl) scoreEl.innerText = `❤️ ${survivalLives}`;
     }
     
-    const qEl = document.getElementById('quiz-q');
+    const qEl = /** @type {HTMLElement} */ (document.getElementById('quiz-q'));
     
     // Определяем стратегию. Для 'survival' и 'true-false' используем существующие стратегии
-    let strategyKey = currentQuizMode;
+    let strategyKey = /** @type {string} */ (currentQuizMode);
     
     // FIX: Для ежедневных вызовов выбираем случайный режим для каждого вопроса
     if (currentQuizMode === 'daily' || currentQuizMode === 'super-daily') {
@@ -534,8 +563,8 @@ export function nextQuizQuestion() {
 
     const strategy = QuizStrategies[strategyKey] || QuizStrategies['multiple-choice'];
     
-    strategy.render(word, container, (isCorrect, autoAdvance, forceNext) => {
-        if (forceNext) {
+    strategy.render(word, /** @type {HTMLElement} */ (container), (/** @type {boolean|null} */ isCorrect, autoAdvance, forceNext) => {
+        if (forceNext || isCorrect === null) { // isCorrect === null means skip/force next
             if (quizIndex < quizWords.length - 1) { quizIndex++; nextQuizQuestion(); } else { endQuiz(true); }
             return;
         }
@@ -558,7 +587,7 @@ function preloadNextAudio() {
     } catch (e) { /* ignore */ }
 }
 
-function recordQuizAnswer(isCorrect, autoAdvance = true) {
+function recordQuizAnswer(/** @type {boolean} */ isCorrect, autoAdvance = true) {
     const word = quizWords[quizIndex];
     recordAttempt(word.id, isCorrect);
 
@@ -607,7 +636,7 @@ function recordQuizAnswer(isCorrect, autoAdvance = true) {
             document.body.classList.add('pulse-red-effect');
             setTimeout(() => document.body.classList.remove('pulse-red-effect'), 700);
             
-            playTone('life-lost', 400);
+            playTone(/** @type {any} */ ('life-lost'));
             
             if (survivalLives <= 0) {
                 showToast('☠️ Жизни закончились!'); endQuiz(true); return; 
@@ -638,7 +667,7 @@ function recordQuizAnswer(isCorrect, autoAdvance = true) {
     }
 }
 
-function endQuiz() {
+function endQuiz(forceEnd = false) {
     if (quizInterval) clearInterval(quizInterval);
     if (currentQuizMode === 'sprint' && quizCorrectCount > state.userStats.sprintRecord) { state.userStats.sprintRecord = quizCorrectCount; showComboEffect(`🏆 Рекорд: ${quizCorrectCount}!`); }
     if (currentQuizMode === 'survival' && quizCorrectCount > state.userStats.survivalRecord) state.userStats.survivalRecord = quizCorrectCount;
@@ -666,7 +695,7 @@ function endQuiz() {
         localStorage.setItem('daily_challenge_v1', JSON.stringify(state.dailyChallenge));
         showComboEffect(`🔥 Вызов пройден!\n+50 XP | +${totalCoins + 50} 💰\nСерия: ${streak} дн.`);
         updateDailyChallengeUI();
-        if (typeof confetti === 'function') confetti({ particleCount: 150, spread: 70, origin: { y: 0.6 } });
+        if (typeof /** @type {any} */ (window).confetti === 'function') /** @type {any} */ (window).confetti({ particleCount: 150, spread: 70, origin: { y: 0.6 } });
     }
 
     // FIX: Условие было неверным. Сессия всегда активна во время квиза.
@@ -692,7 +721,7 @@ function endQuiz() {
     if (searchInputEl) searchInputEl.style.display = 'block';
     const quizCountEl = document.getElementById('quiz-count');
     if (quizCountEl) quizCountEl.style.display = 'block';
-    const header = document.querySelector('#quiz-modal .modal-header');
+    const header = /** @type {HTMLElement} */ (document.querySelector('#quiz-modal .modal-header'));
     if (header) header.style.display = 'flex';
 
     showToast('🏁 Квиз завершен!');
@@ -714,7 +743,7 @@ export function quitQuiz() {
 export function updateQuizCount() {
     const countEl = document.getElementById('quiz-count');
     if (!countEl) return;
-    const filterFn = (w) => {
+    const filterFn = (/** @type {any} */ w) => {
         if (w.type !== state.currentType) return false;
         const wTopic = w.topic || w.topic_ru || w.topic_kr;
         const matchTopic = (quizTopic === 'all' || wTopic === quizTopic);
@@ -738,7 +767,7 @@ export function updateQuizModesAvailability() {
     const selector = document.getElementById('quiz-mode-selector');
     if (!selector) return;
     const buttons = selector.querySelectorAll('.quiz-mode-btn');
-    const filterFn = (w) => {
+    const filterFn = (/** @type {any} */ w) => {
         if (w.type !== state.currentType) return false;
         const wTopic = w.topic || w.topic_ru || w.topic_kr;
         const matchTopic = (quizTopic === 'all' || wTopic === quizTopic);
@@ -749,7 +778,8 @@ export function updateQuizModesAvailability() {
         return matchTopic && matchCat && matchStar && matchSearch;
     };
     const basePool = state.dataStore.filter(filterFn);
-    buttons.forEach(btn => {
+    buttons.forEach(b => {
+        const btn = /** @type {HTMLButtonElement} */ (b);
         const mode = btn.dataset.mode;
         let count = basePool.length;
         let reason = '';

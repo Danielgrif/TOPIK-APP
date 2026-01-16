@@ -12,6 +12,7 @@ const THEMES = {
 
 /**
  * Generates an image of the user's stats and triggers a download/share.
+ * @param {string} [themeOverride]
  */
 export async function shareStats(themeOverride) {
     showToast('🎨 Создаем изображение...');
@@ -30,7 +31,7 @@ export async function shareStats(themeOverride) {
     canvas.height = height;
 
     const themeKey = themeOverride || state.themeColor || 'purple';
-    const colors = THEMES[themeKey] || THEMES.purple;
+    const colors = /** @type {Record<string, string[]>} */ (THEMES)[themeKey] || THEMES.purple;
 
     // Background
     const gradient = ctx.createLinearGradient(0, 0, width, height);
@@ -40,6 +41,13 @@ export async function shareStats(themeOverride) {
     ctx.fillRect(0, 0, width, height);
 
     // Helper for rounded rect
+    /**
+     * @param {number} x
+     * @param {number} y
+     * @param {number} w
+     * @param {number} h
+     * @param {number} r
+     */
     const roundRect = (x, y, w, h, r) => {
         if (w < 2 * r) r = w / 2;
         if (h < 2 * r) r = h / 2;
@@ -97,7 +105,7 @@ export async function shareStats(themeOverride) {
     ctx.fillText('LEVEL', centerX, centerY - 100);
     
     ctx.font = 'bold 160px sans-serif'; // x2
-    ctx.fillText(state.userStats.level, centerX, centerY + 50);
+    ctx.fillText(String(state.userStats.level), centerX, centerY + 50);
 
     // XP Text
     ctx.font = '32px sans-serif'; // x2
@@ -145,7 +153,7 @@ export async function shareStats(themeOverride) {
         // Value
         ctx.fillStyle = '#ffffff';
         ctx.font = 'bold 56px sans-serif'; // x2
-        ctx.fillText(stat.value, x + 40, y + 170);
+        ctx.fillText(String(stat.value), x + 40, y + 170);
     });
 
     // Footer
@@ -157,6 +165,7 @@ export async function shareStats(themeOverride) {
     // Export
     try {
         const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+        if (!blob) throw new Error('Blob creation failed');
         const file = new File([blob], 'topik_stats.png', { type: 'image/png' });
         let shared = false;
 

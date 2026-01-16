@@ -27,7 +27,7 @@ function renderShop() {
     const balanceEl = document.getElementById('shop-balance');
     if (!container || !balanceEl) return;
 
-    balanceEl.innerText = state.userStats.coins;
+    balanceEl.innerText = String(state.userStats.coins);
     container.innerHTML = '';
 
     // Daily Reward Section
@@ -88,6 +88,9 @@ function renderShop() {
     });
 }
 
+/**
+ * @param {string} id
+ */
 export function buyItem(id) {
     const item = SHOP_ITEMS.find(i => i.id === id);
     if (!item) return;

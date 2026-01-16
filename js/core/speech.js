@@ -1,5 +1,6 @@
 import { showToast, levenshtein } from '../utils/utils.js';
 
+/** @type {any} */
 let recognition = null;
 
 /**
@@ -9,7 +10,7 @@ let recognition = null;
 function getRecognition() {
     if (recognition) return recognition;
 
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    const SpeechRecognition = /** @type {any} */ (window).SpeechRecognition || /** @type {any} */ (window).webkitSpeechRecognition;
     if (!SpeechRecognition) {
         showToast('❌ Распознавание речи не поддерживается в этом браузере.');
         return null;
@@ -38,15 +39,15 @@ export function checkPronunciation(correctWord, btn, onResult) {
 
     if (btn) {
         btn.textContent = '🎤';
-        btn.disabled = true;
+        /** @type {HTMLButtonElement} */ (btn).disabled = true;
     }
     showToast('🎤 Говорите...');
 
-    rec.onresult = (event) => {
+    rec.onresult = (/** @type {any} */ event) => {
         if (!event.results || !event.results[0] || !event.results[0][0]) return;
         const spokenText = event.results[0][0].transcript.trim();
         
-        const normalize = (s) => s.replace(/[.,\/#!$%\^&\*;:{}=\-_`~()]/g,"").replace(/\s+/g, "");
+        const normalize = (/** @type {string} */ s) => s.replace(/[.,\/#!$%\^&\*;:{}=\-_`~()]/g,"").replace(/\s+/g, "");
         const spokenNorm = normalize(spokenText);
         const correctNorm = normalize(correctWord);
 
@@ -61,7 +62,7 @@ export function checkPronunciation(correctWord, btn, onResult) {
         if (onResult) onResult(similarity, spokenText);
     };
 
-    rec.onerror = (event) => {
+    rec.onerror = (/** @type {any} */ event) => {
         let errorMessage = 'Ошибка распознавания';
         if (event.error === 'no-speech') errorMessage = 'Не удалось распознать речь. Попробуйте снова.';
         else if (event.error === 'not-allowed' || event.error === 'service-not-allowed') errorMessage = 'Доступ к микрофону запрещен.';
@@ -71,7 +72,7 @@ export function checkPronunciation(correctWord, btn, onResult) {
     };
 
     rec.onend = () => {
-        if (btn) { btn.textContent = '🗣️'; btn.disabled = false; }
+        if (btn) { btn.textContent = '🗣️'; /** @type {HTMLButtonElement} */ (btn).disabled = false; }
     };
 
     rec.start();

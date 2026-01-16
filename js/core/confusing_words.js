@@ -3,7 +3,7 @@ import { levenshtein } from '../utils/utils.js';
 
 /**
  * Finds groups of confusing words based on Levenshtein distance.
- * @returns {Array<Array<Object>>} Array of word groups (pairs or triplets).
+ * @returns {Array<Array<any>>} Array of word groups (pairs or triplets).
  */
 export function findConfusingWords() {
     const words = state.dataStore.filter(w => w.type === 'word' && w.word_kr.length > 1);

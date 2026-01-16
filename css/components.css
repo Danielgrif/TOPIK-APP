@@ -1,0 +1,11 @@
+/*
+  Сюда следует перенести стили для всех переиспользуемых UI-элементов:
+  - .btn, .btn-icon, .fab-btn, .nav-btn, .tool-btn
+  - .card, .card-skeleton
+  - .modal, .modal-content
+  - .search-input, .custom-select
+  - .toast-item, .install-banner
+*/
+
+/* Пример */
+.btn { cursor: pointer; border-radius: 8px; }

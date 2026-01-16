@@ -36,8 +36,8 @@ const ASSETS = [
   'https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js'
 ];
 
-self.addEventListener('install', (e) => {
-  self.skipWaiting(); // Force activation to fix stale index.html
+self.addEventListener('install', (/** @type {any} */ e) => {
+  /** @type {any} */ (self).skipWaiting(); // Force activation to fix stale index.html
   e.waitUntil(
     caches.open(CACHE_NAME).then((cache) => cache.addAll(ASSETS))
   );
@@ -45,11 +45,11 @@ self.addEventListener('install', (e) => {
 
 self.addEventListener('message', (event) => {
   if (event.data && event.data.type === 'SKIP_WAITING') {
-    self.skipWaiting();
+    /** @type {any} */ (self).skipWaiting();
   }
 });
 
-self.addEventListener('activate', (e) => {
+self.addEventListener('activate', (/** @type {any} */ e) => {
   e.waitUntil(
     caches.keys().then((keyList) => {
       return Promise.all(keyList.map((key) => {
@@ -57,11 +57,11 @@ self.addEventListener('activate', (e) => {
           return caches.delete(key); // Удаляем старый кэш
         }
       }));
-    }).then(() => self.clients.claim()) // Немедленный захват контроля над страницей
+    }).then(() => /** @type {any} */ (self).clients.claim()) // Немедленный захват контроля над страницей
   );
 });
 
-self.addEventListener('fetch', (e) => {
+self.addEventListener('fetch', (/** @type {any} */ e) => {
   const url = new URL(e.request.url);
 
   // FIX: Игнорируем не-GET запросы (POST) и схемы кроме http/https (chrome-extension)

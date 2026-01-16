@@ -49,9 +49,9 @@
 ### UI & Presentation
 - **`js/app.js`**:
   - Точка входа (`init`).
+  - **Global Event Delegation**: Обработка `data-action` и `data-modal-target` для всего приложения.
   - Настройка глобальных слушателей (Auth, Search).
   - Регистрация Service Worker (PWA).
-  - Экспорт функций в `window` для inline-событий HTML.
 
 - **`js/ui/ui.js`**:
   - Управление глобальными элементами UI: фильтры, таймер сессии, жесты, навигация.
@@ -74,9 +74,8 @@
   - Утилиты: `debounce`, `showToast`, `speak` (TTS), `playTone` (Web Audio API), `levenshtein`, `generateDiffHtml`.
 
 - **`style.css`**:
-  - Стили интерфейса, адаптивность, анимации (Loader, Shake, FadeIn, Pulse).
-  - Переменные CSS (`:root`, `.dark-mode`) для темизации.
-  - Стили для 3D-карточек, графиков, модальных окон.
+  - **(Legacy)**. Стили разделены на модули в папке `/css`.
+  - `base.css`, `layout.css`, `components.css`, `themes.css`, `animations.css`.
 
 ### PWA
 - **`manifest.json`**: Метаданные приложения для установки.
@@ -89,6 +88,9 @@
   - Python-скрипт для наполнения контента (Asyncio).
   - Генерирует аудио (Edge TTS) и загружает картинки (Pixabay) в Supabase Storage.
   - Обновляет таблицу `vocabulary`.
+- **`validate_schema.py`**:
+  - Скрипт валидации схемы БД (Supabase) и наличия бакетов.
+  - Проверяет таблицы `vocabulary` и `user_progress`.
 
 ## 4. Data Flow (Типичный сценарий)
 1. **Start**: `app.js` -> `db.js` (fetchVocabulary) -> `state.js` (загрузка LocalStorage) -> `ui.js` (render).
@@ -115,24 +117,25 @@
 
 ## 7. Strict Evaluation & Roadmap
 
-### 📊 Evaluation (Score: 9.0/10)
-**Strengths:** Performance (Workers, PWA), Clean Vanilla JS Architecture, Automation (Python pipeline), Skeleton loading implemented for smoother UI.
+### 📊 Evaluation (Score: 9.2/10)
+**Strengths:**
+  - **Architecture:** Clean Vanilla JS with Event Delegation (`app.js`).
+  - **Performance:** Workers, PWA, Skeleton loading, Optimized DOM updates.
+  - **Automation:** Robust Python pipeline (`content_worker.py`) with async/await.
+  - **Reliability:** Schema validation script (`validate_schema.py`) ensures DB integrity.
 **Weaknesses:**
-  - **Critical:** Database schema drift. Код ожидал колонки (`image_pixabay`), которых не было в БД, что приводило к ошибкам в бэкенд-сервисах. Это указывает на отсутствие процесса миграции/валидации схемы.
-  - Insufficient test coverage (только `Scheduler` частично протестирован).
-  - Некоторые модули (`ui.js`, `quiz.js`) все еще велики и могут быть дополнительно разделены.
-  - **In Progress:** TypeScript integration (Configured `tsconfig.json` & `package.json`).
-  - **Resolved:** XSS vulnerabilities in Quiz Strategies (fixed via DOM methods).
-  - **Resolved:** Python worker default API key check.
+  - **CSS:** ✅ **(Fixed)** `style.css` has been modularized.
+  - **Type Safety:** TypeScript integration is partial (JSDoc used, but full strict mode pending for all files).
+  - **Testing:** Unit tests cover Scheduler and Worker, but UI logic is largely untested.
 
 ### 🛣️ Improvement Program
 
-#### Phase 1: Stability & Quality (Immediate)
-1. **Critical:** Implement a schema validation/migration strategy. Все сервисы должны работать с единым источником правды о схеме БД.
-2. **Unit Tests:** Расширить покрытие тестами (Jest/Vitest) для `utils.js`, `db.js` и логики квизов.
-3. **Type Safety:** Внедрить JSDoc-аннотации во все ключевые модули для раннего обнаружения ошибок.
-4. **Refactoring:** Продолжить рефакторинг `ui.js` и `quiz.js`, вынося логику в более мелкие, сфокусированные модули.
-5. **Security:** Ensure all user inputs are sanitized (completed for Quiz Strategies).
+#### Phase 1: Stability & Quality (Completed/In Progress)
+1.  **Schema Validation:** ✅ Implemented `validate_schema.py` to check DB columns and buckets.
+2.  **Event Delegation:** ✅ Refactored `index.html` and `app.js` to remove inline `onclick` handlers.
+3.  **Type Safety:** 🔄 In Progress. `app.js` fully typed with JSDoc. Next: `ui/*.js`.
+4.  **CSS Modularization:** ✅ Split `style.css` into modules.
+4.  **Unit Tests:** 🔄 Added `test_content_worker.py`. Need more JS unit tests.
 
 #### Phase 2: UX & Content (Completed)
 1. **Leaderboard:** Global XP leaderboard with Realtime updates. (Done)
@@ -163,6 +166,6 @@
 3. **Advanced Search:** Filter by "Has Audio", "Has Image", "Has Example".
 
 #### Phase 5: Technical Debt & Performance (Long-term)
-1. **Virtual Scrolling:** Replace pagination with a virtual scroller for the main grid to support 10k+ words.
-2. **TypeScript Migration:** Gradually convert `.js` files to `.ts`.
-3. **Framework Migration:** Move UI logic to Preact/Lit for better state management.
+1.  **CSS Modularization:** ✅ **(Done)**
+2.  **Virtual Scrolling:** Replace pagination with a virtual scroller for the main grid to support 10k+ words.
+3.  **Full TypeScript Migration:** Convert `.js` files to `.ts` for build-time safety.

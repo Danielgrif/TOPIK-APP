@@ -105,20 +105,20 @@ export async function runTests() {
         const now = Date.now();
         const mockData = [
             { id: 1, word_kr: 'Due' },
-            { id: 2, word_kr: 'Future' },
+            { id: 2, word_kr: 'Future' }, // This word is not in mockHistory, so it won't be in the queue
             { id: 3, word_kr: 'New' }
         ];
+        /** @type {Record<string | number, import('./js/core/state.js').WordHistoryItem>} */
         const mockHistory = {
-            1: { sm2: { nextReview: now - 10000 } }, // Due
-            2: { sm2: { nextReview: now + 100000 } }, // Future
-            3: { attempts: 1 } // New (has history but no sm2)
+            1: { attempts: 1, correct: 1, lastReview: now - 20000, sm2: { interval: 1, repetitions: 1, ef: 2.5, nextReview: now - 10000 } }, // Due
+            3: { attempts: 1, correct: 0, lastReview: now - 5000 } // New (has history but no sm2)
         };
         Scheduler.init({ dataStore: mockData, wordHistory: mockHistory });
         const q = Scheduler.getQueue();
         
-        assert('Queue contains due items', q.some(w => w.id === 1));
-        assert('Queue contains new items (no sm2)', q.some(w => w.id === 3));
-        assert('Queue excludes future items', !q.some(w => w.id === 2));
+        assert('Queue contains due items', q.some((/** @type {any} */ w) => w.id === 1));
+        assert('Queue contains new items (no sm2)', q.some((/** @type {any} */ w) => w.id === 3));
+        assert('Queue excludes future items', !q.some((/** @type {any} */ w) => w.id === 2));
         // New items (nextReview=0) should come before Due items (nextReview=timestamp)
         assert('Queue order (New first)', q[0].id === 3);
 

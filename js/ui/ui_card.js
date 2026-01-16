@@ -23,12 +23,6 @@ let scrollObserver = null;
 let appearanceObserver = null;
 
 /**
- * Returns the color associated with a topic string.
- * @param {string} text - Topic text (e.g., "Семья").
- * @returns {string} CSS color string.
- */
-
-/**
  * Renders skeleton loaders while data is fetching.
  */
 export function renderSkeletons() {
@@ -373,9 +367,9 @@ function createCardBack(item) {
     const imgContainer = document.createElement('div'); imgContainer.className = 'card-image-container';
     const imgUrl = item.image;
     const img = document.createElement('img');
-    img.className = 'card-image'; img.loading = 'lazy'; img.draggable = false;
-    if (imgUrl) { img.src = imgUrl; img.onerror = function() { this.style.display = 'none'; }; } else { img.style.display = 'none'; }
-    imgContainer.appendChild(img);
+    img.className = 'card-image'; img.loading = 'lazy'; img.draggable = false; 
+    if (imgUrl) { img.src = imgUrl; img.onerror = (e) => { const target = /** @type {HTMLElement} */ (/** @type {Event} */ (e).target); if (target) target.style.display = 'none'; }; } else { img.style.display = 'none'; }
+    imgContainer.appendChild(img); // Corrected: Append img to imgContainer
 
     const ctrls = document.createElement('div'); ctrls.className = 'img-controls';
     const fileInput = document.createElement('input');

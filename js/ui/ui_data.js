@@ -6,6 +6,7 @@ import { updateStats, updateSRSBadge, updateXPUI } from '../core/stats.js';
 import { render } from './ui_card.js';
 import { checkAchievements } from '../core/stats.js';
 import { openConfirm } from './ui_modal.js';
+import { saveAndRender } from './ui.js';
 
 /**
  * Resets all user progress (Local & Cloud).
@@ -64,7 +65,7 @@ export async function resetAllProgress() {
 
         immediateSaveState(); updateStats(); updateXPUI(); render(); updateSRSBadge();
         showToast('✅ Прогресс полностью сброшен');
-    } catch (e) { console.error('resetAllProgress error', e); showToast('Ошибка: ' + e.message); }
+    } catch (e) { console.error('resetAllProgress error', e); showToast('Ошибка: ' + /** @type {any} */ (e).message); }
 }
 
 /**
@@ -87,7 +88,7 @@ export async function clearData() {
                 const { error } = await client.auth.signInWithPassword({ email: session.user.email, password: val });
                 if (error) { showToast('❌ Неверный пароль'); return false; }
                 return true;
-            } : null
+            } : undefined
         }
     ); 
 }
@@ -117,12 +118,14 @@ export function exportProgress() {
  * @param {Event} event 
  */
 export function importProgress(event) {
-    const file = event.target.files[0];
+    const target = /** @type {HTMLInputElement} */ (event.target);
+    const file = target.files ? target.files[0] : null;
     if (!file) return;
     const reader = new FileReader();
     reader.onload = (e) => {
         try {
-            const data = JSON.parse(e.target.result);
+            const target = /** @type {FileReader} */ (e.target);
+            const data = JSON.parse(/** @type {string} */ (target.result));
             if (!data || typeof data !== 'object') throw new Error('Invalid data format');
 
             if (data.stats) {
@@ -163,7 +166,7 @@ export function importProgress(event) {
             saveAndRender();
             checkAchievements(false);
             showToast('✅ Данные импортированы!');
-        } catch (err) { showToast('❌ Ошибка импорта: ' + err.message); }
+        } catch (err) { showToast('❌ Ошибка импорта: ' + /** @type {any} */ (err).message); }
     };
     reader.readAsText(file);
 }

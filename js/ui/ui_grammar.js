@@ -2,7 +2,7 @@ import { openModal } from './ui_modal.js';
 
 /**
  * Opens the Grammar Detail modal for a specific item.
- * @param {Object} item - The grammar item from dataStore.
+ * @param {any} item - The grammar item from dataStore.
  */
 export function openGrammarModal(item) {
     const container = document.getElementById('grammar-content');

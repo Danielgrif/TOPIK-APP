@@ -1,20 +1,35 @@
-# Секреты (ВАЖНО!)
-env/
-.env
-.env.local
-
-# Зависимости
 node_modules/
-
-# Python служебное
-__pycache__/
-*.pyc
-
-# Логи и временные файлы
-log.txt
-*.log
 .DS_Store
-
-# Сборка
+Thumbs.db
+.vscode/
+*.log
+.env
+.env.*.local
+env
 dist/
-build/
+coverage/
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Python (так как в проекте есть content_worker.py)
+__pycache__/
+*.py[cod]
+venv/
+.venv/
+
+# TypeScript
+*.tsbuildinfo
+
+# Editor directories and files
+.idea/
+*.swp
+*.swo
+
+# OS generated files
+ehthumbs.db
+Desktop.ini
+.spotlight-V100
+.trashes

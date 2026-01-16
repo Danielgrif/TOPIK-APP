@@ -3,7 +3,7 @@ import { showToast } from '../utils/utils.js';
 import { closeModal } from './ui_modal.js';
 
 export async function submitWordRequest() {
-    const input = document.getElementById('new-word-input');
+    const input = /** @type {HTMLInputElement} */ (document.getElementById('new-word-input'));
     if (!input) return;
     
     const word = input.value.trim();

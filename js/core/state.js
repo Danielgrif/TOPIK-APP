@@ -26,6 +26,44 @@
  * @property {Set<number|string>} mistakes - ID слов с ошибками
  * @property {Set<number|string>} favorites - ID избранных слов
  * @property {Object.<string, WordHistoryItem>} wordHistory - История по каждому слову
+ * @property {Object} streak
+ * @property {number} streak.count
+ * @property {string|null} streak.lastDate
+ * @property {Array<any>} sessions
+ * @property {Array<any>} achievements
+ * @property {Set<number|string>} dirtyWordIds
+ * @property {boolean} sessionActive
+ * @property {number} sessionWordsReviewed
+ * @property {number} sessionSeconds
+ * @property {any} sessionInterval
+ * @property {boolean} darkMode
+ * @property {boolean} hanjaMode
+ * @property {number} audioSpeed
+ * @property {string} currentVoice
+ * @property {boolean} autoUpdate
+ * @property {Object} studyGoal
+ * @property {string} studyGoal.type
+ * @property {number} studyGoal.target
+ * @property {string} themeColor
+ * @property {boolean} backgroundMusicEnabled
+ * @property {number} backgroundMusicVolume
+ * @property {string} currentStar
+ * @property {string|string[]} currentTopic
+ * @property {string} currentCategory
+ * @property {string} currentType
+ * @property {boolean} focusMode
+ * @property {boolean} zenMode
+ * @property {string} viewMode
+ * @property {Array<string>} searchHistory
+ * @property {Object} dailyChallenge
+ * @property {string|null} dailyChallenge.lastDate
+ * @property {boolean} dailyChallenge.completed
+ * @property {number} [dailyChallenge.streak]
+ * @property {string} [quizDifficulty]
+ * @property {string} [quizTopic]
+ * @property {string} [quizCategory]
+ * @property {Array<{id: string, name: string, filename: string}>} MUSIC_TRACKS
+ * @property {boolean} isSyncing
  */
 
 /** @type {AppState} */
@@ -43,6 +81,7 @@ export const state = {
     dailyChallenge: { lastDate: null, completed: false, streak: 0 },
     searchHistory: [], // История поиска (массив строк)
     studyGoal: { type: 'words', target: 10 }, // 'words' | 'time' (minutes)
+    dirtyWordIds: new Set(),
     
     // Настройки UI
     currentStar: 'all',
@@ -72,7 +111,6 @@ export const state = {
     quizCategory: 'all',
     
     // Состояние синхронизации
-    dirtyWordIds: new Set(),
     isSyncing: false,
     
     // Сессия
@@ -84,7 +122,7 @@ export const state = {
 
 // Инициализация из LocalStorage
 try {
-    const load = (key, def) => {
+    const load = (/** @type {string} */ key, /** @type {any} */ def) => {
         const val = localStorage.getItem(key);
         return val ? JSON.parse(val) : def;
     };

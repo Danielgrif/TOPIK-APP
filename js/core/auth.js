@@ -2,9 +2,9 @@ import { client } from './supabaseClient.js';
 import { loadFromSupabase } from './db.js';
 import { showToast } from '../utils/utils.js';
 import { saveAndRender } from '../ui/ui.js';
-import { openModal, closeModal } from '../ui/ui_modal.js';
+import { openModal, closeModal, openConfirm } from '../ui/ui_modal.js';
 
-export function updateAuthUI(user) {
+export function updateAuthUI(/** @type {any} */ user) {
     const profileBtn = document.getElementById('profile-button');
     const avatar = document.getElementById('profile-avatar');
     const name = document.getElementById('profile-name');
@@ -24,8 +24,8 @@ export function updateAuthUI(user) {
 export function openLoginModal() {
     openModal('login-modal');
     const emailInput = document.getElementById('auth-email');
-    if (emailInput) emailInput.value = '';
-    const passInput = document.getElementById('auth-password');
+    if (emailInput instanceof HTMLInputElement) emailInput.value = '';
+    const passInput = /** @type {HTMLInputElement} */ (document.getElementById('auth-password'));
     if (!passInput) return;
     passInput.value = '';
     passInput.type = 'password';
@@ -33,7 +33,7 @@ export function openLoginModal() {
     if(toggleBtn) toggleBtn.textContent = '👁️';
     
     const bar = document.getElementById('strength-bar');
-    if(bar && bar.parentElement) { bar.style.width = '0%'; bar.parentElement.style.display = 'none'; }
+    if(bar && bar.parentElement) { bar.style.width = '0%'; /** @type {HTMLElement} */ (bar.parentElement).style.display = 'none'; }
 
     const authError = document.getElementById('auth-error');
     if (authError) authError.style.display = 'none';
@@ -42,11 +42,11 @@ export function openLoginModal() {
     passInput.onkeydown = (e) => { if (e.key === 'Enter') handleAuth('login'); };
     
     passInput.oninput = (e) => {
-        const target = e.target;
+        const target = /** @type {HTMLInputElement} */ (e.target);
         if (!target) return;
         const val = target.value;
-        const meter = document.getElementById('strength-bar');
-        const container = document.querySelector('.password-strength');
+        const meter = /** @type {HTMLElement | null} */ (document.getElementById('strength-bar'));
+        const container = /** @type {HTMLElement} */ (document.querySelector('.password-strength'));
         if (!val) { if(container) container.style.display = 'none'; return; }
         if(container) container.style.display = 'block';
         let score = 0;
@@ -67,7 +67,7 @@ export function openLoginModal() {
 export function openProfileModal() {
     // FIX: Используем getSession вместо getUser для мгновенного отклика.
     // getUser делает сетевой запрос, что может вызывать задержки ("зависание").
-    client.auth.getSession().then(({data}) => {
+    client.auth.getSession().then((/** @type {any} */ {data}) => {
         const session = data.session;
         if (session && session.user) {
             const emailEl = document.getElementById('profile-email');
@@ -76,7 +76,7 @@ export function openProfileModal() {
             if (avatarEl) avatarEl.textContent = session.user.email.charAt(0).toUpperCase();
             
             // Логика индикатора сложности для смены пароля
-            const input = document.getElementById('new-password');
+            const input = /** @type {HTMLInputElement} */ (document.getElementById('new-password'));
             const bar = document.getElementById('new-strength-bar');
             const container = document.getElementById('new-strength-container');
             
@@ -86,7 +86,7 @@ export function openProfileModal() {
                 if (bar) bar.style.width = '0%';
                 
                 input.oninput = (e) => {
-                    const target = e.target;
+                    const target = /** @type {HTMLInputElement} */ (e.target);
                     if(!target) return;
                     const val = target.value;
                     if (!val) { if (container) container.style.display = 'none'; return; }
@@ -110,7 +110,7 @@ export function openProfileModal() {
             
             // Добавляем кнопку установки, если она доступна
             const installBtn = document.getElementById('install-app-btn');
-            if (!installBtn && window.installApp) {
+            if (!installBtn && /** @type {any} */ (window).installApp) {
                 // Кнопка уже есть в HTML (см. ниже), просто управляем видимостью через app.js
             }
 
@@ -122,10 +122,10 @@ export function openProfileModal() {
             updateAuthUI(null);
             openLoginModal();
         }
-    }).catch(err => console.error('Profile check failed:', err));
+    }).catch((/** @type {any} */ err) => console.error('Profile check failed:', err));
 }
 
-export async function handleAuth(type) {
+export async function handleAuth(/** @type {string} */ type) {
     const emailInput = /** @type {HTMLInputElement} */ (document.getElementById('auth-email'));
     const passwordInput = /** @type {HTMLInputElement} */ (document.getElementById('auth-password'));
     if(!emailInput || !passwordInput) return;
@@ -152,7 +152,7 @@ export async function handleAuth(type) {
     }
 }
 
-async function performReset(email) {
+async function performReset(/** @type {string} */ email) {
     if (!email) return showAuthError('Введите Email для сброса пароля');
     showToast('⏳ Отправка письма...');
     try {
@@ -160,13 +160,13 @@ async function performReset(email) {
         if (error) throw error;
         alert(`Ссылка для входа отправлена на ${email}.\nПроверьте почту.`);
         closeModal('login-modal');
-    } catch (e) {
+    } catch (/** @type {any} */ e) {
         console.error(e);
         showAuthError('Ошибка: ' + e.message);
     }
 }
 
-async function performLogin(email, password) {
+async function performLogin(/** @type {string} */ email, /** @type {string} */ password) {
     if (!email || !password) return showAuthError('Введите Email и пароль');
     showToast('⏳ Вход...');
     try {
@@ -178,7 +178,7 @@ async function performLogin(email, password) {
     }
 }
 
-async function performSignup(email, password) {
+async function performSignup(/** @type {string} */ email, /** @type {string} */ password) {
     if (!email || !password) return showAuthError('Введите Email и пароль');
     showToast('⏳ Регистрация...');
     try {
@@ -199,7 +199,7 @@ async function performSignup(email, password) {
     }
 }
 
-async function finalizeAuth(user) {
+async function finalizeAuth(/** @type {any} */ user) {
     showToast('✅ Успешно!');
     updateAuthUI(user);
     await loadFromSupabase(user);
@@ -207,7 +207,7 @@ async function finalizeAuth(user) {
     closeModal('login-modal');
 }
 
-function showAuthError(msg) {
+function showAuthError(/** @type {string} */ msg) {
     const errEl = document.getElementById('auth-error');
     if (errEl) {
         errEl.textContent = msg;
@@ -216,7 +216,7 @@ function showAuthError(msg) {
     shakeModal();
 }
 
-function handleAuthError(e) {
+function handleAuthError(/** @type {any} */ e) {
     console.error(e);
     let msg = e.message;
     if (msg.includes('already registered')) msg = 'Такой пользователь уже есть. Попробуйте войти.';
@@ -259,9 +259,9 @@ export async function handleLogout() {
     });
 }
 
-export function toggleResetMode(show) {
+export function toggleResetMode(/** @type {boolean} */ show) {
     const ids = ['auth-password-container', 'auth-buttons', 'auth-reset-buttons', 'auth-forgot-link', 'auth-back-link', 'auth-social'];
-    const els = {};
+    const els = /** @type {Record<string, HTMLElement | null>} */ ({});
     ids.forEach(id => els[id] = document.getElementById(id));
     const title = document.getElementById('auth-title');
     const desc = document.getElementById('auth-desc');
@@ -290,8 +290,9 @@ export function toggleResetMode(show) {
 }
 
 export function togglePasswordVisibility() {
-    const input = document.getElementById('auth-password');
+    const input = /** @type {HTMLInputElement} */ (document.getElementById('auth-password'));
     const btn = document.getElementById('toggle-password-btn');
+    if (!input || !btn) return;
     if (input.type === 'password') { input.type = 'text'; btn.textContent = '🙈'; } 
     else { input.type = 'password'; btn.textContent = '👁️'; }
 }
@@ -303,7 +304,8 @@ export function cleanAuthUrl() {
 }
 
 function shakeModal() {
-    const content = document.querySelector('#login-modal .modal-content');
+    const content = /** @type {HTMLElement} */ (document.querySelector('#login-modal .modal-content'));
+    if (!content) return;
     content.classList.remove('shake');
     void content.offsetWidth;
     content.classList.add('shake');
