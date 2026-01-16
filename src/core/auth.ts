@@ -1,305 +1,388 @@
-import { client } from './supabaseClient.ts';
-import { loadFromSupabase } from './db.ts';
-import { showToast } from '../utils/utils.ts';
+import { client } from "./supabaseClient.ts";
+import { loadFromSupabase } from "./db.ts";
+import { showToast } from "../utils/utils.ts";
 // @ts-ignore
-import { saveAndRender } from '../ui/ui.ts';
-import { openModal, closeModal, openConfirm } from '../ui/ui_modal.ts';
+import { saveAndRender } from "../ui/ui.ts";
+import { openModal, closeModal, openConfirm } from "../ui/ui_modal.ts";
 
-export function updateAuthUI(user: any) {
-    const profileBtn = document.getElementById('profile-button');
-    const avatar = document.getElementById('profile-avatar');
-    const name = document.getElementById('profile-name');
-    if (!profileBtn || !avatar || !name) return;
-    
-    if (user) {
-        avatar.textContent = user.email.charAt(0).toUpperCase();
-        name.textContent = user.email.split('@')[0];
-        profileBtn.title = `Вошли как ${user.email}`;
-    } else {
-        avatar.textContent = '👤';
-        name.textContent = 'Профиль';
-        profileBtn.title = 'Войти или зарегистрироваться';
-    }
+export function updateAuthUI(user: { email: string } | null) {
+  const profileBtn = document.getElementById("profile-button");
+  const avatar = document.getElementById("profile-avatar");
+  const name = document.getElementById("profile-name");
+  if (!profileBtn || !avatar || !name) return;
+
+  if (user) {
+    avatar.textContent = user.email.charAt(0).toUpperCase();
+    name.textContent = user.email.split("@")[0];
+    profileBtn.title = `Вошли как ${user.email}`;
+  } else {
+    avatar.textContent = "👤";
+    name.textContent = "Профиль";
+    profileBtn.title = "Войти или зарегистрироваться";
+  }
 }
 
 export function openLoginModal() {
-    openModal('login-modal');
-    const emailInput = document.getElementById('auth-email') as HTMLInputElement | null;
-    if (emailInput) emailInput.value = '';
-    const passInput = document.getElementById('auth-password') as HTMLInputElement | null;
-    if (!passInput) return;
-    passInput.value = '';
-    passInput.type = 'password';
-    const toggleBtn = document.getElementById('toggle-password-btn');
-    if(toggleBtn) toggleBtn.textContent = '👁️';
-    
-    const bar = document.getElementById('strength-bar');
-    if(bar && bar.parentElement) { bar.style.width = '0%'; bar.parentElement.style.display = 'none'; }
+  openModal("login-modal");
+  const emailInput = document.getElementById(
+    "auth-email",
+  ) as HTMLInputElement | null;
+  if (emailInput) emailInput.value = "";
+  const passInput = document.getElementById(
+    "auth-password",
+  ) as HTMLInputElement | null;
+  if (!passInput) return;
+  passInput.value = "";
+  passInput.type = "password";
+  const toggleBtn = document.getElementById("toggle-password-btn");
+  if (toggleBtn) toggleBtn.textContent = "👁️";
 
-    const authError = document.getElementById('auth-error');
-    if (authError) authError.style.display = 'none';
-    toggleResetMode(false);
-    
-    passInput.onkeydown = (e) => { if (e.key === 'Enter') handleAuth('login'); };
-    
-    passInput.oninput = (e) => {
-        const target = e.target as HTMLInputElement;
-        if (!target) return;
-        const val = target.value;
-        const meter = document.getElementById('strength-bar');
-        const container = document.querySelector('.password-strength') as HTMLElement | null;
-        if (!val) { if(container) container.style.display = 'none'; return; }
-        if(container) container.style.display = 'block';
-        let score = 0;
-        if (val.length > 5) score += 20;
-        if (val.length > 8) score += 20;
-        if (/[A-Z]/.test(val)) score += 20;
-        if (/[0-9]/.test(val)) score += 20;
-        if (/[^A-Za-z0-9]/.test(val)) score += 20;
-        if(meter) {
-            meter.style.width = score + '%';
-            if (score < 40) meter.style.backgroundColor = 'var(--danger)';
-            else if (score < 80) meter.style.backgroundColor = 'var(--warning)';
-            else meter.style.backgroundColor = 'var(--success)';
-        }
-    };
+  const bar = document.getElementById("strength-bar");
+  if (bar && bar.parentElement) {
+    bar.style.width = "0%";
+    bar.parentElement.style.display = "none";
+  }
+
+  const authError = document.getElementById("auth-error");
+  if (authError) authError.style.display = "none";
+  toggleResetMode(false);
+
+  passInput.onkeydown = (e) => {
+    if (e.key === "Enter") handleAuth("login");
+  };
+
+  passInput.oninput = (e) => {
+    const target = e.target as HTMLInputElement;
+    if (!target) return;
+    const val = target.value;
+    const meter = document.getElementById("strength-bar");
+    const container = document.querySelector(
+      ".password-strength",
+    ) as HTMLElement | null;
+    if (!val) {
+      if (container) container.style.display = "none";
+      return;
+    }
+    if (container) container.style.display = "block";
+    let score = 0;
+    if (val.length > 5) score += 20;
+    if (val.length > 8) score += 20;
+    if (/[A-Z]/.test(val)) score += 20;
+    if (/[0-9]/.test(val)) score += 20;
+    if (/[^A-Za-z0-9]/.test(val)) score += 20;
+    if (meter) {
+      meter.style.width = score + "%";
+      if (score < 40) meter.style.backgroundColor = "var(--danger)";
+      else if (score < 80) meter.style.backgroundColor = "var(--warning)";
+      else meter.style.backgroundColor = "var(--success)";
+    }
+  };
 }
 
 export function openProfileModal() {
-    client.auth.getSession().then(({data}: any) => {
-        const session = data.session;
-        if (session && session.user) {
-            const emailEl = document.getElementById('profile-email');
-            if (emailEl) emailEl.textContent = session.user.email;
-            const avatarEl = document.getElementById('profile-avatar-large');
-            if (avatarEl) avatarEl.textContent = session.user.email.charAt(0).toUpperCase();
-            
-            const input = document.getElementById('new-password') as HTMLInputElement | null;
-            const bar = document.getElementById('new-strength-bar');
-            const container = document.getElementById('new-strength-container');
-            
-            if (input) {
-                input.value = '';
-                if (container) container.style.display = 'none';
-                if (bar) bar.style.width = '0%';
-                
-                input.oninput = (e) => {
-                    const target = e.target as HTMLInputElement;
-                    if(!target) return;
-                    const val = target.value;
-                    if (!val) { if (container) container.style.display = 'none'; return; }
-                    if (container) container.style.display = 'block';
-                    
-                    let score = 0;
-                    if (val.length > 5) score += 20;
-                    if (val.length > 8) score += 20;
-                    if (/[A-Z]/.test(val)) score += 20;
-                    if (/[0-9]/.test(val)) score += 20;
-                    if (/[^A-Za-z0-9]/.test(val)) score += 20;
-                    
-                    if (bar) {
-                        bar.style.width = score + '%';
-                        if (score < 40) bar.style.backgroundColor = 'var(--danger)';
-                        else if (score < 80) bar.style.backgroundColor = 'var(--warning)';
-                        else bar.style.backgroundColor = 'var(--success)';
-                    }
-                };
-            }
-            
-            const installBtn = document.getElementById('install-app-btn');
-            if (!installBtn && (window as any).installApp) {
-                // Logic handled in app.ts
-            }
+  client.auth
+    .getSession() // @ts-ignore
+    .then(({ data }) => {
+      const session = data.session;
+      if (session && session.user) {
+        const emailEl = document.getElementById("profile-email");
+        if (emailEl) emailEl.textContent = session.user.email;
+        const avatarEl = document.getElementById("profile-avatar-large");
+        if (avatarEl)
+          avatarEl.textContent = session.user.email.charAt(0).toUpperCase();
 
-            openModal('profile-modal');
-        } else {
-            console.warn("Кнопка профиля нажата, но активная сессия не найдена. Исправляем UI.");
-            updateAuthUI(null);
-            openLoginModal();
+        const input = document.getElementById(
+          "new-password",
+        ) as HTMLInputElement | null;
+        const bar = document.getElementById("new-strength-bar");
+        const container = document.getElementById("new-strength-container");
+
+        if (input) {
+          input.value = "";
+          if (container) container.style.display = "none";
+          if (bar) bar.style.width = "0%";
+
+          input.oninput = (e) => {
+            const target = e.target as HTMLInputElement;
+            if (!target) return;
+            const val = target.value;
+            if (!val) {
+              if (container) container.style.display = "none";
+              return;
+            }
+            if (container) container.style.display = "block";
+
+            let score = 0;
+            if (val.length > 5) score += 20;
+            if (val.length > 8) score += 20;
+            if (/[A-Z]/.test(val)) score += 20;
+            if (/[0-9]/.test(val)) score += 20;
+            if (/[^A-Za-z0-9]/.test(val)) score += 20;
+
+            if (bar) {
+              bar.style.width = score + "%";
+              if (score < 40) bar.style.backgroundColor = "var(--danger)";
+              else if (score < 80) bar.style.backgroundColor = "var(--warning)";
+              else bar.style.backgroundColor = "var(--success)";
+            }
+          };
         }
-    }).catch((err: any) => console.error('Profile check failed:', err));
+
+        const installBtn = document.getElementById("install-app-btn");
+        if (!installBtn && (window as any).installApp) {
+          // Logic handled in app.ts
+        }
+
+        openModal("profile-modal");
+      } else {
+        console.warn(
+          "Кнопка профиля нажата, но активная сессия не найдена. Исправляем UI.",
+        );
+        updateAuthUI(null);
+        openLoginModal();
+      }
+    })
+    .catch((err: unknown) => console.error("Profile check failed:", err));
 }
 
 export async function handleAuth(type: string) {
-    const emailInput = document.getElementById('auth-email') as HTMLInputElement | null;
-    const passwordInput = document.getElementById('auth-password') as HTMLInputElement | null;
-    if(!emailInput || !passwordInput) return;
+  const emailInput = document.getElementById(
+    "auth-email",
+  ) as HTMLInputElement | null;
+  const passwordInput = document.getElementById(
+    "auth-password",
+  ) as HTMLInputElement | null;
+  if (!emailInput || !passwordInput) return;
 
-    const email = emailInput.value.trim();
-    const password = passwordInput.value.trim();
-    
-    const errEl = document.getElementById('auth-error');
-    if (errEl) errEl.style.display = 'none';
+  const email = emailInput.value.trim();
+  const password = passwordInput.value.trim();
 
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (email && !emailRegex.test(email)) {
-        showAuthError('Некорректный формат Email');
-        return;
-    }
+  const errEl = document.getElementById("auth-error");
+  if (errEl) errEl.style.display = "none";
 
-    if (type === 'reset') {
-        await performReset(email);
-    } else if (type === 'login') {
-        await performLogin(email, password);
-    } else if (type === 'signup') {
-        await performSignup(email, password);
-    }
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (email && !emailRegex.test(email)) {
+    showAuthError("Некорректный формат Email");
+    return;
+  }
+
+  if (type === "reset") {
+    await performReset(email);
+  } else if (type === "login") {
+    await performLogin(email, password);
+  } else if (type === "signup") {
+    await performSignup(email, password);
+  }
 }
 
 async function performReset(email: string) {
-    if (!email) return showAuthError('Введите Email для сброса пароля');
-    showToast('⏳ Отправка письма...');
-    try {
-        const { error } = await client.auth.resetPasswordForEmail(email, { redirectTo: window.location.href });
-        if (error) throw error;
-        alert(`Ссылка для входа отправлена на ${email}.\nПроверьте почту.`);
-        closeModal('login-modal');
-    } catch (e: any) {
-        console.error(e);
-        showAuthError('Ошибка: ' + e.message);
-    }
+  if (!email) return showAuthError("Введите Email для сброса пароля");
+  showToast("⏳ Отправка письма...");
+  try {
+    const { error } = await client.auth.resetPasswordForEmail(email, {
+      redirectTo: window.location.href,
+    });
+    if (error) throw error;
+    alert(`Ссылка для входа отправлена на ${email}.\nПроверьте почту.`);
+    closeModal("login-modal");
+  } catch (e: unknown) {
+    console.error(e);
+    showAuthError("Ошибка: " + (e as Error).message);
+  }
 }
 
 async function performLogin(email: string, password: string) {
-    if (!email || !password) return showAuthError('Введите Email и пароль');
-    showToast('⏳ Вход...');
-    try {
-        const { data, error } = await client.auth.signInWithPassword({ email, password });
-        if (error) throw error;
-        await finalizeAuth(data.user);
-    } catch (e) {
-        handleAuthError(e);
-    }
+  if (!email || !password) return showAuthError("Введите Email и пароль");
+  showToast("⏳ Вход...");
+  try {
+    const { data, error } = await client.auth.signInWithPassword({
+      email,
+      password,
+    });
+    if (error) throw error;
+    await finalizeAuth(data.user);
+  } catch (e) {
+    handleAuthError(e);
+  }
 }
 
 async function performSignup(email: string, password: string) {
-    if (!email || !password) return showAuthError('Введите Email и пароль');
-    showToast('⏳ Регистрация...');
-    try {
-        const { data, error } = await client.auth.signUp({ email, password });
-        if (error) throw error;
+  if (!email || !password) return showAuthError("Введите Email и пароль");
+  showToast("⏳ Регистрация...");
+  try {
+    const { data, error } = await client.auth.signUp({ email, password });
+    if (error) throw error;
 
-        if (data.user && !data.session) {
-            alert('Регистрация успешна! Проверьте почту для подтверждения.');
-            closeModal('login-modal');
-        } else {
-            if (data.user) {
-                try { await client.from('user_global_stats').insert([{ user_id: data.user.id, xp: 0, level: 1 }]); } catch(e) {}
-            }
-            await finalizeAuth(data.user);
+    if (data.user && !data.session) {
+      alert("Регистрация успешна! Проверьте почту для подтверждения.");
+      closeModal("login-modal");
+    } else {
+      if (data.user) {
+        try {
+          await client
+            .from("user_global_stats")
+            .insert([{ user_id: data.user.id, xp: 0, level: 1 }]);
+        } catch {
+          // Ignore if stats already exist
         }
-    } catch (e) {
-        handleAuthError(e);
+      }
+      await finalizeAuth(data.user);
     }
+  } catch (e) {
+    handleAuthError(e);
+  }
 }
 
-async function finalizeAuth(user: any) {
-    showToast('✅ Успешно!');
-    updateAuthUI(user);
-    await loadFromSupabase(user);
-    saveAndRender();
-    closeModal('login-modal');
+async function finalizeAuth(user: { id: string; email?: string }) {
+  showToast("✅ Успешно!");
+  updateAuthUI(user);
+  await loadFromSupabase(user);
+  saveAndRender();
+  closeModal("login-modal");
 }
 
 function showAuthError(msg: string) {
-    const errEl = document.getElementById('auth-error');
-    if (errEl) {
-        errEl.textContent = msg;
-        errEl.style.display = 'block';
-    }
-    shakeModal();
+  const errEl = document.getElementById("auth-error");
+  if (errEl) {
+    errEl.textContent = msg;
+    errEl.style.display = "block";
+  }
+  shakeModal();
 }
 
-function handleAuthError(e: any) {
-    console.error(e);
-    let msg = e.message;
-    if (msg.includes('already registered')) msg = 'Такой пользователь уже есть. Попробуйте войти.';
-    else if (msg.includes('Invalid login')) msg = 'Неверный Email или пароль.';
-    else if (msg.includes('Email not confirmed')) msg = 'Email не подтвержден.';
-    showAuthError(msg);
+function handleAuthError(e: unknown) {
+  console.error(e);
+  let msg = (e as Error).message;
+  if (msg.includes("already registered"))
+    msg = "Такой пользователь уже есть. Попробуйте войти.";
+  else if (msg.includes("Invalid login")) msg = "Неверный Email или пароль.";
+  else if (msg.includes("Email not confirmed")) msg = "Email не подтвержден.";
+  showAuthError(msg);
 }
 
 export async function signInWithGoogle() {
-    const { data, error } = await client.auth.signInWithOAuth({
-        provider: 'google',
-        options: { redirectTo: window.location.origin + window.location.pathname }
-    });
-    if (error) {
-        console.error('Google Sign-In Error:', error);
-        alert('Ошибка Google входа: ' + error.message);
-    }
+  const { error } = await client.auth.signInWithOAuth({
+    provider: "google",
+    options: { redirectTo: window.location.origin + window.location.pathname },
+  });
+  if (error) {
+    console.error("Google Sign-In Error:", error);
+    alert("Ошибка Google входа: " + error.message);
+  }
 }
 
 export async function handleChangePassword() {
-    const newPassInput = document.getElementById('new-password') as HTMLInputElement | null;
-    if(!newPassInput) return;
-    const newPass = newPassInput.value.trim();
-    if (!newPass) { alert('Введите новый пароль'); return; }
-    if (newPass.length < 6) { alert('Пароль должен содержать минимум 6 символов'); return; }
-    showToast('⏳ Обновление...');
-    const { error } = await client.auth.updateUser({ password: newPass });
-    if (error) {
-        console.error('Update Password Error:', error);
-        alert('Ошибка: ' + error.message);
-    }
-    else { showToast('✅ Пароль изменен'); newPassInput.value = ''; closeModal('profile-modal'); }
+  const newPassInput = document.getElementById(
+    "new-password",
+  ) as HTMLInputElement | null;
+  if (!newPassInput) return;
+  const newPass = newPassInput.value.trim();
+  if (!newPass) {
+    alert("Введите новый пароль");
+    return;
+  }
+  if (newPass.length < 6) {
+    alert("Пароль должен содержать минимум 6 символов");
+    return;
+  }
+  showToast("⏳ Обновление...");
+  const { error } = await client.auth.updateUser({ password: newPass });
+  if (error) {
+    console.error("Update Password Error:", error);
+    alert("Ошибка: " + error.message);
+  } else {
+    showToast("✅ Пароль изменен");
+    newPassInput.value = "";
+    closeModal("profile-modal");
+  }
 }
 
 export async function handleLogout() {
-    openConfirm('Выйти из аккаунта?', async () => {
-        await client.auth.signOut();
-        location.reload();
-    });
+  openConfirm("Выйти из аккаунта?", async () => {
+    await client.auth.signOut();
+    location.reload();
+  });
 }
 
 export function toggleResetMode(show: boolean) {
-    const ids = ['auth-password-container', 'auth-buttons', 'auth-reset-buttons', 'auth-forgot-link', 'auth-back-link', 'auth-social'];
-    const els: Record<string, HTMLElement | null> = {};
-    ids.forEach(id => els[id] = document.getElementById(id));
-    const title = document.getElementById('auth-title');
-    const desc = document.getElementById('auth-desc');
-    const errEl = document.getElementById('auth-error');
-    if (errEl) errEl.style.display = 'none';
+  const ids = [
+    "auth-password-container",
+    "auth-buttons",
+    "auth-reset-buttons",
+    "auth-forgot-link",
+    "auth-back-link",
+    "auth-social",
+  ];
+  const els: Record<string, HTMLElement | null> = {};
+  ids.forEach((id) => (els[id] = document.getElementById(id)));
+  const title = document.getElementById("auth-title");
+  const desc = document.getElementById("auth-desc");
+  const errEl = document.getElementById("auth-error");
+  if (errEl) errEl.style.display = "none";
 
-    if (show) {
-        if(els['auth-password-container']) els['auth-password-container'].style.display = 'none';
-        if(els['auth-buttons']) els['auth-buttons'].style.display = 'none';
-        if(els['auth-reset-buttons']) els['auth-reset-buttons'].style.display = 'block';
-        if(els['auth-forgot-link']) els['auth-forgot-link'].style.display = 'none';
-        if(els['auth-back-link']) els['auth-back-link'].style.display = 'inline';
-        if(title) title.textContent = '🔑 Сброс пароля';
-        if(desc) desc.textContent = 'Введите Email, чтобы получить ссылку для входа.';
-        if(els['auth-social']) els['auth-social'].style.display = 'none';
-    } else {
-        if(els['auth-password-container']) els['auth-password-container'].style.display = 'block';
-        if(els['auth-buttons']) els['auth-buttons'].style.display = 'flex';
-        if(els['auth-reset-buttons']) els['auth-reset-buttons'].style.display = 'none';
-        if(els['auth-forgot-link']) els['auth-forgot-link'].style.display = 'inline';
-        if(els['auth-back-link']) els['auth-back-link'].style.display = 'none';
-        if(title) title.textContent = '🔐 Профиль';
-        if(desc) desc.textContent = 'Войдите, чтобы сохранить прогресс в облаке.';
-        if(els['auth-social']) els['auth-social'].style.display = 'block';
-    }
+  if (show) {
+    if (els["auth-password-container"])
+      els["auth-password-container"].style.display = "none";
+    if (els["auth-buttons"]) els["auth-buttons"].style.display = "none";
+    if (els["auth-reset-buttons"])
+      els["auth-reset-buttons"].style.display = "block";
+    if (els["auth-forgot-link"]) els["auth-forgot-link"].style.display = "none";
+    if (els["auth-back-link"]) els["auth-back-link"].style.display = "inline";
+    if (title) title.textContent = "🔑 Сброс пароля";
+    if (desc)
+      desc.textContent = "Введите Email, чтобы получить ссылку для входа.";
+    if (els["auth-social"]) els["auth-social"].style.display = "none";
+  } else {
+    if (els["auth-password-container"])
+      els["auth-password-container"].style.display = "block";
+    if (els["auth-buttons"]) els["auth-buttons"].style.display = "flex";
+    if (els["auth-reset-buttons"])
+      els["auth-reset-buttons"].style.display = "none";
+    if (els["auth-forgot-link"])
+      els["auth-forgot-link"].style.display = "inline";
+    if (els["auth-back-link"]) els["auth-back-link"].style.display = "none";
+    if (title) title.textContent = "🔐 Профиль";
+    if (desc) desc.textContent = "Войдите, чтобы сохранить прогресс в облаке.";
+    if (els["auth-social"]) els["auth-social"].style.display = "block";
+  }
 }
 
 export function togglePasswordVisibility() {
-    const input = document.getElementById('auth-password') as HTMLInputElement | null;
-    const btn = document.getElementById('toggle-password-btn');
-    if (!input || !btn) return;
-    if (input.type === 'password') { input.type = 'text'; btn.textContent = '🙈'; } 
-    else { input.type = 'password'; btn.textContent = '👁️'; }
+  const input = document.getElementById(
+    "auth-password",
+  ) as HTMLInputElement | null;
+  const btn = document.getElementById("toggle-password-btn");
+  if (!input || !btn) return;
+  if (input.type === "password") {
+    input.type = "text";
+    btn.textContent = "🙈";
+  } else {
+    input.type = "password";
+    btn.textContent = "👁️";
+  }
 }
 
 export function cleanAuthUrl() {
-    if (window.location.hash && (window.location.hash.includes('access_token') || window.location.hash.includes('type=recovery') || window.location.hash.includes('error='))) {
-        window.history.replaceState(null, '', window.location.pathname + window.location.search);
-    }
+  if (
+    window.location.hash &&
+    (window.location.hash.includes("access_token") ||
+      window.location.hash.includes("type=recovery") ||
+      window.location.hash.includes("error="))
+  ) {
+    window.history.replaceState(
+      null,
+      "",
+      window.location.pathname + window.location.search,
+    );
+  }
 }
 
 function shakeModal() {
-    const content = document.querySelector('#login-modal .modal-content') as HTMLElement | null;
-    if (!content) return;
-    content.classList.remove('shake');
-    void content.offsetWidth;
-    content.classList.add('shake');
+  const content = document.querySelector(
+    "#login-modal .modal-content",
+  ) as HTMLElement | null;
+  if (!content) return;
+  content.classList.remove("shake");
+  void content.offsetWidth;
+  content.classList.add("shake");
 }

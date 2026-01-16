@@ -1,4 +1,6 @@
+// @ts-ignore
 import { precacheAndRoute, cleanupOutdatedCaches } from "workbox-precaching";
+// @ts-ignore
 import { clientsClaim } from "workbox-core";
 
 declare let self: ServiceWorkerGlobalScope;
@@ -10,6 +12,7 @@ cleanupOutdatedCaches();
 // @ts-ignore
 precacheAndRoute(self.__WB_MANIFEST);
 
+// const CACHE_VERSION = 'v93';
 const AUDIO_CACHE_NAME = "topik-audio-v1";
 const MAX_AUDIO_ITEMS = 200;
 

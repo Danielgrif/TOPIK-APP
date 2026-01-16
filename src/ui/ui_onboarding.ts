@@ -1,27 +1,47 @@
-import { showToast } from '../utils/utils.ts';
+import { showToast } from "../utils/utils.ts";
 
 let currentStep = 0;
 const onboardingSteps = [
-    { emoji: '👋', title: 'Добро пожаловать!', text: 'TOPIK II Master Pro — ваш умный помощник в изучении корейского языка. Давайте быстро посмотрим основные функции.' },
-    { emoji: '🃏', title: 'Умные карточки', text: 'Нажимайте на карточку, чтобы увидеть перевод. Используйте 🔊 для озвучки и ❤️ для добавления сложных слов в избранное.' },
-    { emoji: '🎮', title: '12 Режимов', text: 'В разделе "Тренировка" вас ждут разнообразные режимы: от простого выбора до Спринта, Выживания и Диктанта.' },
-    { emoji: '🧠', title: 'Интервальные повторения', text: 'Система сама подскажет, когда нужно повторить слово (SRS). Следите за индикатором 🔁 в меню, чтобы не забывать изученное.' },
-    { emoji: '🚀', title: 'Поехали!', text: 'Готовы начать? Удачи в подготовке к экзамену TOPIK! 화이팅!' }
+  {
+    emoji: "👋",
+    title: "Добро пожаловать!",
+    text: "TOPIK II Master Pro — ваш умный помощник в изучении корейского языка. Давайте быстро посмотрим основные функции.",
+  },
+  {
+    emoji: "🃏",
+    title: "Умные карточки",
+    text: "Нажимайте на карточку, чтобы увидеть перевод. Используйте 🔊 для озвучки и ❤️ для добавления сложных слов в избранное.",
+  },
+  {
+    emoji: "🎮",
+    title: "12 Режимов",
+    text: 'В разделе "Тренировка" вас ждут разнообразные режимы: от простого выбора до Спринта, Выживания и Диктанта.',
+  },
+  {
+    emoji: "🧠",
+    title: "Интервальные повторения",
+    text: "Система сама подскажет, когда нужно повторить слово (SRS). Следите за индикатором 🔁 в меню, чтобы не забывать изученное.",
+  },
+  {
+    emoji: "🚀",
+    title: "Поехали!",
+    text: "Готовы начать? Удачи в подготовке к экзамену TOPIK! 화이팅!",
+  },
 ];
 
 export function checkAndShowOnboarding() {
-    if (!localStorage.getItem('onboarding_completed_v1')) {
-        setTimeout(() => renderOnboarding(), 1000);
-    }
+  if (!localStorage.getItem("onboarding_completed_v1")) {
+    setTimeout(() => renderOnboarding(), 1000);
+  }
 }
 
 function renderOnboarding() {
-    let overlay = document.getElementById('onboarding-overlay');
-    if (!overlay) {
-        overlay = document.createElement('div');
-        overlay.id = 'onboarding-overlay';
-        overlay.className = 'onboarding-overlay';
-        overlay.innerHTML = `
+  let overlay = document.getElementById("onboarding-overlay");
+  if (!overlay) {
+    overlay = document.createElement("div");
+    overlay.id = "onboarding-overlay";
+    overlay.className = "onboarding-overlay";
+    overlay.innerHTML = `
             <div class="onboarding-card">
                 <div id="ob-content"></div>
                 <div class="onboarding-dots" id="ob-dots"></div>
@@ -31,47 +51,56 @@ function renderOnboarding() {
                 </div>
             </div>
         `;
-        document.body.appendChild(overlay);
-        
-        const skipBtn = document.getElementById('ob-skip-btn');
-        if (skipBtn) skipBtn.onclick = finishOnboarding;
-        const nextBtn = document.getElementById('ob-next-btn');
-        if (nextBtn) nextBtn.onclick = nextOnboardingStep;
-    }
-    
-    currentStep = 0;
-    updateOnboardingStep();
-    
-    void overlay.offsetWidth;
-    overlay.classList.add('active');
+    document.body.appendChild(overlay);
+
+    const skipBtn = document.getElementById("ob-skip-btn");
+    if (skipBtn) skipBtn.onclick = finishOnboarding;
+    const nextBtn = document.getElementById("ob-next-btn");
+    if (nextBtn) nextBtn.onclick = nextOnboardingStep;
+  }
+
+  currentStep = 0;
+  updateOnboardingStep();
+
+  void overlay.offsetWidth;
+  overlay.classList.add("active");
 }
 
 function nextOnboardingStep() {
-    if (currentStep < onboardingSteps.length - 1) {
-        currentStep++;
-        updateOnboardingStep();
-    } else {
-        finishOnboarding();
-    }
+  if (currentStep < onboardingSteps.length - 1) {
+    currentStep++;
+    updateOnboardingStep();
+  } else {
+    finishOnboarding();
+  }
 }
 
 function updateOnboardingStep() {
-    const step = onboardingSteps[currentStep];
-    const content = document.getElementById('ob-content');
-    const dots = document.getElementById('ob-dots');
-    const btn = document.getElementById('ob-next-btn');
-    
-    if (content) content.innerHTML = `<span class="onboarding-image">${step.emoji}</span><div class="onboarding-title">${step.title}</div><div class="onboarding-text">${step.text}</div>`;
-    if (dots) dots.innerHTML = onboardingSteps.map((_, i) => `<div class="onboarding-dot ${i === currentStep ? 'active' : ''}"></div>`).join('');
-    if (btn) btn.textContent = currentStep === onboardingSteps.length - 1 ? 'Начать' : 'Далее';
+  const step = onboardingSteps[currentStep];
+  const content = document.getElementById("ob-content");
+  const dots = document.getElementById("ob-dots");
+  const btn = document.getElementById("ob-next-btn");
+
+  if (content)
+    content.innerHTML = `<span class="onboarding-image">${step.emoji}</span><div class="onboarding-title">${step.title}</div><div class="onboarding-text">${step.text}</div>`;
+  if (dots)
+    dots.innerHTML = onboardingSteps
+      .map(
+        (_, i) =>
+          `<div class="onboarding-dot ${i === currentStep ? "active" : ""}"></div>`,
+      )
+      .join("");
+  if (btn)
+    btn.textContent =
+      currentStep === onboardingSteps.length - 1 ? "Начать" : "Далее";
 }
 
 function finishOnboarding() {
-    const overlay = document.getElementById('onboarding-overlay');
-    if (overlay) {
-        overlay.classList.remove('active');
-        setTimeout(() => overlay.remove(), 300);
-    }
-    localStorage.setItem('onboarding_completed_v1', 'true');
-    showToast('Удачи в обучении! 🍀');
+  const overlay = document.getElementById("onboarding-overlay");
+  if (overlay) {
+    overlay.classList.remove("active");
+    setTimeout(() => overlay.remove(), 300);
+  }
+  localStorage.setItem("onboarding_completed_v1", "true");
+  showToast("Удачи в обучении! 🍀");
 }
