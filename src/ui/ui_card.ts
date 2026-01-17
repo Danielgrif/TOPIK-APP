@@ -13,7 +13,8 @@ const MIN_COL_WIDTH = 160;
 const BUFFER_ITEMS = 10;
 
 let virtualScrollInitialized = false;
-const debouncedRenderVisible = debounce(renderVisibleListItems, 50);
+let scrollRafId: number | null = null;
+let currentFilteredData: Word[] = [];
 
 /** @type {IntersectionObserver | null} */
 const scrollObserver: IntersectionObserver | null = null;
@@ -51,8 +52,12 @@ export function render() {
   const grid = document.getElementById("vocabulary-grid");
   if (!grid) return;
 
+  // Оптимизация: кэшируем отфильтрованные данные один раз при рендере
+  updateFilteredData();
+
   if (virtualScrollInitialized) {
-    grid.removeEventListener("scroll", debouncedRenderVisible as EventListener);
+    grid.removeEventListener("scroll", onVirtualScroll);
+    window.removeEventListener("resize", onVirtualScroll);
     virtualScrollInitialized = false;
   }
   grid.classList.remove("virtual-scroll-container", "list-view", "grid");
@@ -79,9 +84,9 @@ function renderEmptyState(grid: HTMLElement) {
         `;
 }
 
-function getFilteredData(): Word[] {
+function updateFilteredData() {
   const source = (state.searchResults || state.dataStore || []) as Word[];
-  return source.filter((w) => {
+  currentFilteredData = source.filter((w) => {
     if (!w) return false;
     if (
       state.currentStar !== "all" &&
@@ -107,8 +112,28 @@ function getFilteredData(): Word[] {
   });
 }
 
+function getFilteredData(): Word[] {
+  return currentFilteredData;
+}
+
+function onVirtualScroll(e: Event) {
+  if (scrollRafId) return;
+
+  scrollRafId = window.requestAnimationFrame(() => {
+    const grid = document.getElementById("vocabulary-grid");
+    if (grid) {
+      if (state.viewMode === "list") {
+        renderVisibleListItems({ target: grid, sourceData: currentFilteredData });
+      } else {
+        renderVisibleGridItems({ target: grid, sourceData: currentFilteredData });
+      }
+    }
+    scrollRafId = null;
+  });
+}
+
 function initGridVirtualScroll(grid: HTMLElement) {
-  const sourceData = getFilteredData();
+  const sourceData = currentFilteredData;
 
   if (sourceData.length === 0) {
     renderEmptyState(grid);
@@ -124,8 +149,8 @@ function initGridVirtualScroll(grid: HTMLElement) {
   sizer.className = "virtual-sizer";
   grid.appendChild(sizer);
 
-  grid.addEventListener("scroll", debouncedRenderVisible as EventListener);
-  window.addEventListener("resize", debouncedRenderVisible as EventListener);
+  grid.addEventListener("scroll", onVirtualScroll);
+  window.addEventListener("resize", onVirtualScroll);
 
   virtualScrollInitialized = true;
 
@@ -137,13 +162,8 @@ function initGridVirtualScroll(grid: HTMLElement) {
   });
 }
 
-function renderVisibleGridItems(params: {
-  target: HTMLElement;
-  sourceData: Word[];
-  contentContainer?: HTMLElement;
-  sizer?: HTMLElement;
-}) {
-  const grid = (params.target || params.currentTarget) as HTMLElement;
+function renderVisibleGridItems(params: { target: HTMLElement; sourceData: Word[]; contentContainer?: HTMLElement; sizer?: HTMLElement }) {
+  const grid = params.target;
   if (!grid) return;
 
   const sourceData = params.sourceData || getFilteredData();
@@ -163,7 +183,7 @@ function renderVisibleGridItems(params: {
   const totalRows = Math.ceil(sourceData.length / colCount);
   const totalHeight = totalRows * ITEM_HEIGHT_GRID;
 
-  sizer.style.height = `${totalHeight}px`;
+  (sizer as HTMLElement).style.height = `${totalHeight}px`;
 
   const scrollTop = grid.scrollTop;
   const viewportHeight = grid.clientHeight;
@@ -198,7 +218,7 @@ function renderVisibleGridItems(params: {
 }
 
 function initVirtualScroll(grid: HTMLElement) {
-  const sourceData = getFilteredData();
+  const sourceData = currentFilteredData;
 
   if (sourceData.length === 0) {
     renderEmptyState(grid);
@@ -210,17 +230,14 @@ function initVirtualScroll(grid: HTMLElement) {
   sizer.style.height = `${sourceData.length * ITEM_HEIGHT_LIST}px`;
   grid.appendChild(sizer);
 
-  grid.addEventListener("scroll", debouncedRenderVisible as EventListener);
+  grid.addEventListener("scroll", onVirtualScroll);
   virtualScrollInitialized = true;
 
   renderVisibleListItems({ target: grid, sourceData });
 }
 
-function renderVisibleListItems(params: {
-  target: HTMLElement;
-  sourceData: Word[];
-}) {
-  const grid = (params.target || params.currentTarget) as HTMLElement;
+function renderVisibleListItems(params: { target: HTMLElement; sourceData: Word[] }) {
+  const grid = params.target;
   if (!grid) return;
 
   const sourceData = params.sourceData || getFilteredData();
@@ -273,9 +290,23 @@ function createCardElement(item: Word): HTMLElement {
   inner.appendChild(front);
   inner.appendChild(back);
   el.appendChild(inner);
-  el.onclick = () => {
+
+  let imageLoaded = false;
+  el.onclick = (e) => {
+    // Не переворачивать, если клик был по кнопке
+    if ((e.target as HTMLElement).closest("button")) return;
+
     el.classList.toggle("revealed");
     if (navigator.vibrate) navigator.vibrate(10);
+
+    // Ленивая загрузка изображения при первом переворачивании
+    if (el.classList.contains("revealed") && !imageLoaded) {
+      const img = el.querySelector(".card-image") as HTMLImageElement;
+      if (img && img.dataset.src) {
+        img.src = img.dataset.src;
+        imageLoaded = true;
+      }
+    }
   };
   return el;
 }
@@ -437,10 +468,9 @@ function createCardBack(item: Word): HTMLElement {
   const imgUrl = item.image;
   const img = document.createElement("img");
   img.className = "card-image";
-  img.loading = "lazy";
   img.draggable = false;
   if (imgUrl) {
-    img.src = imgUrl;
+    img.dataset.src = imgUrl; // Используем data-src для ленивой загрузки
     img.onerror = () => {
       img.style.display = "none";
     };

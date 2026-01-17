@@ -335,8 +335,8 @@ export function checkAchievements(showAlert = true) {
       state.achievements.push({ id: ach.id, date: Date.now() });
       if (showAlert) {
         showToast(`🎉 Новое достижение: ${ach.emoji} ${ach.title}`);
-        if (typeof (window as any).confetti === "function") {
-          (window as any).confetti({
+        if (typeof window.confetti === "function") {
+          window.confetti({
             particleCount: 150,
             spread: 70,
             origin: { y: 0.6 },
@@ -423,7 +423,7 @@ export async function renderLeaderboard() {
 
     const currentUserId = (await client.auth.getUser()).data.user?.id;
 
-    data.forEach(
+    data?.forEach(
       (user: { user_id: string; level: number; xp: number }, idx: number) => {
         const isMe = user.user_id === currentUserId;
         const medal =
@@ -493,16 +493,24 @@ export function renderTopicMastery() {
 
 const chartInstances: Record<string, unknown> = {};
 
+function destroyChart(key: string) {
+  const instance = chartInstances[key] as { destroy: () => void } | undefined;
+  if (instance && typeof instance.destroy === "function") {
+    instance.destroy();
+  }
+}
+
 function getLast7DaysActivity() {
   const days = [];
   const today = new Date();
   for (let i = 6; i >= 0; i--) {
     const d = new Date();
     d.setDate(today.getDate() - i);
-    const dateStr = d.toISOString().split("T")[0];
-    const hasSession = state.sessions.some(
-      (s) => s.date && s.date.startsWith(dateStr),
-    );
+    const localDateStr = d.toLocaleDateString("en-CA");
+    const hasSession = state.sessions.some((s) => {
+      if (!s.date) return false;
+      return new Date(s.date).toLocaleDateString("en-CA") === localDateStr;
+    });
     days.push({
       day: d.toLocaleDateString("ru-RU", { weekday: "short" }),
       date: d.getDate(),
@@ -595,7 +603,7 @@ export function renderActivityChart() {
     document.getElementById("activityChart") as HTMLCanvasElement
   )?.getContext("2d");
   if (!ctx) return;
-  if (chartInstances["activity"]) (chartInstances["activity"] as any).destroy();
+  destroyChart("activity");
 
   const labels = [];
   const dataPoints = [];
@@ -604,11 +612,12 @@ export function renderActivityChart() {
   for (let i = 6; i >= 0; i--) {
     const d = new Date();
     d.setDate(now.getDate() - i);
-    const dateStr = d.toISOString().split("T")[0];
+    const localDateStr = d.toLocaleDateString("en-CA");
     labels.push(d.toLocaleDateString("ru-RU", { weekday: "short" }));
-    const daySessions = state.sessions.filter((s) =>
-      s.date.startsWith(dateStr),
-    );
+    const daySessions = state.sessions.filter((s) => {
+      if (!s.date) return false;
+      return new Date(s.date).toLocaleDateString("en-CA") === localDateStr;
+    });
     const count = daySessions.reduce(
       (acc, s) => acc + (s.wordsReviewed || 0),
       0,
@@ -647,7 +656,7 @@ export function renderAccuracyChart() {
     document.getElementById("accuracyChart") as HTMLCanvasElement
   )?.getContext("2d");
   if (!ctx) return;
-  if (chartInstances["accuracy"]) (chartInstances["accuracy"] as any).destroy();
+  destroyChart("accuracy");
 
   const recentSessions = state.sessions.slice(-10);
   const labels = recentSessions.map((_, i) => i + 1);
@@ -680,8 +689,7 @@ export function renderForgettingCurve() {
     document.getElementById("forgettingChart") as HTMLCanvasElement
   )?.getContext("2d");
   if (!ctx) return;
-  if (chartInstances["forgetting"])
-    (chartInstances["forgetting"] as any).destroy();
+  destroyChart("forgetting");
 
   const labels = [];
   const data = [];
@@ -718,7 +726,7 @@ export function renderSRSDistributionChart() {
     document.getElementById("srsChart") as HTMLCanvasElement
   )?.getContext("2d");
   if (!ctx) return;
-  if (chartInstances["srs"]) (chartInstances["srs"] as any).destroy();
+  destroyChart("srs");
 
   const counts = [0, 0, 0, 0];
   state.dataStore.forEach((w) => {

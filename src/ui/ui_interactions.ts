@@ -201,10 +201,8 @@ export function showLevelUpAnimation(level: number) {
   overlay.classList.add("active");
   playTone("success", 300);
 
-  // @ts-ignore
-  if (typeof confetti === "function") {
-    // @ts-ignore
-    confetti({
+  if (typeof window.confetti === "function") {
+    window.confetti({
       particleCount: 200,
       spread: 100,
       origin: { y: 0.6 },

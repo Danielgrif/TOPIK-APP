@@ -1,5 +1,5 @@
 import { client } from "./supabaseClient.ts";
-import { state } from "./state.ts";
+import { state, Session } from "./state.ts";
 import { showToast, parseBilingualString } from "../utils/utils.ts";
 import { syncGlobalStats } from "./sync.ts";
 import { Scheduler } from "./scheduler.ts";
@@ -62,6 +62,32 @@ export function immediateSaveState() {
     localStorage.setItem("custom_words_v1", JSON.stringify(state.customWords));
   } catch (e) {
     console.error("Save error:", e);
+  }
+}
+
+export function cleanupInvalidStateIds() {
+  if (!state.dataStore || state.dataStore.length === 0) return;
+
+  const validIds = new Set(state.dataStore.map((w) => String(w.id)));
+
+  const cleanSet = (s: Set<string | number>): Set<string | number> => {
+    const newSet = new Set<string | number>();
+    s.forEach((id) => {
+      if (validIds.has(String(id))) {
+        newSet.add(id);
+      }
+    });
+    return newSet;
+  };
+
+  state.learned = cleanSet(state.learned);
+  state.mistakes = cleanSet(state.mistakes);
+  state.favorites = cleanSet(state.favorites);
+
+  for (const key in state.wordHistory) {
+    if (!validIds.has(String(key))) {
+      delete state.wordHistory[key];
+    }
   }
 }
 
@@ -151,25 +177,7 @@ export async function fetchVocabulary() {
 
     validateSchema(state.dataStore);
 
-    const validIds = new Set(state.dataStore.map((w) => String(w.id)));
-
-    const cleanSet = (s: Set<string | number>): Set<string | number> => {
-      const newSet = new Set();
-      s.forEach((id) => {
-        if (validIds.has(String(id))) newSet.add(id);
-      });
-      return newSet as Set<string | number>;
-    };
-
-    state.learned = cleanSet(state.learned);
-    state.mistakes = cleanSet(state.mistakes);
-    state.favorites = cleanSet(state.favorites);
-
-    for (const key in state.wordHistory) {
-      if (!validIds.has(String(key))) {
-        delete state.wordHistory[key];
-      }
-    }
+    cleanupInvalidStateIds();
 
     immediateSaveState();
   } catch (e) {
@@ -206,8 +214,8 @@ export async function loadFromSupabase(user: { id: string }) {
 
       if (globalData.achievements && Array.isArray(globalData.achievements)) {
         const localIds = new Set(state.achievements.map((a) => a.id));
-        globalData.achievements.forEach((a: { id: string }) => {
-          if (!localIds.has(a.id)) state.achievements.push(a);
+        globalData.achievements.forEach((a: { id: string; date?: number }) => {
+          if (!localIds.has(a.id)) state.achievements.push({ ...a, date: a.date || Date.now() });
         });
       }
 
@@ -237,7 +245,7 @@ export async function loadFromSupabase(user: { id: string }) {
         const localDates = new Set(
           state.sessions.map((s: { date: string }) => s.date),
         );
-        globalData.sessions.forEach((s: { date: string }) => {
+        globalData.sessions.forEach((s: Session) => {
           if (!localDates.has(s.date)) state.sessions.push(s);
         });
         state.sessions.sort(
@@ -281,23 +289,7 @@ export async function loadFromSupabase(user: { id: string }) {
       });
     }
 
-    const cleanSet = (s: Set<string | number>): Set<string | number> => {
-      const newSet = new Set();
-      s.forEach((id) => {
-        if (validIds.has(String(id))) newSet.add(id);
-      });
-      return newSet as Set<string | number>;
-    };
-    state.learned = cleanSet(state.learned);
-    state.mistakes = cleanSet(state.mistakes);
-    state.favorites = cleanSet(state.favorites);
-
-    for (const key in state.wordHistory) {
-      if (!validIds.has(String(key))) {
-        delete state.wordHistory[key];
-      }
-    }
-
+    cleanupInvalidStateIds();
     showToast("✅ Профиль загружен");
   } catch (e) {
     console.error("Load Error:", e);

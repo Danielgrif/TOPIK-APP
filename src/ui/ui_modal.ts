@@ -1,7 +1,7 @@
 import { state } from "../core/state.ts";
 import { updateVoiceUI } from "./ui_settings.ts";
 
-let lastFocusedElement: HTMLElement | null = null;
+const focusStack: HTMLElement[] = [];
 let _confirmHandler: EventListener | null = null;
 
 export function openModal(modalId: string) {
@@ -46,10 +46,8 @@ export function openModal(modalId: string) {
     updateVoiceUI();
   }
 
-  try {
-    lastFocusedElement = document.activeElement as HTMLElement;
-  } catch {
-    lastFocusedElement = null;
+  if (document.activeElement instanceof HTMLElement) {
+    focusStack.push(document.activeElement);
   }
 
   if (modalId === "stats-modal") {
@@ -81,6 +79,19 @@ export function openModal(modalId: string) {
     });
   }
   modalEl.classList.add("active");
+
+  // Accessibility: Перемещаем фокус внутрь модального окна
+  setTimeout(() => {
+    const focusable = modalEl.querySelector(
+      'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+    ) as HTMLElement;
+    if (focusable) {
+      focusable.focus();
+    } else {
+      modalEl.setAttribute("tabindex", "-1");
+      modalEl.focus();
+    }
+  }, 50);
 }
 
 export function closeModal(modalId: string) {
@@ -104,11 +115,14 @@ export function closeModal(modalId: string) {
       import("../core/stats.ts").then((m) => m.renderDetailedStats());
     }
   }
-  try {
-    if (lastFocusedElement && typeof lastFocusedElement.focus === "function")
-      lastFocusedElement.focus();
-  } catch {
-    // Ignore
+
+  const prevFocus = focusStack.pop();
+  if (prevFocus && document.body.contains(prevFocus)) {
+    try {
+      prevFocus.focus();
+    } catch {
+      // Ignore
+    }
   }
 }
 
@@ -127,6 +141,10 @@ export function openConfirm(
   if (!modal) {
     if (typeof onYes === "function") onYes();
     return;
+  }
+
+  if (document.activeElement instanceof HTMLElement) {
+    focusStack.push(document.activeElement);
   }
 
   const msgEl = document.getElementById("confirm-message");
@@ -148,6 +166,9 @@ export function openConfirm(
     } else {
       inputContainer.style.display = "none";
       input.onkeydown = null;
+      if (yesBtn) {
+        setTimeout(() => yesBtn.focus(), 50);
+      }
     }
   }
 
@@ -188,5 +209,14 @@ export function closeConfirm() {
       // Ignore
     }
     _confirmHandler = null;
+  }
+
+  const prevFocus = focusStack.pop();
+  if (prevFocus && document.body.contains(prevFocus)) {
+    try {
+      prevFocus.focus();
+    } catch {
+      // Ignore
+    }
   }
 }

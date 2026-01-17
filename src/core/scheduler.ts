@@ -47,7 +47,7 @@ export const Scheduler = {
           interval = 1;
         }
       } else if (repetitions === 1) {
-        interval = 6;
+        interval = Math.max(6, Math.round(effectiveInterval * ef));
       } else if (grade === 3) {
         interval = Math.round(effectiveInterval * 1.2);
       } else if (grade === 5) {
@@ -136,10 +136,6 @@ export const Scheduler = {
 
     entry.attempts++;
     if (grade >= 3) entry.correct++;
-
-    if (typeof window.scheduleSaveState === "function") {
-      window.scheduleSaveState();
-    }
 
     return result;
   },

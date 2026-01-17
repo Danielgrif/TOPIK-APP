@@ -520,7 +520,7 @@ export const QuizStrategies: Record<string, Strategy> = {
       qEl.appendChild(tDiv);
       container.innerHTML = "";
 
-      const allGroups = findConfusingWords() as Word[][];
+      const allGroups = findConfusingWords();
       const group = allGroups.find((g) => g.find((w) => w.id === word.id)) || [
         word,
       ];
@@ -644,7 +644,7 @@ export const QuizStrategies: Record<string, Strategy> = {
       qEl.innerHTML = `<div style="font-size:18px; margin-bottom:15px;">Соедините слово с переводом</div>`;
       container.innerHTML = "";
 
-      const pairs = findAssociations() as Array<{ left: Word; right: Word }>;
+      const pairs = findAssociations();
       if (pairs.length < 5) {
         qEl.innerText = "Недостаточно слов для этого режима.";
         setTimeout(() => quitQuiz(), 1500);

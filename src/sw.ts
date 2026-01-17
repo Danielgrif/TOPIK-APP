@@ -29,10 +29,6 @@ self.addEventListener("fetch", (e: FetchEvent) => {
     return;
   }
 
-  if (url.hostname.includes("supabase.co")) {
-    return;
-  }
-
   // Стратегия Cache First для аудио с обновлением в фоне (Stale-While-Revalidate) для надежности,
   // либо Cache First с fallback на сеть. Текущая реализация Cache First.
   if (url.pathname.endsWith(".mp3") || url.href.includes("/audio-files/")) {
@@ -63,6 +59,11 @@ self.addEventListener("fetch", (e: FetchEvent) => {
           });
         }),
     );
+    return;
+  }
+
+  // Игнорируем остальные запросы к Supabase (API, Auth и т.д.), чтобы они шли напрямую в сеть
+  if (url.hostname.includes("supabase.co")) {
     return;
   }
 });

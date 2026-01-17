@@ -128,5 +128,3 @@ export function claimDailyReward() {
 // Expose functions to window for inline onclick handlers
 window.buyItem = buyItem;
 window.claimDailyReward = claimDailyReward;
-window.buyItem = buyItem;
-window.claimDailyReward = claimDailyReward;

@@ -3,16 +3,18 @@ import { parseBilingualString } from "../utils/utils.ts";
 import { render } from "./ui_card.ts";
 import { Word } from "../types/index.ts";
 
-window.addEventListener("click", (e) => {
-  document.querySelectorAll(".multiselect-content.show").forEach((el) => {
-    if (
-      el.parentElement &&
-      e.target instanceof Node &&
-      !el.parentElement.contains(e.target)
-    )
-      el.classList.remove("show");
+export function setupFilterBehavior() {
+  window.addEventListener("click", (e) => {
+    document.querySelectorAll(".multiselect-content.show").forEach((el) => {
+      if (
+        el.parentElement &&
+        e.target instanceof Node &&
+        !el.parentElement.contains(e.target)
+      )
+        el.classList.remove("show");
+    });
   });
-});
+}
 
 export function toggleFilterPanel() {
   const panel = document.getElementById("filter-panel");
@@ -138,10 +140,6 @@ export function populateCategoryFilter() {
     });
   categorySelect.value = "all";
   state.currentCategory = "all";
-}
-
-export function handleTopicChange(_val: string) {
-  /* Deprecated for multi-select */
 }
 
 export function handleCategoryChange(val: string) {

@@ -35,7 +35,6 @@ export function playAndSpeak(word: Word): Promise<void> {
       const text =
         word && (word.word_kr || word.translation) ? word.word_kr : "";
       let url = word.audio_url;
-      // @ts-ignore
       if (state.currentVoice === "male" && word.audio_male)
         url = word.audio_male;
       if (text) speak(text, url).then(resolve);
@@ -79,22 +78,18 @@ export function showError(m: string) {
   if (overlay) overlay.style.display = "flex";
 }
 
+const keyHandlers = new WeakMap<HTMLElement, EventListener>();
+
 /**
  * Enables keyboard navigation for quiz options.
  */
 export function enableQuizKeyboard(container: HTMLElement) {
   if (!container) return;
 
-  // FIX: Удаляем старый слушатель, чтобы избежать дублирования событий
-  if (
-    (container as HTMLElement & { _keyHandler?: EventListener })._keyHandler
-  ) {
-    container.removeEventListener(
-      "keydown",
-      (container as HTMLElement & { _keyHandler?: EventListener })._keyHandler!,
-    );
-    (container as HTMLElement & { _keyHandler?: EventListener })._keyHandler =
-      undefined;
+  if (keyHandlers.has(container)) {
+    const oldHandler = keyHandlers.get(container);
+    if (oldHandler) container.removeEventListener("keydown", oldHandler);
+    keyHandlers.delete(container);
   }
 
   const options = Array.from(container.querySelectorAll(".quiz-option")).map(
@@ -141,8 +136,7 @@ export function enableQuizKeyboard(container: HTMLElement) {
     return;
   }
   container.addEventListener("keydown", onKey);
-  (container as HTMLElement & { _keyHandler?: EventListener })._keyHandler =
-    onKey; // Сохраняем ссылку для удаления
+  keyHandlers.set(container, (e: Event) => onKey(e as KeyboardEvent));
   options.forEach((o) =>
     o.addEventListener("click", () => {
       options.forEach((x) => x.classList.remove("selected"));

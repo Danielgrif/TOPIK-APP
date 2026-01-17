@@ -3,7 +3,7 @@ import { state } from "../core/state.ts";
 /**
  * Creates a debounced function that delays invoking `fn` until after `wait` milliseconds.
  */
-export function debounce<T extends (...args: unknown[]) => unknown>(
+export function debounce<T extends (...args: any[]) => any>(
   fn: T,
   wait: number = 200,
 ): (...args: Parameters<T>) => void {

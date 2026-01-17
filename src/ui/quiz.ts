@@ -13,6 +13,7 @@ import { applyBackgroundMusic } from "./ui_settings.ts";
 import { QuizStrategies } from "./quiz_strategies.ts";
 import { findConfusingWords } from "../core/confusing_words.ts";
 import { Word } from "../types/index.ts";
+import { getQuizConfig, QuizConfig } from "./quiz_modes_config.ts";
 
 let currentQuizMode: string;
 let quizWords: Word[] = [];
@@ -24,10 +25,10 @@ let quizCategory: string = "all";
 let quizSearch: string = "";
 let quizInterval: number | null = null;
 let quizCorrectCount: number = 0;
-let quizSecondsElapsed: number = 0;
 let quizTimerValue: number = 0;
 let survivalLives: number = 0;
 let isQuizPaused: boolean = false;
+let currentConfig: QuizConfig | null = null;
 
 export function updateDailyChallengeUI() {
   const btn = document.querySelector(".fire-btn") as HTMLElement;
@@ -284,6 +285,7 @@ function populateQuizDifficulty() {
 
 export function startQuizMode(mode: string) {
   currentQuizMode = mode;
+  currentConfig = getQuizConfig(mode);
   ensureSessionStarted();
 
   const filterFn = (w: Word) => {
@@ -299,55 +301,19 @@ export function startQuizMode(mode: string) {
   };
 
   const pool = state.dataStore.filter(filterFn);
-  const unlearnedPool = pool.filter((w) => !state.learned.has(w.id));
-  const learnedPool = pool.filter((w) => state.learned.has(w.id));
+  quizWords = currentConfig.getWords(pool);
 
-  unlearnedPool.sort(() => Math.random() - 0.5);
-  learnedPool.sort(() => Math.random() - 0.5);
-
-  if (mode === "confusing") {
-    const groups = findConfusingWords();
-    if (groups.length === 0) {
+  if (quizWords.length === 0) {
+    if (mode === "confusing") {
       showToast("Не найдено похожих слов для тренировки!");
       return;
     }
-    quizWords = groups
-      .flat()
-      .sort(() => Math.random() - 0.5)
-      .slice(0, 20);
-  }
-  if (mode === "association") {
-    quizWords = Array(5).fill({ id: "dummy" } as Word);
-  }
-  if (mode === "sprint")
-    quizWords = unlearnedPool.concat(learnedPool).slice(0, 100);
-  else if (mode === "survival")
-    quizWords = unlearnedPool.concat(learnedPool).slice(0, 200);
-  else quizWords = unlearnedPool.concat(learnedPool).slice(0, 10);
-
-  if (mode === "scramble" || mode === "essay") {
-    quizWords = quizWords.filter(
-      (w) => w.example_kr && w.example_kr.length > 5 && w.example_ru,
-    );
-  }
-  if (mode === "dialogue") {
-    quizWords = quizWords.filter((w) => w.example_audio && w.example_kr);
-  }
-  if (mode === "synonyms") {
-    quizWords = quizWords.filter(
-      (w) => w.synonyms && w.synonyms.trim().length > 0,
-    );
-  }
-  if (mode === "antonyms") {
-    quizWords = quizWords.filter(
-      (w) => w.antonyms && w.antonyms.trim().length > 0,
-    );
-  }
-
-  if (quizWords.length === 0) {
-    if (quizTopic !== "all" || quizCategory !== "all")
+    if (quizTopic !== "all" || quizCategory !== "all") {
       showToast("Нет слов для тренировки в выбранной теме!");
-    else quizWords = state.dataStore.slice(0, 10);
+    } else {
+      // Fallback if filter is too strict but we need something
+      quizWords = state.dataStore.slice(0, 10);
+    }
     if (quizWords.length === 0) return;
   }
 
@@ -360,9 +326,8 @@ export function startQuizMode(mode: string) {
   quizIndex = 0;
   quizStart = Date.now();
   quizCorrectCount = 0;
-  quizTimerValue = mode === "sprint" ? 60 : mode === "survival" ? 15 : 0;
-  if (mode === "survival") survivalLives = 3;
-  quizSecondsElapsed = 0;
+  quizTimerValue = currentConfig.initialTimer;
+  survivalLives = currentConfig.initialLives;
   isQuizPaused = false;
 
   const bar = document.getElementById("quiz-progress-fill");
@@ -370,47 +335,39 @@ export function startQuizMode(mode: string) {
     bar.style.transition = "";
     bar.style.background = "";
   }
-  if (mode === "sprint" || mode === "survival")
+  if (currentConfig.isTimerCountdown)
     if (bar)
       bar.style.transition = "width 1s linear, background-color 1s linear";
 
-  if (quizInterval) clearInterval(quizInterval);
+  if (quizInterval) {
+    clearInterval(quizInterval);
+    quizInterval = null;
+  }
   quizInterval = window.setInterval(() => {
     if (isQuizPaused) return;
-    if (currentQuizMode === "sprint") {
-      quizTimerValue--;
-      const pct = Math.max(0, (quizTimerValue / 60) * 100);
+    
+    if (!currentConfig || !currentConfig.onTick) return;
+
+    const { gameOver, nextTimer, ui } = currentConfig.onTick(quizTimerValue);
+    quizTimerValue = nextTimer;
+
+    if (ui) {
+      const el = document.getElementById("quiz-timer-display");
+      if (el) {
+        el.innerText = ui.text;
+        el.style.color = ui.isDanger ? "var(--danger)" : "";
+      }
       if (bar) {
-        bar.style.width = `${pct}%`;
-        bar.style.backgroundColor = `hsl(${Math.floor((pct / 100) * 120)}, 80%, 45%)`;
-      }
-      const el = document.getElementById("quiz-timer-display");
-      if (el) {
-        el.innerText = `⏳ ${quizTimerValue}`;
-        el.style.color = quizTimerValue < 10 ? "var(--danger)" : "";
-      }
-      if (quizTimerValue <= 0) endQuiz(true);
-    } else if (currentQuizMode === "survival") {
-      quizTimerValue--;
-      const el = document.getElementById("quiz-timer-display");
-      if (el) {
-        el.innerText = `⏳ ${quizTimerValue}s`;
-        el.style.color = quizTimerValue < 5 ? "var(--danger)" : "";
-      }
-      const pct = Math.min(100, Math.max(0, (quizTimerValue / 30) * 100));
-      if (bar) {
-        bar.style.width = `${pct}%`;
-        bar.style.backgroundColor = `hsl(${Math.min(120, pct * 4)}, 80%, 45%)`;
-      }
-      if (quizTimerValue <= 0) endQuiz(true);
-    } else {
-      quizSecondsElapsed++;
-      const el = document.getElementById("quiz-timer-display");
-      if (el) {
-        el.innerText = `${String(Math.floor(quizSecondsElapsed / 60)).padStart(2, "0")}:${String(quizSecondsElapsed % 60).padStart(2, "0")}`;
-        el.style.color = "";
+        bar.style.width = `${ui.barPercent}%`;
+        if (currentConfig.isTimerCountdown) {
+          bar.style.backgroundColor = `hsl(${Math.floor((ui.barPercent / 100) * 120)}, 80%, 45%)`;
+        } else {
+          bar.style.backgroundColor = "";
+        }
       }
     }
+    
+    if (gameOver) endQuiz(true);
   }, 1000);
 
   const quizDiff = document.getElementById("quiz-difficulty");
@@ -450,46 +407,10 @@ export function startDailyChallenge() {
   const launch = () => {
     const isSunday = new Date().getDay() === 0;
     currentQuizMode = isSunday ? "super-daily" : "daily";
+    currentConfig = getQuizConfig(currentQuizMode);
     ensureSessionStarted();
 
-    const countNew = isSunday ? 7 : 3;
-    const countReview = isSunday ? 3 : 2;
-    const total = countNew + countReview;
-
-    const unlearned = state.dataStore
-      .filter((w: Word) => !state.learned.has(w.id))
-      .sort(() => Math.random() - 0.5);
-    const learned = state.dataStore
-      .filter((w: Word) => state.learned.has(w.id))
-      .sort(() => Math.random() - 0.5);
-
-    quizWords = [
-      ...unlearned.slice(0, countNew),
-      ...learned.slice(0, countReview),
-    ];
-
-    if (quizWords.length < total) {
-      const needed = total - quizWords.length;
-      const currentIds = new Set(quizWords.map((w) => w.id));
-
-      const easyPool = state.dataStore.filter(
-        (w: Word) => !currentIds.has(w.id) && w.level === "★☆☆",
-      );
-      easyPool.sort(() => Math.random() - 0.5);
-
-      const easyToAdd = easyPool.slice(0, needed);
-      quizWords = quizWords.concat(easyToAdd);
-
-      if (quizWords.length < total) {
-        const stillNeeded = total - quizWords.length;
-        const currentIdsUpdated = new Set(quizWords.map((w) => w.id));
-        const others = state.dataStore.filter(
-          (w: Word) => !currentIdsUpdated.has(w.id),
-        );
-        others.sort(() => Math.random() - 0.5);
-        quizWords = quizWords.concat(others.slice(0, stillNeeded));
-      }
-    }
+    quizWords = currentConfig.getWords(state.dataStore);
 
     quizIndex = 0;
     quizStart = Date.now();
@@ -743,14 +664,13 @@ function recordQuizAnswer(isCorrect: boolean, autoAdvance: boolean = true) {
     state.learned.add(word.id);
     state.mistakes.delete(word.id);
     addXP(10);
-    if (currentQuizMode === "sprint") {
-      quizTimerValue += 2;
-      showToast("+2 сек!", 800);
+    
+    if (currentConfig) {
+      const { timeChange, livesChange } = currentConfig.onAnswer(true, quizTimerValue, survivalLives);
+      quizTimerValue += timeChange;
+      survivalLives += livesChange;
     }
-    if (currentQuizMode === "survival") {
-      quizTimerValue += 3;
-      showComboEffect("+3 сек!");
-    }
+    
     document.body.classList.add("correct-flash");
     setTimeout(() => document.body.classList.remove("correct-flash"), 700);
   } else {
@@ -761,26 +681,18 @@ function recordQuizAnswer(isCorrect: boolean, autoAdvance: boolean = true) {
       gameEl.classList.add("shake");
       setTimeout(() => gameEl.classList.remove("shake"), 700);
     }
-    if (currentQuizMode === "sprint") {
-      quizTimerValue -= 5;
-      showToast("-5 сек!", 800);
-    }
-    if (currentQuizMode === "survival") {
-      survivalLives--;
+    
+    if (currentConfig) {
+      const { timeChange, livesChange, gameOver } = currentConfig.onAnswer(false, quizTimerValue, survivalLives);
+      quizTimerValue += timeChange;
+      survivalLives += livesChange;
+      
       const scoreEl = document.getElementById("quiz-score");
-      if (scoreEl) scoreEl.innerText = `❤️ ${survivalLives}`;
-
-      document.body.classList.add("pulse-red-effect");
-      setTimeout(() => document.body.classList.remove("pulse-red-effect"), 700);
-
-      playTone("life-lost");
-
-      if (survivalLives <= 0) {
-        showToast("☠️ Жизни закончились!");
+      if (scoreEl && currentQuizMode === 'survival') scoreEl.innerText = `❤️ ${survivalLives}`;
+      
+      if (gameOver) {
         endQuiz(true);
         return;
-      } else {
-        showToast("💔 Минус жизнь!", 800);
       }
     }
     document.body.classList.add("wrong-flash");
@@ -816,52 +728,17 @@ function recordQuizAnswer(isCorrect: boolean, autoAdvance: boolean = true) {
 }
 
 function endQuiz(_forceEnd: boolean = false) {
-  if (quizInterval) clearInterval(quizInterval);
-  if (
-    currentQuizMode === "sprint" &&
-    quizCorrectCount > state.userStats.sprintRecord
-  ) {
-    state.userStats.sprintRecord = quizCorrectCount;
-    showComboEffect(`🏆 Рекорд: ${quizCorrectCount}!`);
+  if (quizInterval) {
+    clearInterval(quizInterval);
+    quizInterval = null;
   }
-  if (
-    currentQuizMode === "survival" &&
-    quizCorrectCount > state.userStats.survivalRecord
-  )
-    state.userStats.survivalRecord = quizCorrectCount;
-
-  if (currentQuizMode === "daily") {
-    const today = new Date().toDateString();
-    const yesterday = new Date(Date.now() - 86400000).toDateString();
-
-    let streak = state.dailyChallenge.streak || 0;
-
-    if (state.dailyChallenge.lastDate === yesterday) streak++;
-    else if (state.dailyChallenge.lastDate !== today) streak = 1;
-
-    const baseCoins = 50;
-    const streakBonus = Math.min(streak, 7) * 10;
-    const totalCoins = baseCoins + streakBonus;
-
-    addXP(50);
-    state.userStats.coins += totalCoins;
-    updateStats();
-
-    state.dailyChallenge = { lastDate: today, completed: true, streak: streak };
-    localStorage.setItem(
-      "daily_challenge_v1",
-      JSON.stringify(state.dailyChallenge),
-    );
-    showComboEffect(
-      `🔥 Вызов пройден!\n+50 XP | +${totalCoins + 50} 💰\nСерия: ${streak} дн.`,
-    );
+  
+  if (currentConfig && currentConfig.onEnd) {
+    currentConfig.onEnd(quizCorrectCount);
+  }
+  
+  if (currentQuizMode === "daily" || currentQuizMode === "super-daily") {
     updateDailyChallengeUI();
-    if (typeof window.confetti === "function")
-      window.confetti({
-        particleCount: 150,
-        spread: 70,
-        origin: { y: 0.6 },
-      });
   }
 
   if (state.sessionActive && quizWords && quizIndex >= 0) {
@@ -899,7 +776,10 @@ function endQuiz(_forceEnd: boolean = false) {
 }
 
 export function quitQuiz() {
-  if (quizInterval) clearInterval(quizInterval);
+  if (quizInterval) {
+    clearInterval(quizInterval);
+    quizInterval = null;
+  }
   endQuiz(false);
 }
 

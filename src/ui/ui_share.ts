@@ -153,7 +153,7 @@ export async function shareStats(themeOverride?: string) {
     if (
       !isWindows &&
       navigator.share &&
-      navigator.canShare({ files: [file] })
+      (typeof navigator.canShare === "function" ? navigator.canShare({ files: [file] }) : true)
     ) {
       try {
         await navigator.share({ files: [file], title: "Мой прогресс в TOPIK" });

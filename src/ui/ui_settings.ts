@@ -2,6 +2,7 @@ import { state } from "../core/state.ts";
 import { showToast } from "../utils/utils.ts";
 import { render } from "./ui_card.ts";
 import { scheduleSaveState } from "../core/db.ts";
+import { openConfirm } from "./ui_modal.ts";
 
 const THEME_COLORS = {
   purple: "#6c5ce7",
@@ -177,8 +178,7 @@ export function populateMusicTrackSelect() {
     const option = document.createElement("option");
     option.value = track.filename;
     option.textContent = track.name;
-    // @ts-ignore
-    if (track.filename === state.backgroundMusicTrack) {
+    if (state.backgroundMusicTrack && track.filename === state.backgroundMusicTrack) {
       option.selected = true;
     }
     selectEl.appendChild(option);
@@ -189,6 +189,7 @@ let activePlayerId = "a";
 let hasInteracted = false;
 /** @type {number|null} */
 let volumeAnimationInterval: number | null = null; // Единый интервал для всех анимаций громкости
+let currentFadeOutPlayer: HTMLAudioElement | null = null; // Ссылка на плеер, который затухает
 
 /**
  * Applies the background music setting (plays/pauses).
@@ -299,12 +300,19 @@ function crossfade(
   if (volumeAnimationInterval) {
     clearInterval(volumeAnimationInterval);
   }
+  // Если предыдущий кроссфейд был прерван, убедимся, что уходящий плеер остановлен
+  if (currentFadeOutPlayer) {
+    currentFadeOutPlayer.volume = 0;
+    currentFadeOutPlayer.pause();
+    currentFadeOutPlayer = null;
+  }
 
   let stepCount = 0;
   const totalSteps = 20;
   const initialFadeInVol =
     startVolume !== undefined ? startVolume : fadeInPlayer.volume;
   const initialFadeOutVol = fadeOutPlayer ? fadeOutPlayer.volume : 0;
+  currentFadeOutPlayer = fadeOutPlayer;
 
   volumeAnimationInterval = setInterval(() => {
     stepCount++;
@@ -327,6 +335,7 @@ function crossfade(
       }
       if (volumeAnimationInterval) clearInterval(volumeAnimationInterval);
       volumeAnimationInterval = null;
+      currentFadeOutPlayer = null;
     }
   }, 50); // 50ms * 20 steps = 1 second duration
 }
@@ -361,6 +370,12 @@ export function duckBackgroundMusic(duck: boolean) {
   if (volumeAnimationInterval) {
     clearInterval(volumeAnimationInterval);
   }
+  // Если прервали кроссфейд, очищаем хвосты
+  if (currentFadeOutPlayer) {
+    currentFadeOutPlayer.volume = 0;
+    currentFadeOutPlayer.pause();
+    currentFadeOutPlayer = null;
+  }
 
   const targetVolume = duck
     ? state.backgroundMusicVolume * 0.2
@@ -384,4 +399,45 @@ export function duckBackgroundMusic(duck: boolean) {
       volumeAnimationInterval = null;
     }
   }, 20);
+}
+
+export function resetAllSettings() {
+  openConfirm("Сбросить все настройки к значениям по умолчанию?", () => {
+    const settingsKeys = [
+      "hanja_mode_v1",
+      "voice_pref",
+      "audio_speed_v1",
+      "dark_mode_v1",
+      "auto_update_v1",
+      "theme_color_v1",
+      "background_music_enabled_v1",
+      "background_music_volume_v1",
+      "focus_mode_v1",
+      "zen_mode_v1",
+      "view_mode_v1",
+      "study_goal_v1",
+      "quiz_difficulty_v1",
+      "quiz_topic_v1",
+      "quiz_category_v1",
+    ];
+
+    settingsKeys.forEach((key) => localStorage.removeItem(key));
+
+    // Reset state object to defaults
+    Object.assign(state, {
+      hanjaMode: false,
+      currentVoice: "female",
+      audioSpeed: 0.9,
+      darkMode: false,
+      autoUpdate: true,
+      themeColor: "purple",
+      backgroundMusicEnabled: false,
+      backgroundMusicVolume: 0.3,
+      focusMode: false,
+      viewMode: "grid",
+    });
+
+    showToast("⚙️ Настройки сброшены. Перезагрузка...");
+    setTimeout(() => location.reload(), 800);
+  });
 }

@@ -4,10 +4,9 @@ import { state } from "./state.ts";
 export async function syncGlobalStats() {
   if (state.isSyncing || !navigator.onLine) return;
 
-  const {
-    data: { user },
-  } = await client.auth.getUser();
-  if (!user) return;
+  const { data, error } = await client.auth.getUser();
+  if (error || !data?.user) return;
+  const user = data.user;
 
   state.isSyncing = true;
   const syncBtn = document.getElementById("sync-btn");

@@ -26,7 +26,7 @@ import {
 import {
   toggleFilterPanel,
   populateFilters,
-  handleTopicChange,
+  setupFilterBehavior,
   handleCategoryChange,
   setTypeFilter,
   setStarFilter,
@@ -58,6 +58,7 @@ import {
   applyBackgroundMusic,
   setAccentColor,
   setAudioSpeed,
+  resetAllSettings,
 } from "./ui/ui_settings.ts";
 
 import {
@@ -92,7 +93,12 @@ const searchWorker = new Worker(
   { type: "module" },
 );
 const APP_VERSION = "v56";
-let deferredPrompt: any;
+
+interface BeforeInstallPromptEvent extends Event {
+  prompt: () => Promise<void>;
+  userChoice: Promise<{ outcome: 'accepted' | 'dismissed'; platform: string }>;
+}
+let deferredPrompt: BeforeInstallPromptEvent | null = null;
 
 window.onerror = function (msg, url, line, col, error) {
   console.error("🚨 Global Error:", { msg, url, line, col, error });
@@ -251,6 +257,9 @@ function setupGlobalListeners() {
         case "quit-quiz":
           quitQuiz();
           break;
+        case "reset-settings":
+          resetAllSettings();
+          break;
       }
     }
   });
@@ -300,29 +309,28 @@ async function init() {
     render();
   };
 
-  client.auth.onAuthStateChange(
-    async (event: string, session: { user: any } | null) => {
-      if (session) {
-        updateAuthUI(session.user);
-        if (event === "SIGNED_IN" || event === "INITIAL_SESSION") {
-          cleanAuthUrl();
-          await loadFromSupabase(session.user);
-          saveAndRender();
-          closeModal("login-modal");
-        }
-        if (event === "PASSWORD_RECOVERY") {
-          openProfileModal();
-          showToast("ℹ️ Введите новый пароль");
-        }
-      } else {
-        updateAuthUI(null);
+  (client as any).auth.onAuthStateChange(async (event: string, session: { user: any } | null) => {
+    if (session) {
+      updateAuthUI(session.user);
+      if (event === "SIGNED_IN" || event === "INITIAL_SESSION") {
+        cleanAuthUrl();
+        await loadFromSupabase(session.user);
+        saveAndRender();
+        closeModal("login-modal");
       }
-    },
-  );
+      if (event === "PASSWORD_RECOVERY") {
+        openProfileModal();
+        showToast("ℹ️ Введите новый пароль");
+      }
+    } else {
+      updateAuthUI(null);
+    }
+  });
 
   updateXPUI();
   updateStats();
   populateFilters();
+  setupFilterBehavior();
   import("./core/stats.ts").then((m) => m.renderTopicMastery());
   import("./ui/quiz.ts").then((m) => m.buildQuizModes());
   updateSRSBadge();
@@ -419,7 +427,7 @@ async function init() {
 
   window.addEventListener("beforeinstallprompt", (e: Event) => {
     e.preventDefault();
-    deferredPrompt = e;
+    deferredPrompt = e as BeforeInstallPromptEvent;
     const btn = document.getElementById("install-app-btn");
     if (btn) btn.style.display = "flex";
 
@@ -452,7 +460,6 @@ Object.assign(window, {
   shuffleWords,
   setStarFilter,
   setTypeFilter,
-  handleTopicChange,
   handleCategoryChange,
   toggleHanjaMode,
   toggleVoice,
@@ -491,8 +498,8 @@ Object.assign(window, {
   startDailyChallenge,
   quitQuiz,
   renderDetailedStats,
-  checkPronunciation: (word: string, btn: HTMLElement) =>
-    import("./core/speech.js").then((m) => m.checkPronunciation(word, btn)),
+  checkPronunciation: (word: string, btn: HTMLElement, callback?: (score: number, text: string) => void) =>
+    import("./core/speech.ts").then((m) => m.checkPronunciation(word, btn, callback)),
   resetSearchHandler,
   runTests: () => import("./tests.ts").then((m) => m.runTests()),
   forceUpdateSW: async () => {

@@ -172,6 +172,43 @@ export async function runTests() {
     );
     const diff2 = generateDiffHtml("cat", "cats");
     assert("Diff HTML (Insertion)", diff2.includes('diff-ins">s</span>'));
+
+    console.log("📘 Edge Cases & Boundaries (SM-2)");
+
+    // 12. EF Lower Bound
+    // Start with EF 1.3. Grade 3 reduces EF. Should stay 1.3.
+    // EF change for grade 3: 0.1 - (2) * (0.08 + 2*0.02) = 0.1 - 0.24 = -0.14.
+    item = { interval: 10, repetitions: 5, ef: 1.3 };
+    res = Scheduler.calculate(3, item);
+    assert("EF Lower Bound (1.3)", Math.abs(res.ef - 1.3) < 0.001);
+
+    // 13. Grade Clamping
+    item = { interval: 10, repetitions: 5, ef: 2.5 };
+    res = Scheduler.calculate(100, item); // Should treat as 5
+    // Grade 5 logic: interval * ef * 1.3. 10 * 2.5 * 1.3 = 32.5 -> 33
+    // Fuzzing might apply.
+    // Let's check EF. Grade 5 adds 0.1. 2.5 -> 2.6.
+    assert("Grade Clamping (>5 treated as 5)", Math.abs(res.ef - 2.6) < 0.001);
+
+    // 14. Soft Lapse Boundary
+    // Interval 10 -> Fail -> 1
+    item = { interval: 10, repetitions: 5, ef: 2.5 };
+    res = Scheduler.calculate(0, item);
+    assert("Soft Lapse Boundary (10 -> 1)", res.interval === 1);
+
+    // Interval 11 -> Fail -> max(1, 11*0.2) = 2.2 -> 2
+    item = { interval: 11, repetitions: 5, ef: 2.5 };
+    res = Scheduler.calculate(0, item);
+    assert("Soft Lapse Boundary (11 -> 2)", res.interval === 2);
+
+    // 15. Late Review Scaling
+    // Interval 5. Reviewed 20 days later (15 days late). Grade 4.
+    // Effective = 20. New = 20 * 2.5 = 50.
+    item = { interval: 5, repetitions: 2, ef: 2.5 };
+    const veryLate = Date.now() - 20 * 24 * 60 * 60 * 1000;
+    res = Scheduler.calculate(4, item, veryLate);
+    // Fuzzing applies to 50. Range approx 47-53.
+    assertRange("Late Review Scaling (5->~50)", res.interval, 47, 53);
   } catch (e) {
     console.error("💥 Exception:", e);
     failed++;

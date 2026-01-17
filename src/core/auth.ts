@@ -1,7 +1,6 @@
 import { client } from "./supabaseClient.ts";
 import { loadFromSupabase } from "./db.ts";
 import { showToast } from "../utils/utils.ts";
-// @ts-ignore
 import { saveAndRender } from "../ui/ui.ts";
 import { openModal, closeModal, openConfirm } from "../ui/ui_modal.ts";
 
@@ -38,9 +37,13 @@ export function openLoginModal() {
   if (toggleBtn) toggleBtn.textContent = "👁️";
 
   const bar = document.getElementById("strength-bar");
-  if (bar && bar.parentElement) {
+  const strengthContainer = document.querySelector(
+    ".password-strength",
+  ) as HTMLElement | null;
+  if (passInput && bar && strengthContainer) {
     bar.style.width = "0%";
-    bar.parentElement.style.display = "none";
+    strengthContainer.style.display = "none";
+    setupPasswordStrengthMeter(passInput, bar, strengthContainer);
   }
 
   const authError = document.getElementById("auth-error");
@@ -50,40 +53,14 @@ export function openLoginModal() {
   passInput.onkeydown = (e) => {
     if (e.key === "Enter") handleAuth("login");
   };
-
-  passInput.oninput = (e) => {
-    const target = e.target as HTMLInputElement;
-    if (!target) return;
-    const val = target.value;
-    const meter = document.getElementById("strength-bar");
-    const container = document.querySelector(
-      ".password-strength",
-    ) as HTMLElement | null;
-    if (!val) {
-      if (container) container.style.display = "none";
-      return;
-    }
-    if (container) container.style.display = "block";
-    let score = 0;
-    if (val.length > 5) score += 20;
-    if (val.length > 8) score += 20;
-    if (/[A-Z]/.test(val)) score += 20;
-    if (/[0-9]/.test(val)) score += 20;
-    if (/[^A-Za-z0-9]/.test(val)) score += 20;
-    if (meter) {
-      meter.style.width = score + "%";
-      if (score < 40) meter.style.backgroundColor = "var(--danger)";
-      else if (score < 80) meter.style.backgroundColor = "var(--warning)";
-      else meter.style.backgroundColor = "var(--success)";
-    }
-  };
 }
 
 export function openProfileModal() {
   client.auth
-    .getSession() // @ts-ignore
-    .then(({ data }) => {
-      const session = data.session;
+    .getSession()
+    .then(({ data, error }) => {
+      if (error) throw error;
+      const session = data?.session;
       if (session && session.user) {
         const emailEl = document.getElementById("profile-email");
         if (emailEl) emailEl.textContent = session.user.email;
@@ -97,35 +74,11 @@ export function openProfileModal() {
         const bar = document.getElementById("new-strength-bar");
         const container = document.getElementById("new-strength-container");
 
-        if (input) {
+        if (input && bar && container) {
           input.value = "";
-          if (container) container.style.display = "none";
-          if (bar) bar.style.width = "0%";
-
-          input.oninput = (e) => {
-            const target = e.target as HTMLInputElement;
-            if (!target) return;
-            const val = target.value;
-            if (!val) {
-              if (container) container.style.display = "none";
-              return;
-            }
-            if (container) container.style.display = "block";
-
-            let score = 0;
-            if (val.length > 5) score += 20;
-            if (val.length > 8) score += 20;
-            if (/[A-Z]/.test(val)) score += 20;
-            if (/[0-9]/.test(val)) score += 20;
-            if (/[^A-Za-z0-9]/.test(val)) score += 20;
-
-            if (bar) {
-              bar.style.width = score + "%";
-              if (score < 40) bar.style.backgroundColor = "var(--danger)";
-              else if (score < 80) bar.style.backgroundColor = "var(--warning)";
-              else bar.style.backgroundColor = "var(--success)";
-            }
-          };
+          container.style.display = "none";
+          bar.style.width = "0%";
+          setupPasswordStrengthMeter(input, bar, container);
         }
 
         const installBtn = document.getElementById("install-app-btn");
@@ -143,6 +96,34 @@ export function openProfileModal() {
       }
     })
     .catch((err: unknown) => console.error("Profile check failed:", err));
+}
+
+function setupPasswordStrengthMeter(
+  inputEl: HTMLInputElement,
+  barEl: HTMLElement,
+  containerEl: HTMLElement,
+) {
+  inputEl.oninput = () => {
+    const val = inputEl.value;
+
+    if (!val) {
+      containerEl.style.display = "none";
+      return;
+    }
+    containerEl.style.display = "block";
+
+    let score = 0;
+    if (val.length > 5) score += 20;
+    if (val.length > 8) score += 20;
+    if (/[A-Z]/.test(val)) score += 20;
+    if (/[0-9]/.test(val)) score += 20;
+    if (/[^A-Za-z0-9]/.test(val)) score += 20;
+
+    barEl.style.width = `${score}%`;
+    if (score < 40) barEl.style.backgroundColor = "var(--danger)";
+    else if (score < 80) barEl.style.backgroundColor = "var(--warning)";
+    else barEl.style.backgroundColor = "var(--success)";
+  };
 }
 
 export async function handleAuth(type: string) {
@@ -186,8 +167,7 @@ async function performReset(email: string) {
     alert(`Ссылка для входа отправлена на ${email}.\nПроверьте почту.`);
     closeModal("login-modal");
   } catch (e: unknown) {
-    console.error(e);
-    showAuthError("Ошибка: " + (e as Error).message);
+    handleAuthError(e);
   }
 }
 
@@ -235,7 +215,7 @@ async function performSignup(email: string, password: string) {
 
 async function finalizeAuth(user: { id: string; email?: string }) {
   showToast("✅ Успешно!");
-  updateAuthUI(user);
+  updateAuthUI(user.email ? { email: user.email } : null);
   await loadFromSupabase(user);
   saveAndRender();
   closeModal("login-modal");
@@ -251,12 +231,28 @@ function showAuthError(msg: string) {
 }
 
 function handleAuthError(e: unknown) {
-  console.error(e);
-  let msg = (e as Error).message;
-  if (msg.includes("already registered"))
-    msg = "Такой пользователь уже есть. Попробуйте войти.";
-  else if (msg.includes("Invalid login")) msg = "Неверный Email или пароль.";
-  else if (msg.includes("Email not confirmed")) msg = "Email не подтвержден.";
+  console.error("Auth Error:", e);
+  let msg = (e as Error).message || "Произошла ошибка";
+
+  // Обработка ошибок сети
+  if (
+    msg.includes("Failed to fetch") ||
+    msg.includes("Network request failed") ||
+    msg.includes("connection error")
+  ) {
+    msg = "🌐 Ошибка сети. Проверьте интернет-соединение.";
+  } else if (msg.includes("already registered")) {
+    msg = "📧 Этот Email уже зарегистрирован. Попробуйте войти.";
+  } else if (msg.includes("Invalid login") || msg.includes("Invalid credentials")) {
+    msg = "❌ Неверный Email или пароль.";
+  } else if (msg.includes("Email not confirmed")) {
+    msg = "📩 Email не подтвержден. Проверьте почту.";
+  } else if (msg.includes("Rate limit exceeded") || msg.includes("Too many requests")) {
+    msg = "⏳ Слишком много попыток. Подождите немного.";
+  } else if (msg.includes("Password should be at least")) {
+    msg = "🔒 Пароль должен быть не менее 6 символов.";
+  }
+
   showAuthError(msg);
 }
 

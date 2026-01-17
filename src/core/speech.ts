@@ -1,21 +1,47 @@
 import { showToast, levenshtein } from "../utils/utils.ts";
 
-let recognition: unknown = null;
+interface SpeechRecognitionEvent extends Event {
+  results: {
+    [index: number]: {
+      [index: number]: {
+        transcript: string;
+      };
+    };
+  };
+}
 
-function getRecognition(): unknown {
+interface SpeechRecognitionErrorEvent extends Event {
+  error: string;
+}
+
+interface ISpeechRecognition extends EventTarget {
+  lang: string;
+  interimResults: boolean;
+  maxAlternatives: number;
+  start(): void;
+  stop(): void;
+  onresult: (event: SpeechRecognitionEvent) => void;
+  onerror: (event: SpeechRecognitionErrorEvent) => void;
+  onend: () => void;
+}
+
+let recognition: ISpeechRecognition | null = null;
+
+function getRecognition(): ISpeechRecognition | null {
   if (recognition) return recognition;
 
   const SpeechRecognition =
-    window.SpeechRecognition || window.webkitSpeechRecognition;
+    window.SpeechRecognition ||
+    window.webkitSpeechRecognition;
   if (!SpeechRecognition) {
     showToast("❌ Распознавание речи не поддерживается в этом браузере.");
     return null;
   }
 
-  recognition = new (SpeechRecognition as any)();
-  (recognition as any).lang = "ko-KR";
-  (recognition as any).interimResults = false;
-  (recognition as any).maxAlternatives = 1;
+  recognition = new (SpeechRecognition as any)() as ISpeechRecognition;
+  recognition.lang = "ko-KR";
+  recognition.interimResults = false;
+  recognition.maxAlternatives = 1;
 
   return recognition;
 }
@@ -29,7 +55,7 @@ export function checkPronunciation(
   if (!rec) return;
 
   try {
-    (rec as any).stop();
+    rec.stop();
   } catch (_e) {
     // Ignore
   }
@@ -40,14 +66,12 @@ export function checkPronunciation(
   }
   showToast("🎤 Говорите...");
 
-  (rec as any).onresult = (event: any) => {
+  rec.onresult = (event: SpeechRecognitionEvent) => {
     if (!event.results || !event.results[0] || !event.results[0][0]) return;
     const spokenText = event.results[0][0].transcript.trim();
 
     const normalize = (s: string) =>
-      s
-        .replace(new RegExp("[.,/#!$%^&*;:{}=\\-_`~()]", "g"), "")
-        .replace(/\s+/g, "");
+      s.replace(new RegExp("[.,/#!$%^&*;:{}=\\-_`~()]", "g"), "").replace(/\s+/g, "");
     const spokenNorm = normalize(spokenText);
     const correctNorm = normalize(correctWord);
 
@@ -71,7 +95,7 @@ export function checkPronunciation(
     if (onResult) onResult(similarity, spokenText);
   };
 
-  (rec as any).onerror = (event: any) => {
+  rec.onerror = (event: SpeechRecognitionErrorEvent) => {
     let errorMessage = "Ошибка распознавания";
     if (event.error === "no-speech")
       errorMessage = "Не удалось распознать речь. Попробуйте снова.";

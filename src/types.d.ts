@@ -22,6 +22,7 @@ declare global {
     // --- Browser APIs ---
     SpeechRecognition: unknown;
     webkitSpeechRecognition: unknown;
+    webkitAudioContext: typeof AudioContext;
 
     // --- App Global Functions (exposed for HTML event handlers) ---
 
@@ -32,7 +33,7 @@ declare global {
     speak: (text: string | null, url?: string | null) => Promise<void>;
 
     /** UI & Logic Helpers */
-    checkPronunciation: (word: string, btn?: HTMLElement) => void;
+    checkPronunciation: (word: string, btn?: HTMLElement, callback?: (score: number, text: string) => void) => void;
     setBackgroundMusicVolume: (volume: string | number) => void;
     scheduleSaveState: () => void;
 
