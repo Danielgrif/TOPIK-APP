@@ -345,7 +345,7 @@ export function startQuizMode(mode: string) {
   }
   quizInterval = window.setInterval(() => {
     if (isQuizPaused) return;
-    
+
     if (!currentConfig || !currentConfig.onTick) return;
 
     const { gameOver, nextTimer, ui } = currentConfig.onTick(quizTimerValue);
@@ -366,7 +366,7 @@ export function startQuizMode(mode: string) {
         }
       }
     }
-    
+
     if (gameOver) endQuiz(true);
   }, 1000);
 
@@ -664,13 +664,17 @@ function recordQuizAnswer(isCorrect: boolean, autoAdvance: boolean = true) {
     state.learned.add(word.id);
     state.mistakes.delete(word.id);
     addXP(10);
-    
+
     if (currentConfig) {
-      const { timeChange, livesChange } = currentConfig.onAnswer(true, quizTimerValue, survivalLives);
+      const { timeChange, livesChange } = currentConfig.onAnswer(
+        true,
+        quizTimerValue,
+        survivalLives,
+      );
       quizTimerValue += timeChange;
       survivalLives += livesChange;
     }
-    
+
     document.body.classList.add("correct-flash");
     setTimeout(() => document.body.classList.remove("correct-flash"), 700);
   } else {
@@ -681,15 +685,20 @@ function recordQuizAnswer(isCorrect: boolean, autoAdvance: boolean = true) {
       gameEl.classList.add("shake");
       setTimeout(() => gameEl.classList.remove("shake"), 700);
     }
-    
+
     if (currentConfig) {
-      const { timeChange, livesChange, gameOver } = currentConfig.onAnswer(false, quizTimerValue, survivalLives);
+      const { timeChange, livesChange, gameOver } = currentConfig.onAnswer(
+        false,
+        quizTimerValue,
+        survivalLives,
+      );
       quizTimerValue += timeChange;
       survivalLives += livesChange;
-      
+
       const scoreEl = document.getElementById("quiz-score");
-      if (scoreEl && currentQuizMode === 'survival') scoreEl.innerText = `❤️ ${survivalLives}`;
-      
+      if (scoreEl && currentQuizMode === "survival")
+        scoreEl.innerText = `❤️ ${survivalLives}`;
+
       if (gameOver) {
         endQuiz(true);
         return;
@@ -732,11 +741,11 @@ function endQuiz(_forceEnd: boolean = false) {
     clearInterval(quizInterval);
     quizInterval = null;
   }
-  
+
   if (currentConfig && currentConfig.onEnd) {
     currentConfig.onEnd(quizCorrectCount);
   }
-  
+
   if (currentQuizMode === "daily" || currentQuizMode === "super-daily") {
     updateDailyChallengeUI();
   }

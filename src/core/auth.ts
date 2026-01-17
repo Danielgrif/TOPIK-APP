@@ -243,11 +243,17 @@ function handleAuthError(e: unknown) {
     msg = "🌐 Ошибка сети. Проверьте интернет-соединение.";
   } else if (msg.includes("already registered")) {
     msg = "📧 Этот Email уже зарегистрирован. Попробуйте войти.";
-  } else if (msg.includes("Invalid login") || msg.includes("Invalid credentials")) {
+  } else if (
+    msg.includes("Invalid login") ||
+    msg.includes("Invalid credentials")
+  ) {
     msg = "❌ Неверный Email или пароль.";
   } else if (msg.includes("Email not confirmed")) {
     msg = "📩 Email не подтвержден. Проверьте почту.";
-  } else if (msg.includes("Rate limit exceeded") || msg.includes("Too many requests")) {
+  } else if (
+    msg.includes("Rate limit exceeded") ||
+    msg.includes("Too many requests")
+  ) {
     msg = "⏳ Слишком много попыток. Подождите немного.";
   } else if (msg.includes("Password should be at least")) {
     msg = "🔒 Пароль должен быть не менее 6 символов.";

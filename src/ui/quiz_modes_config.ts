@@ -20,7 +20,11 @@ export interface QuizConfig {
   isTimerCountdown: boolean;
   initialLives: number;
   onTick(currentTimer: number): TickResult;
-  onAnswer(isCorrect: boolean, currentTimer: number, lives: number): {
+  onAnswer(
+    isCorrect: boolean,
+    currentTimer: number,
+    lives: number,
+  ): {
     timeChange: number;
     livesChange: number;
     gameOver: boolean;
@@ -71,7 +75,10 @@ class SprintQuizConfig extends BaseQuizConfig {
   getWords(pool: Word[]): Word[] {
     const unlearned = pool.filter((w) => !state.learned.has(w.id));
     const learned = pool.filter((w) => state.learned.has(w.id));
-    return unlearned.concat(learned).sort(() => Math.random() - 0.5).slice(0, 100);
+    return unlearned
+      .concat(learned)
+      .sort(() => Math.random() - 0.5)
+      .slice(0, 100);
   }
 
   onTick(t: number): TickResult {
@@ -114,7 +121,10 @@ class SurvivalQuizConfig extends BaseQuizConfig {
   getWords(pool: Word[]): Word[] {
     const unlearned = pool.filter((w) => !state.learned.has(w.id));
     const learned = pool.filter((w) => state.learned.has(w.id));
-    return unlearned.concat(learned).sort(() => Math.random() - 0.5).slice(0, 200);
+    return unlearned
+      .concat(learned)
+      .sort(() => Math.random() - 0.5)
+      .slice(0, 200);
   }
 
   onTick(t: number): TickResult {
@@ -160,20 +170,31 @@ class DailyQuizConfig extends BaseQuizConfig {
     const countReview = isSunday ? 3 : 2;
     const total = countNew + countReview;
 
-    const unlearned = pool.filter((w) => !state.learned.has(w.id)).sort(() => Math.random() - 0.5);
-    const learned = pool.filter((w) => state.learned.has(w.id)).sort(() => Math.random() - 0.5);
+    const unlearned = pool
+      .filter((w) => !state.learned.has(w.id))
+      .sort(() => Math.random() - 0.5);
+    const learned = pool
+      .filter((w) => state.learned.has(w.id))
+      .sort(() => Math.random() - 0.5);
 
-    let words = [...unlearned.slice(0, countNew), ...learned.slice(0, countReview)];
+    let words = [
+      ...unlearned.slice(0, countNew),
+      ...learned.slice(0, countReview),
+    ];
 
     if (words.length < total) {
       const currentIds = new Set(words.map((w) => w.id));
-      const easyPool = pool.filter((w) => !currentIds.has(w.id) && w.level === "★☆☆");
+      const easyPool = pool.filter(
+        (w) => !currentIds.has(w.id) && w.level === "★☆☆",
+      );
       easyPool.sort(() => Math.random() - 0.5);
       words = words.concat(easyPool.slice(0, total - words.length));
-      
+
       if (words.length < total) {
         const currentIds2 = new Set(words.map((w) => w.id));
-        const others = pool.filter((w) => !currentIds2.has(w.id)).sort(() => Math.random() - 0.5);
+        const others = pool
+          .filter((w) => !currentIds2.has(w.id))
+          .sort(() => Math.random() - 0.5);
         words = words.concat(others.slice(0, total - words.length));
       }
     }
@@ -197,10 +218,15 @@ class DailyQuizConfig extends BaseQuizConfig {
     updateStats();
 
     state.dailyChallenge = { lastDate: today, completed: true, streak: streak };
-    localStorage.setItem("daily_challenge_v1", JSON.stringify(state.dailyChallenge));
-    
-    showComboEffect(`🔥 Вызов пройден!\n+50 XP | +${totalCoins} 💰\nСерия: ${streak} дн.`);
-    
+    localStorage.setItem(
+      "daily_challenge_v1",
+      JSON.stringify(state.dailyChallenge),
+    );
+
+    showComboEffect(
+      `🔥 Вызов пройден!\n+50 XP | +${totalCoins} 💰\nСерия: ${streak} дн.`,
+    );
+
     if (typeof window.confetti === "function") {
       window.confetti({ particleCount: 150, spread: 70, origin: { y: 0.6 } });
     }
@@ -211,7 +237,10 @@ class ConfusingQuizConfig extends BaseQuizConfig {
   getWords(_pool: Word[]): Word[] {
     const groups = findConfusingWords();
     if (groups.length === 0) return [];
-    return groups.flat().sort(() => Math.random() - 0.5).slice(0, 20);
+    return groups
+      .flat()
+      .sort(() => Math.random() - 0.5)
+      .slice(0, 20);
   }
 }
 
@@ -222,7 +251,10 @@ class AssociationQuizConfig extends BaseQuizConfig {
 }
 
 class FilteredQuizConfig extends BaseQuizConfig {
-  constructor(private filterFn: (w: Word) => boolean, private minLength: number = 10) {
+  constructor(
+    private filterFn: (w: Word) => boolean,
+    private minLength: number = 10,
+  ) {
     super();
   }
   getWords(pool: Word[]): Word[] {
@@ -233,21 +265,33 @@ class FilteredQuizConfig extends BaseQuizConfig {
 
 export function getQuizConfig(mode: string): QuizConfig {
   switch (mode) {
-    case "sprint": return new SprintQuizConfig();
-    case "survival": return new SurvivalQuizConfig();
-    case "daily": 
-    case "super-daily": return new DailyQuizConfig();
-    case "confusing": return new ConfusingQuizConfig();
-    case "association": return new AssociationQuizConfig();
+    case "sprint":
+      return new SprintQuizConfig();
+    case "survival":
+      return new SurvivalQuizConfig();
+    case "daily":
+    case "super-daily":
+      return new DailyQuizConfig();
+    case "confusing":
+      return new ConfusingQuizConfig();
+    case "association":
+      return new AssociationQuizConfig();
     case "scramble":
     case "essay":
-      return new FilteredQuizConfig(w => !!(w.example_kr && w.example_kr.length > 5 && w.example_ru));
+      return new FilteredQuizConfig(
+        (w) => !!(w.example_kr && w.example_kr.length > 5 && w.example_ru),
+      );
     case "dialogue":
-      return new FilteredQuizConfig(w => !!(w.example_audio && w.example_kr));
+      return new FilteredQuizConfig((w) => !!(w.example_audio && w.example_kr));
     case "synonyms":
-      return new FilteredQuizConfig(w => !!(w.synonyms && w.synonyms.trim().length > 0));
+      return new FilteredQuizConfig(
+        (w) => !!(w.synonyms && w.synonyms.trim().length > 0),
+      );
     case "antonyms":
-      return new FilteredQuizConfig(w => !!(w.antonyms && w.antonyms.trim().length > 0));
-    default: return new BaseQuizConfig();
+      return new FilteredQuizConfig(
+        (w) => !!(w.antonyms && w.antonyms.trim().length > 0),
+      );
+    default:
+      return new BaseQuizConfig();
   }
 }

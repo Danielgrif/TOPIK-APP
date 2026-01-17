@@ -33,7 +33,11 @@ declare global {
     speak: (text: string | null, url?: string | null) => Promise<void>;
 
     /** UI & Logic Helpers */
-    checkPronunciation: (word: string, btn?: HTMLElement, callback?: (score: number, text: string) => void) => void;
+    checkPronunciation: (
+      word: string,
+      btn?: HTMLElement,
+      callback?: (score: number, text: string) => void,
+    ) => void;
     setBackgroundMusicVolume: (volume: string | number) => void;
     scheduleSaveState: () => void;
 

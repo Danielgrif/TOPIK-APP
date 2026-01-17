@@ -123,9 +123,15 @@ function onVirtualScroll(e: Event) {
     const grid = document.getElementById("vocabulary-grid");
     if (grid) {
       if (state.viewMode === "list") {
-        renderVisibleListItems({ target: grid, sourceData: currentFilteredData });
+        renderVisibleListItems({
+          target: grid,
+          sourceData: currentFilteredData,
+        });
       } else {
-        renderVisibleGridItems({ target: grid, sourceData: currentFilteredData });
+        renderVisibleGridItems({
+          target: grid,
+          sourceData: currentFilteredData,
+        });
       }
     }
     scrollRafId = null;
@@ -162,7 +168,12 @@ function initGridVirtualScroll(grid: HTMLElement) {
   });
 }
 
-function renderVisibleGridItems(params: { target: HTMLElement; sourceData: Word[]; contentContainer?: HTMLElement; sizer?: HTMLElement }) {
+function renderVisibleGridItems(params: {
+  target: HTMLElement;
+  sourceData: Word[];
+  contentContainer?: HTMLElement;
+  sizer?: HTMLElement;
+}) {
   const grid = params.target;
   if (!grid) return;
 
@@ -236,7 +247,10 @@ function initVirtualScroll(grid: HTMLElement) {
   renderVisibleListItems({ target: grid, sourceData });
 }
 
-function renderVisibleListItems(params: { target: HTMLElement; sourceData: Word[] }) {
+function renderVisibleListItems(params: {
+  target: HTMLElement;
+  sourceData: Word[];
+}) {
   const grid = params.target;
   if (!grid) return;
 

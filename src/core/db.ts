@@ -215,7 +215,8 @@ export async function loadFromSupabase(user: { id: string }) {
       if (globalData.achievements && Array.isArray(globalData.achievements)) {
         const localIds = new Set(state.achievements.map((a) => a.id));
         globalData.achievements.forEach((a: { id: string; date?: number }) => {
-          if (!localIds.has(a.id)) state.achievements.push({ ...a, date: a.date || Date.now() });
+          if (!localIds.has(a.id))
+            state.achievements.push({ ...a, date: a.date || Date.now() });
         });
       }
 

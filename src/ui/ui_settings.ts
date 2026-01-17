@@ -178,7 +178,10 @@ export function populateMusicTrackSelect() {
     const option = document.createElement("option");
     option.value = track.filename;
     option.textContent = track.name;
-    if (state.backgroundMusicTrack && track.filename === state.backgroundMusicTrack) {
+    if (
+      state.backgroundMusicTrack &&
+      track.filename === state.backgroundMusicTrack
+    ) {
       option.selected = true;
     }
     selectEl.appendChild(option);

@@ -93,9 +93,10 @@ export const state: AppState = {
   currentType: "word",
   hanjaMode: localStorage.getItem("hanja_mode_v1") === "true",
   currentVoice: localStorage.getItem("voice_pref") || "female",
-  audioSpeed: localStorage.getItem("audio_speed_v1") !== null
-    ? Number(localStorage.getItem("audio_speed_v1"))
-    : 0.9,
+  audioSpeed:
+    localStorage.getItem("audio_speed_v1") !== null
+      ? Number(localStorage.getItem("audio_speed_v1"))
+      : 0.9,
   darkMode: localStorage.getItem("dark_mode_v1") === "true",
   focusMode: localStorage.getItem("focus_mode_v1") === "true",
   zenMode: localStorage.getItem("zen_mode_v1") === "true",
@@ -104,9 +105,10 @@ export const state: AppState = {
   autoUpdate: localStorage.getItem("auto_update_v1") !== "false",
   backgroundMusicEnabled:
     localStorage.getItem("background_music_enabled_v1") === "true",
-  backgroundMusicVolume: localStorage.getItem("background_music_volume_v1") !== null
-    ? Number(localStorage.getItem("background_music_volume_v1"))
-    : 0.3,
+  backgroundMusicVolume:
+    localStorage.getItem("background_music_volume_v1") !== null
+      ? Number(localStorage.getItem("background_music_volume_v1"))
+      : 0.3,
 
   MUSIC_TRACKS: [
     {

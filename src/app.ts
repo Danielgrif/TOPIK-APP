@@ -96,7 +96,7 @@ const APP_VERSION = "v56";
 
 interface BeforeInstallPromptEvent extends Event {
   prompt: () => Promise<void>;
-  userChoice: Promise<{ outcome: 'accepted' | 'dismissed'; platform: string }>;
+  userChoice: Promise<{ outcome: "accepted" | "dismissed"; platform: string }>;
 }
 let deferredPrompt: BeforeInstallPromptEvent | null = null;
 
@@ -309,23 +309,25 @@ async function init() {
     render();
   };
 
-  (client as any).auth.onAuthStateChange(async (event: string, session: { user: any } | null) => {
-    if (session) {
-      updateAuthUI(session.user);
-      if (event === "SIGNED_IN" || event === "INITIAL_SESSION") {
-        cleanAuthUrl();
-        await loadFromSupabase(session.user);
-        saveAndRender();
-        closeModal("login-modal");
+  (client as any).auth.onAuthStateChange(
+    async (event: string, session: { user: any } | null) => {
+      if (session) {
+        updateAuthUI(session.user);
+        if (event === "SIGNED_IN" || event === "INITIAL_SESSION") {
+          cleanAuthUrl();
+          await loadFromSupabase(session.user);
+          saveAndRender();
+          closeModal("login-modal");
+        }
+        if (event === "PASSWORD_RECOVERY") {
+          openProfileModal();
+          showToast("ℹ️ Введите новый пароль");
+        }
+      } else {
+        updateAuthUI(null);
       }
-      if (event === "PASSWORD_RECOVERY") {
-        openProfileModal();
-        showToast("ℹ️ Введите новый пароль");
-      }
-    } else {
-      updateAuthUI(null);
-    }
-  });
+    },
+  );
 
   updateXPUI();
   updateStats();
@@ -498,8 +500,14 @@ Object.assign(window, {
   startDailyChallenge,
   quitQuiz,
   renderDetailedStats,
-  checkPronunciation: (word: string, btn: HTMLElement, callback?: (score: number, text: string) => void) =>
-    import("./core/speech.ts").then((m) => m.checkPronunciation(word, btn, callback)),
+  checkPronunciation: (
+    word: string,
+    btn: HTMLElement,
+    callback?: (score: number, text: string) => void,
+  ) =>
+    import("./core/speech.ts").then((m) =>
+      m.checkPronunciation(word, btn, callback),
+    ),
   resetSearchHandler,
   runTests: () => import("./tests.ts").then((m) => m.runTests()),
   forceUpdateSW: async () => {

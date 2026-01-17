@@ -31,8 +31,7 @@ function getRecognition(): ISpeechRecognition | null {
   if (recognition) return recognition;
 
   const SpeechRecognition =
-    window.SpeechRecognition ||
-    window.webkitSpeechRecognition;
+    window.SpeechRecognition || window.webkitSpeechRecognition;
   if (!SpeechRecognition) {
     showToast("❌ Распознавание речи не поддерживается в этом браузере.");
     return null;
@@ -71,7 +70,9 @@ export function checkPronunciation(
     const spokenText = event.results[0][0].transcript.trim();
 
     const normalize = (s: string) =>
-      s.replace(new RegExp("[.,/#!$%^&*;:{}=\\-_`~()]", "g"), "").replace(/\s+/g, "");
+      s
+        .replace(new RegExp("[.,/#!$%^&*;:{}=\\-_`~()]", "g"), "")
+        .replace(/\s+/g, "");
     const spokenNorm = normalize(spokenText);
     const correctNorm = normalize(correctWord);
 
