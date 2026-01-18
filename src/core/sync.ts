@@ -20,12 +20,14 @@ export async function syncGlobalStats() {
       audioSpeed: state.audioSpeed,
       currentVoice: state.currentVoice,
       autoUpdate: state.autoUpdate,
+      autoTheme: state.autoTheme,
       studyGoal: state.studyGoal,
       lastDailyReward: state.userStats.lastDailyReward,
       themeColor: state.themeColor,
       backgroundMusicEnabled: state.backgroundMusicEnabled,
       backgroundMusicVolume: state.backgroundMusicVolume,
       streakLastDate: state.streak.lastDate,
+      survivalHealth: state.userStats.survivalHealth,
     };
 
     const globalUpdates = {

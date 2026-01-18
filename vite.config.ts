@@ -5,10 +5,11 @@ export default defineConfig({
   plugins: [
     VitePWA({
       strategies: 'injectManifest',
-      srcDir: '.',
-      filename: 'src/sw.ts',
+      srcDir: 'src',
+      filename: 'sw.ts',
       registerType: 'autoUpdate',
-      injectRegister: 'auto',
+      injectRegister: false,
+      scope: '/',
       manifest: {
         name: 'TOPIK II Master Pro',
         short_name: 'TOPIK Pro',
@@ -31,7 +32,7 @@ export default defineConfig({
         ]
       },
       devOptions: {
-        enabled: true,
+        enabled: false,
         type: 'module'
       }
     })

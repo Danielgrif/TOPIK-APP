@@ -1,8 +1,40 @@
 import { state } from "../core/state.ts";
 import { updateVoiceUI } from "./ui_settings.ts";
+import {
+  updateStats,
+  renderTopicMastery,
+  renderDetailedStats,
+  renderActivityChart,
+  renderLearnedChart,
+  renderForgettingCurve,
+  renderSRSDistributionChart,
+  renderAchievements,
+  updateSRSBadge,
+} from "../core/stats.ts";
+import { buildQuizModes, updateQuizCount, quitQuiz } from "./quiz.ts";
 
 const focusStack: HTMLElement[] = [];
 let _confirmHandler: EventListener | null = null;
+
+function updateBottomNav(modalId: string | null) {
+  const nav = document.getElementById("bottom-nav");
+  if (!nav) return;
+  
+  const btns = nav.querySelectorAll(".nav-btn");
+  btns.forEach(b => b.classList.remove("active"));
+
+  if (!modalId) {
+    const home = nav.querySelector(".nav-btn:first-child");
+    if (home) home.classList.add("active");
+    return;
+  }
+
+  let targetBtn = nav.querySelector(`[data-modal-target="${modalId}"]`);
+  if (!targetBtn && modalId === "review-modal") {
+    targetBtn = nav.querySelector(`[data-action="open-review"]`);
+  }
+  if (targetBtn) targetBtn.classList.add("active");
+}
 
 export function openModal(modalId: string) {
   const modalEl = document.getElementById(modalId);
@@ -24,6 +56,10 @@ export function openModal(modalId: string) {
       "dark-mode-toggle-switch",
     ) as HTMLInputElement;
     if (darkModeCheck) darkModeCheck.checked = state.darkMode;
+    const autoThemeCheck = document.getElementById(
+      "auto-theme-toggle-switch",
+    ) as HTMLInputElement;
+    if (autoThemeCheck) autoThemeCheck.checked = state.autoTheme;
     const autoUpdateCheck = document.getElementById(
       "auto-update-check",
     ) as HTMLInputElement;
@@ -56,29 +92,32 @@ export function openModal(modalId: string) {
       const btns = picker.querySelectorAll(".stats-color-btn");
       btns.forEach((b) => b.classList.remove("active"));
       const activeBtn =
-        picker.querySelector(`[data-color="${state.themeColor}"]`) || btns[0];
+        picker.querySelector(`[data-value="${state.themeColor}"]`) || btns[0];
       if (activeBtn) activeBtn.classList.add("active");
     }
-    import("../core/stats.ts").then((m) => {
-      m.updateStats();
-      m.renderTopicMastery();
-      m.renderDetailedStats();
-      m.renderActivityChart();
-      m.renderLearnedChart();
-      m.renderForgettingCurve();
-      m.renderSRSDistributionChart();
-    });
+    updateStats();
+    renderTopicMastery();
+    renderDetailedStats();
+    renderActivityChart();
+    renderLearnedChart();
+    renderForgettingCurve();
+    renderSRSDistributionChart();
   }
   if (modalId === "achievements-modal") {
-    import("../core/stats.ts").then((m) => m.renderAchievements());
+    renderAchievements();
+  }
+  if (modalId === "quotes-modal") {
+    import("./ui_quotes.ts").then((m) => m.renderFavoriteQuotes());
+  }
+  if (modalId === "shop-modal") {
+    import("./ui_shop.ts").then((m) => m.renderShop());
   }
   if (modalId === "quiz-modal") {
-    import("./quiz.ts").then((m) => {
-      m.buildQuizModes();
-      m.updateQuizCount();
-    });
+    buildQuizModes();
+    updateQuizCount();
   }
   modalEl.classList.add("active");
+  updateBottomNav(modalId);
 
   // Accessibility: Перемещаем фокус внутрь модального окна
   setTimeout(() => {
@@ -99,9 +138,9 @@ export function closeModal(modalId: string) {
   if (modalEl) {
     modalEl.classList.remove("active");
     if (modalId === "review-modal" || modalId === "quiz-modal") {
-      import("../core/stats.ts").then((m) => m.updateSRSBadge());
+      updateSRSBadge();
     }
-    if (modalId === "quiz-modal") import("./quiz.ts").then((m) => m.quitQuiz());
+    if (modalId === "quiz-modal") quitQuiz();
     if (modalId === "stats-modal") {
       if (_confirmHandler) {
         try {
@@ -112,9 +151,12 @@ export function closeModal(modalId: string) {
         }
         _confirmHandler = null;
       }
-      import("../core/stats.ts").then((m) => m.renderDetailedStats());
+      renderDetailedStats();
     }
   }
+  
+  const activeModal = document.querySelector(".modal.active");
+  updateBottomNav(activeModal ? activeModal.id : null);
 
   const prevFocus = focusStack.pop();
   if (prevFocus && document.body.contains(prevFocus)) {

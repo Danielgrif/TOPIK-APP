@@ -1,9 +1,22 @@
+console.log("🚀 App starting...");
+
+// Статические импорты стилей (гарантируют загрузку до рендеринга)
+import "./css/base.css";
+import "./css/layout.css";
+import "./css/themes.css";
+import "./css/animations.css";
+import "./css/components.css";
+import "./css/pages.css";
+import "./css/quiz.css";
+import "./css/skeletons.css";
+
 import { client } from "./core/supabaseClient.ts";
 import { state } from "./core/state.ts";
 import {
   fetchVocabulary,
   loadFromSupabase,
   immediateSaveState,
+  fetchRandomQuote,
 } from "./core/db.ts";
 import {
   toggleSessionTimer,
@@ -49,6 +62,8 @@ import {
   toggleVoice,
   updateVoiceUI,
   toggleDarkMode,
+  toggleAutoTheme,
+  checkAutoTheme,
   toggleAutoUpdate,
   applyTheme,
   toggleFocusMode,
@@ -57,8 +72,10 @@ import {
   setBackgroundMusicVolume,
   applyBackgroundMusic,
   setAccentColor,
+  previewAccentColor,
   setAudioSpeed,
   resetAllSettings,
+  applyAccentColor,
 } from "./ui/ui_settings.ts";
 
 import {
@@ -73,25 +90,36 @@ import {
   openLoginModal,
   cleanAuthUrl,
 } from "./core/auth.ts";
-import { debounce, showToast, speak } from "./utils/utils.ts";
+import { debounce, showToast, speak, typeText } from "./utils/utils.ts";
 import {
   updateXPUI,
   updateStats,
   updateSRSBadge,
   renderDetailedStats,
+  renderTopicMastery,
 } from "./core/stats.ts";
 import {
   startDailyChallenge,
   updateDailyChallengeUI,
   checkSuperChallengeNotification,
   quitQuiz,
+  buildQuizModes,
 } from "./ui/quiz.ts";
+import { checkPronunciation } from "./core/speech.ts";
+
+let currentQuote: any = null;
 
 // Используем Vite-совместимый импорт воркера
-const searchWorker = new Worker(
-  new URL("./workers/searchWorker.ts", import.meta.url),
-  { type: "module" },
-);
+let searchWorker: Worker;
+try {
+  searchWorker = new Worker(
+    new URL("./workers/searchWorker.ts", import.meta.url),
+    { type: "module" },
+  );
+  console.log("✅ Worker initialized");
+} catch (e) {
+  console.error("❌ Worker failed to initialize:", e);
+}
 const APP_VERSION = "v56";
 
 interface BeforeInstallPromptEvent extends Event {
@@ -121,9 +149,15 @@ function setupGlobalListeners() {
 
     const closeTrigger = target.closest("[data-close-modal]");
     if (closeTrigger) {
-      const modalId = closeTrigger.getAttribute("data-close-modal");
-      if (modalId) closeModal(modalId);
-      return;
+      // Исправление: Если триггер закрытия — это само модальное окно (оверлей),
+      // проверяем, был ли клик именно по нему, а не по контенту внутри.
+      const isOverlay = closeTrigger.classList.contains("modal");
+      if (!isOverlay || target === closeTrigger) {
+        const modalId = closeTrigger.getAttribute("data-close-modal");
+        if (modalId) closeModal(modalId);
+        return;
+      }
+      // Если клик внутри контента, игнорируем этот триггер и идем дальше проверять data-action
     }
 
     const actionTrigger = target.closest("[data-action]");
@@ -165,12 +199,13 @@ function setupGlobalListeners() {
         case "open-review":
           import("./ui/ui_review.ts").then((m) => m.openReviewMode());
           break;
+        case "open-shop":
+          import("./ui/ui_shop.ts").then((m) => m.openShopModal());
+          break;
+        case "open-profile":
+          openProfileModal();
+          break;
         case "set-accent":
-          if (actionTrigger.parentElement)
-            actionTrigger.parentElement
-              .querySelectorAll(".stats-color-btn, .color-option")
-              .forEach((b) => b.classList.remove("active"));
-          actionTrigger.classList.add("active");
           if (value) setAccentColor(value);
           break;
         case "share-stats": {
@@ -196,11 +231,40 @@ function setupGlobalListeners() {
             .getElementById("level-up-overlay")
             ?.classList.remove("active");
           break;
+        case "close-welcome":
+          {
+            const wOverlay = document.getElementById("welcome-overlay");
+            if (wOverlay) {
+              wOverlay.style.animation = "flyOutUp 0.5s cubic-bezier(0.4, 0, 0.2, 1) forwards";
+              setTimeout(() => {
+                wOverlay.classList.remove("active");
+                wOverlay.style.animation = "";
+              }, 500);
+            }
+          }
+          break;
         case "submit-word-request":
           import("./ui/ui_custom_words.ts").then((m) => m.submitWordRequest());
           break;
+        case "save-quote":
+          if (currentQuote) {
+            const idx = state.favoriteQuotes.findIndex((q: any) => q.id === currentQuote.id);
+            if (idx >= 0) {
+              state.favoriteQuotes.splice(idx, 1);
+              actionTrigger.textContent = "🤍";
+              actionTrigger.classList.remove("active");
+              showToast("Цитата удалена из избранного");
+            } else {
+              state.favoriteQuotes.push(currentQuote);
+              actionTrigger.textContent = "❤️";
+              actionTrigger.classList.add("active");
+              showToast("Цитата сохранена в избранное!");
+            }
+            immediateSaveState();
+          }
+          break;
         case "toggle-password":
-          togglePasswordVisibility();
+          togglePasswordVisibility(actionTrigger as HTMLElement);
           break;
         case "auth":
           if (value) handleAuth(value);
@@ -211,34 +275,9 @@ function setupGlobalListeners() {
         case "toggle-reset-mode":
           toggleResetMode(value === "true");
           break;
-        case "toggle-hanja":
-          toggleHanjaMode(
-            actionTrigger.querySelector("input") ||
-              (actionTrigger as HTMLInputElement),
-          );
-          break;
         case "toggle-voice":
           toggleVoice();
           break;
-        case "toggle-music":
-          toggleBackgroundMusic(
-            actionTrigger.querySelector("input") ||
-              (actionTrigger as HTMLInputElement),
-          );
-          break;
-        case "toggle-auto-update": {
-          const el =
-            actionTrigger.querySelector("input") ||
-            (actionTrigger as HTMLInputElement);
-          toggleAutoUpdate(el);
-          if (state.autoUpdate && "serviceWorker" in navigator) {
-            navigator.serviceWorker.getRegistration().then((reg) => {
-              if (reg && reg.waiting)
-                reg.waiting.postMessage({ type: "SKIP_WAITING" });
-            });
-          }
-          break;
-        }
         case "export-data":
           import("./ui/ui_data.ts").then((m) => m.exportProgress());
           break;
@@ -252,6 +291,13 @@ function setupGlobalListeners() {
           handleChangePassword();
           break;
         case "close-confirm":
+          // То же самое исправление для окна подтверждения
+          if (
+            actionTrigger.classList.contains("modal") &&
+            target !== actionTrigger
+          ) {
+            break;
+          }
           closeConfirm();
           break;
         case "quit-quiz":
@@ -261,6 +307,24 @@ function setupGlobalListeners() {
           resetAllSettings();
           break;
       }
+    }
+  });
+
+  // Color Preview on Hover
+  document.body.addEventListener("mouseover", (e) => {
+    const target = e.target as HTMLElement;
+    const trigger = target.closest('[data-action="set-accent"]');
+    if (trigger) {
+      const val = trigger.getAttribute("data-value");
+      if (val) previewAccentColor(val);
+    }
+  });
+
+  document.body.addEventListener("mouseout", (e) => {
+    const target = e.target as HTMLElement;
+    const trigger = target.closest('[data-action="set-accent"]');
+    if (trigger && (!e.relatedTarget || !trigger.contains(e.relatedTarget as Node))) {
+      applyAccentColor(); // Revert to saved color
     }
   });
 
@@ -280,6 +344,7 @@ function setupGlobalListeners() {
     const action = target.getAttribute("data-action");
 
     if (action === "toggle-dark-mode") toggleDarkMode();
+    if (action === "toggle-auto-theme") toggleAutoTheme(target);
     if (action === "toggle-hanja") toggleHanjaMode(target);
     if (action === "toggle-music") toggleBackgroundMusic(target);
     if (action === "toggle-auto-update") {
@@ -292,25 +357,184 @@ function setupGlobalListeners() {
       }
     }
   });
+
+  // Закрытие модальных окон по клавише Esc
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") {
+      const activeModal = document.querySelector(".modal.active");
+      if (activeModal) {
+        activeModal.id === "confirm-modal" ? closeConfirm() : closeModal(activeModal.id);
+      }
+    }
+  });
+}
+
+function setupLevelUpObserver() {
+  const overlay = document.getElementById("level-up-overlay");
+  if (!overlay) return;
+
+  const observer = new MutationObserver((mutations) => {
+    mutations.forEach((mutation) => {
+      if (
+        mutation.type === "attributes" &&
+        mutation.attributeName === "class"
+      ) {
+        if (overlay.classList.contains("active")) {
+          // 🎆 Запускаем салют из конфетти
+          const duration = 3000;
+          const end = Date.now() + duration;
+
+          (function frame() {
+            window.confetti({
+              particleCount: 4,
+              angle: 60,
+              spread: 55,
+              origin: {
+                x: 0,
+                y: 0
+              },
+              colors: ['#6c5ce7', '#00b894', '#ffeaa7', '#ff7675', '#74b9ff'],
+              zIndex: 10000,
+            });
+            window.confetti({
+              particleCount: 4,
+              angle: 120,
+              spread: 55,
+              origin: {
+                x: 1,
+                y: 0
+              },
+              colors: ['#6c5ce7', '#00b894', '#ffeaa7', '#ff7675', '#74b9ff'],
+              zIndex: 10000,
+            });
+
+            if (Date.now() < end) {
+              requestAnimationFrame(frame);
+            }
+          })();
+        }
+      }
+    });
+  });
+
+  observer.observe(overlay, { attributes: true });
+}
+
+function showWelcomeScreen(email?: string) {
+  const welcomeOverlay = document.getElementById("welcome-overlay");
+  const welcomeName = document.getElementById("welcome-username");
+  const welcomeQuote = document.getElementById("welcome-quote");
+
+  if (welcomeOverlay && welcomeName) {
+    const name = email ? email.split("@")[0] : "Гость";
+    welcomeName.textContent = name;
+
+    const hour = new Date().getHours();
+    let greeting = "С возвращением!";
+    let bgStyle = "rgba(0,0,0,0.85)";
+
+    if (hour >= 5 && hour < 12) {
+      greeting = "Доброе утро!";
+      bgStyle = "linear-gradient(135deg, rgba(255, 180, 180, 0.95) 0%, rgba(255, 220, 240, 0.95) 100%)"; /* Softer Morning */
+    } else if (hour >= 12 && hour < 18) {
+      greeting = "Добрый день!";
+      bgStyle = "linear-gradient(135deg, rgba(100, 180, 255, 0.95) 0%, rgba(100, 230, 255, 0.95) 100%)"; /* Softer Day */
+    } else {
+      greeting = "Добрый вечер!";
+      bgStyle = "linear-gradient(135deg, rgba(30, 40, 60, 0.98) 0%, rgba(50, 70, 100, 0.98) 100%)"; /* Deep Evening */
+    }
+
+    const titleEl = welcomeOverlay.querySelector(".level-up-title");
+    if (titleEl) titleEl.textContent = greeting;
+    welcomeOverlay.style.background = bgStyle;
+
+    welcomeOverlay.classList.add("active");
+    
+    if (welcomeQuote) {
+      welcomeQuote.innerHTML = '<div class="skeleton-pulse" style="height: 20px; width: 60%; margin: 0 auto; border-radius: 4px;"></div>';
+      
+      fetchRandomQuote().then((quote) => {
+        let textToSpeak = "시작이 반이다";
+        if (quote) {
+          currentQuote = quote;
+          const isFav = state.favoriteQuotes.some((q: any) => q.id === quote.id);
+          const heart = isFav ? "❤️" : "🤍";
+          const activeClass = isFav ? "active" : "";
+
+          let html = `<div class="welcome-quote-card">`;
+          html += `<button class="quote-fav-btn ${activeClass}" data-action="save-quote">${heart}</button>`;
+          html += `<div class="welcome-kr" id="welcome-quote-kr"></div>`;
+          html += `<div class="welcome-ru" id="welcome-quote-ru"></div>`;
+          
+          if (quote.literal_translation) {
+            html += `<div class="welcome-literal" style="opacity:0; animation:fadeIn 0.8s ease 1.5s forwards">(Дословно: ${quote.literal_translation})</div>`;
+          }
+          
+          if (quote.explanation) {
+            html += `<div class="welcome-explanation" style="opacity:0; animation:fadeIn 0.8s ease 2s forwards">💡 ${quote.explanation}</div>`;
+          }
+
+          html += `</div>`;
+          welcomeQuote.innerHTML = html;
+          textToSpeak = quote.quote_kr;
+
+          const krEl = document.getElementById("welcome-quote-kr");
+          const ruEl = document.getElementById("welcome-quote-ru");
+          if (krEl) {
+            typeText(krEl, `"${quote.quote_kr}"`, 50).then(() => {
+              if (ruEl) typeText(ruEl, quote.quote_ru, 30);
+            });
+          }
+        } else {
+          welcomeQuote.innerHTML = `<div class="welcome-quote-card"><div class="welcome-kr">"시작이 반이다"</div><div class="welcome-ru">Начало — это уже половина дела.</div></div>`;
+        }
+        setTimeout(() => speak(textToSpeak, quote?.audio_url), 800);
+      });
+    }
+
+    if (typeof window.confetti === "function") {
+      window.confetti({
+        particleCount: 100,
+        spread: 70,
+        origin: { y: 0.6 },
+        zIndex: 20020,
+      });
+    }
+  }
 }
 
 async function init() {
+  // 🧹 ПРИНУДИТЕЛЬНАЯ ОЧИСТКА SERVICE WORKER (для решения проблем с кэшем)
+  if (import.meta.env.DEV && "serviceWorker" in navigator) {
+    const registrations = await navigator.serviceWorker.getRegistrations();
+    for (const registration of registrations) {
+      await registration.unregister();
+      console.log("🧹 Old Service Worker unregistered");
+    }
+  }
+
+  console.log("🏁 Init sequence started");
   const loader = document.getElementById("loading-overlay");
   if (loader) loader.remove();
 
   renderSkeletons();
 
+  console.log("⏳ Fetching vocabulary...");
   await fetchVocabulary();
+  console.log("✅ Vocabulary fetched");
 
-  searchWorker.postMessage({ type: "SET_DATA", data: state.dataStore });
+  if (searchWorker) searchWorker.postMessage({ type: "SET_DATA", data: state.dataStore });
 
-  searchWorker.onmessage = (e) => {
+  if (searchWorker) searchWorker.onmessage = (e) => {
     state.searchResults = e.data;
     render();
   };
 
-  (client as any).auth.onAuthStateChange(
-    async (event: string, session: { user: any } | null) => {
+  client.auth.onAuthStateChange(
+    async (
+      event: string,
+      session: { user: { id: string; email?: string } } | null,
+    ) => {
       if (session) {
         updateAuthUI(session.user);
         if (event === "SIGNED_IN" || event === "INITIAL_SESSION") {
@@ -318,6 +542,7 @@ async function init() {
           await loadFromSupabase(session.user);
           saveAndRender();
           closeModal("login-modal");
+          showWelcomeScreen(session.user.email);
         }
         if (event === "PASSWORD_RECOVERY") {
           openProfileModal();
@@ -325,6 +550,10 @@ async function init() {
         }
       } else {
         updateAuthUI(null);
+        // Показываем приветствие для гостей при запуске приложения
+        if (event === "INITIAL_SESSION") {
+          showWelcomeScreen();
+        }
       }
     },
   );
@@ -333,11 +562,12 @@ async function init() {
   updateStats();
   populateFilters();
   setupFilterBehavior();
-  import("./core/stats.ts").then((m) => m.renderTopicMastery());
-  import("./ui/quiz.ts").then((m) => m.buildQuizModes());
+  renderTopicMastery();
+  buildQuizModes();
   updateSRSBadge();
   updateVoiceUI();
   applyTheme();
+  checkAutoTheme();
   updateDailyChallengeUI();
   checkSuperChallengeNotification();
   applyFocusMode();
@@ -354,6 +584,7 @@ async function init() {
   setupScrollBehavior();
   setupGridEffects();
   setupGlobalListeners();
+  setupLevelUpObserver();
 
   const verEl = document.getElementById("app-version");
   if (verEl) verEl.textContent = `TOPIK Master ${APP_VERSION}`;
@@ -364,8 +595,8 @@ async function init() {
   if (searchInput) {
     searchInput.addEventListener(
       "input",
-      debounce((e: Event) => {
-        const target = e.target as HTMLInputElement;
+      debounce((e: unknown) => {
+        const target = (e as Event).target as HTMLInputElement;
         if (target) {
           const val = target.value.trim().toLowerCase();
           searchWorker.postMessage({ type: "SEARCH", query: val });
@@ -386,9 +617,11 @@ async function init() {
     });
   }
 
-  if ("serviceWorker" in navigator) {
+  if ("serviceWorker" in navigator && !import.meta.env.DEV) {
     navigator.serviceWorker
-      .register("./sw.js")
+      .register("./sw.js", {
+        type: import.meta.env.DEV ? "module" : "classic",
+      })
       .then((reg) => {
         if (!navigator.serviceWorker.controller) {
           showToast("✅ Приложение готово к работе офлайн!");
@@ -443,6 +676,8 @@ window.addEventListener("beforeunload", () => {
 
 init().catch((e) => {
   console.error("Init Error", e);
+  // Убираем alert, чтобы не блокировать интерфейс при некритичных ошибках
+  // alert("Critical Init Error: " + e.message); 
   if (e.name !== "AbortError") showError("Ошибка инициализации: " + e.message);
 });
 
@@ -489,25 +724,23 @@ Object.assign(window, {
   handleLogout,
   toggleResetMode,
   togglePasswordVisibility,
-  setAudioSpeed: (val: string | number) =>
-    import("./ui/ui_settings.ts").then((m) => m.setAudioSpeed(val)),
+  setAudioSpeed: (val: string | number) => setAudioSpeed(val),
   signInWithGoogle,
   speak,
   openLoginModal,
   openReviewMode: () =>
     import("./ui/ui_review.ts").then((m) => m.openReviewMode()),
   openShopModal: () => import("./ui/ui_shop.ts").then((m) => m.openShopModal()),
+  switchShopTab: (tab: string) =>
+    import("./ui/ui_shop.ts").then((m) => m.switchShopTab(tab)),
   startDailyChallenge,
   quitQuiz,
   renderDetailedStats,
   checkPronunciation: (
     word: string,
     btn: HTMLElement,
-    callback?: (score: number, text: string) => void,
-  ) =>
-    import("./core/speech.ts").then((m) =>
-      m.checkPronunciation(word, btn, callback),
-    ),
+    callback?: (score: number, text: string, audioUrl?: string) => void,
+  ) => checkPronunciation(word, btn, callback),
   resetSearchHandler,
   runTests: () => import("./tests.ts").then((m) => m.runTests()),
   forceUpdateSW: async () => {

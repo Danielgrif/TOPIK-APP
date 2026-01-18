@@ -116,7 +116,7 @@ class SprintQuizConfig extends BaseQuizConfig {
 class SurvivalQuizConfig extends BaseQuizConfig {
   initialTimer = 15; // Time bank
   isTimerCountdown = true;
-  initialLives = 3;
+  initialLives = 3 + (state.userStats.survivalHealth || 0);
 
   getWords(pool: Word[]): Word[] {
     const unlearned = pool.filter((w) => !state.learned.has(w.id));
@@ -203,7 +203,9 @@ class DailyQuizConfig extends BaseQuizConfig {
 
   onEnd(_correctCount: number) {
     const today = new Date().toDateString();
-    const yesterday = new Date(Date.now() - 86400000).toDateString();
+    const d = new Date();
+    d.setDate(d.getDate() - 1);
+    const yesterday = d.toDateString();
     let streak = state.dailyChallenge.streak || 0;
 
     if (state.dailyChallenge.lastDate === yesterday) streak++;
@@ -251,10 +253,7 @@ class AssociationQuizConfig extends BaseQuizConfig {
 }
 
 class FilteredQuizConfig extends BaseQuizConfig {
-  constructor(
-    private filterFn: (w: Word) => boolean,
-    private minLength: number = 10,
-  ) {
+  constructor(private filterFn: (w: Word) => boolean) {
     super();
   }
   getWords(pool: Word[]): Word[] {

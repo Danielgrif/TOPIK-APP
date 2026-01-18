@@ -37,7 +37,9 @@ function getRecognition(): ISpeechRecognition | null {
     return null;
   }
 
-  recognition = new (SpeechRecognition as any)() as ISpeechRecognition;
+  recognition = new (SpeechRecognition as {
+    new (): ISpeechRecognition;
+  })() as ISpeechRecognition;
   recognition.lang = "ko-KR";
   recognition.interimResults = false;
   recognition.maxAlternatives = 1;
@@ -48,22 +50,56 @@ function getRecognition(): ISpeechRecognition | null {
 export function checkPronunciation(
   correctWord: string,
   btn?: HTMLElement,
-  onResult?: (similarity: number, text: string) => void,
+  onResult?: (similarity: number, text: string, audioUrl?: string) => void,
 ) {
   const rec = getRecognition();
   if (!rec) return;
 
   try {
     rec.stop();
-  } catch (_e) {
+  } catch {
     // Ignore
   }
+
+  let mediaRecorder: MediaRecorder | null = null;
+  let audioChunks: Blob[] = [];
+
+  const startRecording = async () => {
+    if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia && typeof MediaRecorder !== 'undefined') {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        mediaRecorder = new MediaRecorder(stream);
+        mediaRecorder.ondataavailable = (e) => {
+          if (e.data.size > 0) audioChunks.push(e.data);
+        };
+        mediaRecorder.start();
+      } catch (e) {
+        console.warn("Recording failed:", e);
+      }
+    }
+  };
+
+  startRecording();
 
   if (btn) {
     btn.textContent = "🎤";
     (btn as HTMLButtonElement).disabled = true;
   }
   showToast("🎤 Говорите...");
+
+  const stopRecordingAndGetUrl = (cb: (url?: string) => void) => {
+    if (mediaRecorder && mediaRecorder.state !== "inactive") {
+      mediaRecorder.onstop = () => {
+        const blob = new Blob(audioChunks, { type: "audio/webm" });
+        const url = URL.createObjectURL(blob);
+        mediaRecorder?.stream.getTracks().forEach((t) => t.stop());
+        cb(url);
+      };
+      mediaRecorder.stop();
+    } else {
+      cb(undefined);
+    }
+  };
 
   rec.onresult = (event: SpeechRecognitionEvent) => {
     if (!event.results || !event.results[0] || !event.results[0][0]) return;
@@ -93,7 +129,9 @@ export function checkPronunciation(
 
     showToast(toastMessage, 5000);
 
-    if (onResult) onResult(similarity, spokenText);
+    stopRecordingAndGetUrl((url) => {
+      if (onResult) onResult(similarity, spokenText, url);
+    });
   };
 
   rec.onerror = (event: SpeechRecognitionErrorEvent) => {
@@ -107,13 +145,19 @@ export function checkPronunciation(
       errorMessage = "Доступ к микрофону запрещен.";
     showToast(`❌ ${errorMessage}`);
     console.error("Speech recognition error:", event.error);
-    if (onResult) onResult(0, "");
+    stopRecordingAndGetUrl(() => {
+      if (onResult) onResult(0, "");
+    });
   };
 
   rec.onend = () => {
     if (btn) {
       btn.textContent = "🗣️";
       (btn as HTMLButtonElement).disabled = false;
+    }
+    if (mediaRecorder && mediaRecorder.state !== "inactive") {
+      mediaRecorder.stop();
+      mediaRecorder.stream.getTracks().forEach((t) => t.stop());
     }
   };
 

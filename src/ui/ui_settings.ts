@@ -1,15 +1,24 @@
 import { state } from "../core/state.ts";
 import { showToast } from "../utils/utils.ts";
 import { render } from "./ui_card.ts";
-import { scheduleSaveState } from "../core/db.ts";
+import { scheduleSaveState, immediateSaveState } from "../core/db.ts";
 import { openConfirm } from "./ui_modal.ts";
+import { syncGlobalStats } from "../core/sync.ts";
 
-const THEME_COLORS = {
-  purple: "#6c5ce7",
-  blue: "#0984e3",
-  green: "#00b894",
-  orange: "#e17055",
-  pink: "#e84393",
+const THEME_PALETTES: Record<string, { main: string; hover: string; light: string; accent: string; bg: string; surface: string; surface2: string; border: string; textMain: string; textSub: string; textTertiary: string }> = {
+  purple: { main: "#7c3aed", hover: "#6d28d9", light: "rgba(124, 58, 237, 0.15)", accent: "#a78bfa", bg: "#f5f3ff", surface: "#ffffff", surface2: "#ede9fe", border: "#ddd6fe", textMain: "#2e1065", textSub: "#5b21b6", textTertiary: "#7c3aed" },
+  blue:   { main: "#2563eb", hover: "#1d4ed8", light: "rgba(37, 99, 235, 0.15)", accent: "#60a5fa", bg: "#e0f2fe", surface: "#ffffff", surface2: "#dbeafe", border: "#bfdbfe", textMain: "#172554", textSub: "#1e40af", textTertiary: "#2563eb" },
+  green:  { main: "#059669", hover: "#047857", light: "rgba(5, 150, 105, 0.15)", accent: "#34d399", bg: "#f0fdf4", surface: "#ffffff", surface2: "#dcfce7", border: "#bbf7d0", textMain: "#022c22", textSub: "#047857", textTertiary: "#059669" },
+  orange: { main: "#ea580c", hover: "#c2410c", light: "rgba(234, 88, 12, 0.15)", accent: "#fb923c", bg: "#fff7ed", surface: "#ffffff", surface2: "#ffedd5", border: "#fed7aa", textMain: "#431407", textSub: "#c2410c", textTertiary: "#ea580c" },
+  pink:   { main: "#db2777", hover: "#be185d", light: "rgba(219, 39, 119, 0.15)", accent: "#f472b6", bg: "#fdf2f8", surface: "#ffffff", surface2: "#fce7f3", border: "#fbcfe8", textMain: "#500724", textSub: "#be185d", textTertiary: "#db2777" },
+};
+
+const THEME_PALETTES_DARK: Record<string, { main: string; hover: string; light: string; accent: string; bg: string; surface: string; surface2: string; border: string; textMain: string; textSub: string; textTertiary: string }> = {
+  purple: { main: "#a78bfa", hover: "#8b5cf6", light: "rgba(167, 139, 250, 0.15)", accent: "#c4b5fd", bg: "#1e1b4b", surface: "#28235e", surface2: "#312e6f", border: "#3730a3", textMain: "#ede9fe", textSub: "#a78bfa", textTertiary: "#8b5cf6" },
+  blue:   { main: "#60a5fa", hover: "#3b82f6", light: "rgba(96, 165, 250, 0.15)", accent: "#93c5fd", bg: "#172554", surface: "#1e3a8a", surface2: "#1d4ed8", border: "#2563eb", textMain: "#dbeafe", textSub: "#60a5fa", textTertiary: "#3b82f6" },
+  green:  { main: "#34d399", hover: "#10b981", light: "rgba(52, 211, 153, 0.15)", accent: "#6ee7b7", bg: "#064e3b", surface: "#065f46", surface2: "#047857", border: "#059669", textMain: "#d1fae5", textSub: "#34d399", textTertiary: "#10b981" },
+  orange: { main: "#fb923c", hover: "#f97316", light: "rgba(251, 146, 60, 0.15)", accent: "#fdba74", bg: "#431407", surface: "#7c2d12", surface2: "#9a3412", border: "#c2410c", textMain: "#ffedd5", textSub: "#fb923c", textTertiary: "#f97316" },
+  pink:   { main: "#f472b6", hover: "#ec4899", light: "rgba(244, 114, 182, 0.15)", accent: "#f9a8d4", bg: "#701a75", surface: "#86198f", surface2: "#9d174d", border: "#be185d", textMain: "#fce7f3", textSub: "#f472b6", textTertiary: "#ec4899" },
 };
 
 /**
@@ -20,7 +29,8 @@ export function toggleHanjaMode(el: HTMLInputElement) {
   state.hanjaMode = el.checked;
   localStorage.setItem("hanja_mode_v1", String(state.hanjaMode));
   render();
-  scheduleSaveState();
+  immediateSaveState();
+  syncGlobalStats();
 }
 
 /**
@@ -33,7 +43,8 @@ export function toggleVoice() {
   showToast(
     `Голос: ${state.currentVoice === "female" ? "Женский" : "Мужской"}`,
   );
-  scheduleSaveState();
+  immediateSaveState();
+  syncGlobalStats();
 }
 
 /**
@@ -59,13 +70,41 @@ export function setAudioSpeed(val: string | number) {
 }
 
 /**
+ * Toggles auto theme mode based on time.
+ * @param {HTMLInputElement} el
+ */
+export function toggleAutoTheme(el: HTMLInputElement) {
+  state.autoTheme = el.checked;
+  localStorage.setItem("auto_theme_v1", String(state.autoTheme));
+  if (state.autoTheme) {
+    checkAutoTheme();
+  }
+  showToast(`Авто-тема: ${state.autoTheme ? "ВКЛ" : "ВЫКЛ"}`);
+  immediateSaveState();
+  syncGlobalStats();
+}
+
+export function checkAutoTheme() {
+  if (!state.autoTheme) return;
+  const hour = new Date().getHours();
+  const isNight = hour >= 20 || hour < 6; // Ночь с 20:00 до 06:00
+
+  if (state.darkMode !== isNight) {
+    state.darkMode = isNight;
+    localStorage.setItem("dark_mode_v1", String(state.darkMode));
+    applyTheme();
+  }
+}
+
+/**
  * Toggles dark mode on and off.
  */
 export function toggleDarkMode() {
   state.darkMode = !state.darkMode;
   localStorage.setItem("dark_mode_v1", String(state.darkMode));
   applyTheme();
-  scheduleSaveState();
+  immediateSaveState();
+  syncGlobalStats();
 }
 
 /**
@@ -76,7 +115,8 @@ export function toggleAutoUpdate(el: HTMLInputElement) {
   state.autoUpdate = el.checked;
   localStorage.setItem("auto_update_v1", String(state.autoUpdate));
   showToast(`Автообновление: ${state.autoUpdate ? "ВКЛ" : "ВЫКЛ"}`);
-  scheduleSaveState();
+  immediateSaveState();
+  syncGlobalStats();
 }
 
 /**
@@ -89,7 +129,12 @@ export function applyTheme() {
   const icon = state.darkMode ? "🌙" : "☀️";
 
   const headerBtn = document.getElementById("header-dark-mode-toggle");
-  if (headerBtn) headerBtn.textContent = icon;
+  if (headerBtn) {
+    headerBtn.textContent = icon;
+    headerBtn.classList.remove("rotate-icon");
+    void headerBtn.offsetWidth; // Force reflow to restart animation
+    headerBtn.classList.add("rotate-icon");
+  }
 
   applyAccentColor();
 }
@@ -99,11 +144,12 @@ export function applyTheme() {
  * @param {string} colorKey
  */
 export function setAccentColor(colorKey: string) {
-  if (!Object.keys(THEME_COLORS).includes(colorKey)) return;
+  if (!Object.keys(THEME_PALETTES).includes(colorKey)) return;
   state.themeColor = colorKey;
   localStorage.setItem("theme_color_v1", state.themeColor);
   applyAccentColor();
-  scheduleSaveState();
+  immediateSaveState();
+  syncGlobalStats();
 }
 
 /**
@@ -111,17 +157,65 @@ export function setAccentColor(colorKey: string) {
  */
 export function applyAccentColor() {
   const colorKey = state.themeColor || "purple";
-  const color =
-    (THEME_COLORS as Record<string, string>)[colorKey] || THEME_COLORS.purple;
-  document.documentElement.style.setProperty("--primary", color);
+  let palette = THEME_PALETTES[colorKey] || THEME_PALETTES.purple;
+
+  if (state.darkMode) {
+    palette = THEME_PALETTES_DARK[colorKey] || THEME_PALETTES_DARK.purple;
+  }
+
+  // Use document.body to ensure we override body.dark-mode CSS variables
+  const target = document.body.style;
+
+  target.setProperty("--primary", palette.main);
+  target.setProperty("--primary-hover", palette.hover);
+  target.setProperty("--primary-light", palette.light);
+  target.setProperty("--accent", palette.accent);
+  target.setProperty("--bg", palette.bg);
+  target.setProperty("--surface-1", palette.surface);
+  target.setProperty("--surface-2", palette.surface2);
+  target.setProperty("--surface-3", palette.border);
+  target.setProperty("--border-color", palette.border);
+  target.setProperty("--input-bg", palette.surface2);
+  target.setProperty("--text-main", palette.textMain);
+  target.setProperty("--text-sub", palette.textSub);
+  target.setProperty("--text-tertiary", palette.textTertiary);
+
   // Update active state in UI if selector exists
-  document.querySelectorAll(".color-option").forEach((btn) => {
+  document.querySelectorAll(".color-option, .stats-color-btn").forEach((btn) => {
     if (btn instanceof HTMLElement)
       btn.classList.toggle(
         "active",
-        btn.getAttribute("data-color") === state.themeColor,
+        btn.getAttribute("data-value") === state.themeColor,
       );
   });
+}
+
+/**
+ * Temporarily applies an accent color for preview.
+ * @param {string} colorKey
+ */
+export function previewAccentColor(colorKey: string) {
+  let palette = THEME_PALETTES[colorKey] || THEME_PALETTES.purple;
+
+  if (state.darkMode) {
+    palette = THEME_PALETTES_DARK[colorKey] || THEME_PALETTES_DARK.purple;
+  }
+
+  const target = document.body.style;
+
+  target.setProperty("--primary", palette.main);
+  target.setProperty("--primary-hover", palette.hover);
+  target.setProperty("--primary-light", palette.light);
+  target.setProperty("--accent", palette.accent);
+  target.setProperty("--bg", palette.bg);
+  target.setProperty("--surface-1", palette.surface);
+  target.setProperty("--surface-2", palette.surface2);
+  target.setProperty("--surface-3", palette.border);
+  target.setProperty("--border-color", palette.border);
+  target.setProperty("--input-bg", palette.surface2);
+  target.setProperty("--text-main", palette.textMain);
+  target.setProperty("--text-sub", palette.textSub);
+  target.setProperty("--text-tertiary", palette.textTertiary);
 }
 
 /**
@@ -163,7 +257,8 @@ export function toggleBackgroundMusic(el?: HTMLInputElement) {
   );
   applyBackgroundMusic();
   showToast(`Музыка: ${state.backgroundMusicEnabled ? "ВКЛ" : "ВЫКЛ"}`);
-  scheduleSaveState();
+  immediateSaveState();
+  syncGlobalStats();
 }
 
 /**
@@ -294,7 +389,7 @@ export function applyBackgroundMusic(forcePlay: boolean = false) {
  * @param {number} finalVolume
  * @param {number} [startVolume] - Optional starting volume for the fadeInPlayer.
  */
-function crossfade(
+export function crossfade(
   fadeInPlayer: HTMLAudioElement,
   fadeOutPlayer: HTMLAudioElement | null,
   finalVolume: number,
@@ -412,6 +507,7 @@ export function resetAllSettings() {
       "audio_speed_v1",
       "dark_mode_v1",
       "auto_update_v1",
+      "auto_theme_v1",
       "theme_color_v1",
       "background_music_enabled_v1",
       "background_music_volume_v1",
@@ -433,6 +529,7 @@ export function resetAllSettings() {
       audioSpeed: 0.9,
       darkMode: false,
       autoUpdate: true,
+      autoTheme: false,
       themeColor: "purple",
       backgroundMusicEnabled: false,
       backgroundMusicVolume: 0.3,

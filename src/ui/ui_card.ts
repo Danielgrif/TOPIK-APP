@@ -1,6 +1,5 @@
 import { state } from "../core/state.ts";
-import { client } from "../core/supabaseClient.ts";
-import { speak, showToast, debounce } from "../utils/utils.ts";
+import { speak, showToast } from "../utils/utils.ts";
 import { scheduleSaveState, recordAttempt } from "../core/db.ts";
 import { addXP, checkAchievements } from "../core/stats.ts";
 import { ensureSessionStarted, saveAndRender } from "./ui.ts";
@@ -8,18 +7,31 @@ import { Word } from "../types/index.ts";
 
 // --- Virtual Scroll Constants (for List View) ---
 const ITEM_HEIGHT_LIST = 72;
-const ITEM_HEIGHT_GRID = 280;
-const MIN_COL_WIDTH = 160;
+let ITEM_HEIGHT_GRID = 500;
+const MIN_COL_WIDTH = 280;
 const BUFFER_ITEMS = 10;
+const GRID_GAP = 16;
 
 let virtualScrollInitialized = false;
 let scrollRafId: number | null = null;
 let currentFilteredData: Word[] = [];
+let resizeHandler: (() => void) | null = null;
 
 /** @type {IntersectionObserver | null} */
 const scrollObserver: IntersectionObserver | null = null;
 /** @type {IntersectionObserver | null} */
 let appearanceObserver: IntersectionObserver | null = null;
+let counterTimeout: number | null = null;
+
+function updateGridCardHeight() {
+  // Header (~70) + Toolbar (~60) + BottomNav (~80) + Margins (~30) = ~240px
+  // Оставляем место для интерфейса, остальное отдаем карточке
+  const uiOffset = 240;
+  const minHeight = 400;
+  const availableHeight = window.innerHeight - uiOffset;
+  ITEM_HEIGHT_GRID = Math.max(minHeight, availableHeight);
+  document.documentElement.style.setProperty("--card-height", `${ITEM_HEIGHT_GRID}px`);
+}
 
 export function renderSkeletons() {
   const grid = document.getElementById("vocabulary-grid");
@@ -57,7 +69,7 @@ export function render() {
 
   if (virtualScrollInitialized) {
     grid.removeEventListener("scroll", onVirtualScroll);
-    window.removeEventListener("resize", onVirtualScroll);
+    if (resizeHandler) window.removeEventListener("resize", resizeHandler);
     virtualScrollInitialized = false;
   }
   grid.classList.remove("virtual-scroll-container", "list-view", "grid");
@@ -69,6 +81,7 @@ export function render() {
     return;
   }
 
+  updateGridCardHeight();
   grid.classList.add("grid", "virtual-scroll-container");
   initGridVirtualScroll(grid);
 }
@@ -116,7 +129,7 @@ function getFilteredData(): Word[] {
   return currentFilteredData;
 }
 
-function onVirtualScroll(e: Event) {
+function onVirtualScroll(_e: Event) {
   if (scrollRafId) return;
 
   scrollRafId = window.requestAnimationFrame(() => {
@@ -135,6 +148,30 @@ function onVirtualScroll(e: Event) {
       }
     }
     scrollRafId = null;
+
+    // Update Card Counter (grid is already defined above)
+    // const grid = document.getElementById("vocabulary-grid"); // Removed redeclaration
+    const indicator = document.getElementById("card-counter-indicator");
+    if (grid && indicator && currentFilteredData.length > 0) {
+      const scrollTop = grid.scrollTop;
+      // Calculate approximate index based on scroll position
+      const itemHeight = state.viewMode === "list" ? ITEM_HEIGHT_LIST : (ITEM_HEIGHT_GRID + GRID_GAP);
+      // For grid, we need to know columns.
+      const gridWidth = grid.clientWidth;
+      const gap = GRID_GAP; // CSS gap
+      const colCount = state.viewMode === "list" ? 1 : Math.max(1, Math.floor((gridWidth + gap) / (MIN_COL_WIDTH + gap)));
+      
+      const currentRow = Math.floor((scrollTop + itemHeight / 2) / itemHeight);
+      const currentIndex = Math.min(currentFilteredData.length, Math.max(1, currentRow * colCount + 1));
+      
+      indicator.textContent = `${currentIndex} / ${currentFilteredData.length}`;
+      indicator.classList.add("visible");
+      
+      if (counterTimeout) clearTimeout(counterTimeout);
+      counterTimeout = window.setTimeout(() => {
+        indicator.classList.remove("visible");
+      }, 2000);
+    }
   });
 }
 
@@ -156,7 +193,11 @@ function initGridVirtualScroll(grid: HTMLElement) {
   grid.appendChild(sizer);
 
   grid.addEventListener("scroll", onVirtualScroll);
-  window.addEventListener("resize", onVirtualScroll);
+  resizeHandler = () => {
+    updateGridCardHeight();
+    onVirtualScroll(new Event("resize"));
+  };
+  window.addEventListener("resize", resizeHandler);
 
   virtualScrollInitialized = true;
 
@@ -185,22 +226,22 @@ function renderVisibleGridItems(params: {
   if (!content || !sizer) return;
 
   const gridWidth = grid.clientWidth;
-  const gap = 15;
+  const gap = GRID_GAP;
   const colCount = Math.max(
     1,
     Math.floor((gridWidth + gap) / (MIN_COL_WIDTH + gap)),
   );
 
   const totalRows = Math.ceil(sourceData.length / colCount);
-  const totalHeight = totalRows * ITEM_HEIGHT_GRID;
+  const totalHeight = totalRows * (ITEM_HEIGHT_GRID + gap) - gap;
 
   (sizer as HTMLElement).style.height = `${totalHeight}px`;
 
   const scrollTop = grid.scrollTop;
   const viewportHeight = grid.clientHeight;
 
-  const startRow = Math.max(0, Math.floor(scrollTop / ITEM_HEIGHT_GRID) - 2);
-  const visibleRows = Math.ceil(viewportHeight / ITEM_HEIGHT_GRID) + 4;
+  const startRow = Math.max(0, Math.floor(scrollTop / (ITEM_HEIGHT_GRID + gap)) - 2);
+  const visibleRows = Math.ceil(viewportHeight / (ITEM_HEIGHT_GRID + gap)) + 4;
 
   const startIndex = startRow * colCount;
   const endIndex = Math.min(
@@ -210,7 +251,7 @@ function renderVisibleGridItems(params: {
 
   content.innerHTML = "";
 
-  const topSpacerHeight = startRow * ITEM_HEIGHT_GRID;
+  const topSpacerHeight = startRow * (ITEM_HEIGHT_GRID + gap);
   if (topSpacerHeight > 0) {
     const spacer = document.createElement("div");
     spacer.style.gridColumn = "1 / -1";
@@ -242,6 +283,8 @@ function initVirtualScroll(grid: HTMLElement) {
   grid.appendChild(sizer);
 
   grid.addEventListener("scroll", onVirtualScroll);
+  resizeHandler = () => onVirtualScroll(new Event("resize"));
+  window.addEventListener("resize", resizeHandler);
   virtualScrollInitialized = true;
 
   renderVisibleListItems({ target: grid, sourceData });
@@ -333,16 +376,11 @@ function createCardFront(item: Word): HTMLElement {
   const topRow = document.createElement("div");
   topRow.className = "card-top-row";
 
-  const levelBadge = document.createElement("div");
-  levelBadge.className = "card-level-badge";
-  levelBadge.textContent = item.level || "★☆☆";
-  topRow.appendChild(levelBadge);
-
-  const controlsDiv = document.createElement("div");
-  controlsDiv.className = "card-top-right";
   const speakBtn = document.createElement("button");
   speakBtn.className = "icon-btn";
   speakBtn.textContent = "🔊";
+  speakBtn.style.fontSize = "24px"; // Larger icon
+  speakBtn.style.padding = "10px";
   speakBtn.onclick = (e) => {
     e.stopPropagation();
     speakBtn.textContent = "📶";
@@ -359,18 +397,25 @@ function createCardFront(item: Word): HTMLElement {
   const favBtn = document.createElement("button");
   favBtn.className = `icon-btn fav-btn ${isFav ? "active" : ""}`;
   favBtn.textContent = isFav ? "❤️" : "🤍";
+  favBtn.style.fontSize = "24px"; // Larger icon
+  favBtn.style.padding = "10px";
   favBtn.title = isFav ? "Убрать из избранного" : "В избранное";
   favBtn.onclick = (e) => {
     e.stopPropagation();
     toggleFavorite(item.id, favBtn);
   };
-  controlsDiv.appendChild(speakBtn);
-  controlsDiv.appendChild(favBtn);
-  topRow.appendChild(controlsDiv);
+  topRow.appendChild(speakBtn);
+  topRow.appendChild(favBtn);
   front.appendChild(topRow);
 
   const mainContent = document.createElement("div");
   mainContent.className = "card-main";
+
+  const levelBadge = document.createElement("div");
+  levelBadge.className = "card-level-badge";
+  levelBadge.textContent = item.level || "★☆☆";
+  mainContent.appendChild(levelBadge);
+
   const wordDiv = document.createElement("div");
   wordDiv.className = "word";
   wordDiv.textContent = item.word_kr || "";
@@ -461,7 +506,6 @@ function createCardFront(item: Word): HTMLElement {
     accEl.innerHTML = `
             <div class="acc-text">🎯 ${acc}% <span style="opacity:0.5; margin:0 4px;">|</span> ${statusText}</div>
             <div class="acc-bar-bg"><div class="acc-bar-fill" style="width:${acc}%; background:${barColor};"></div></div> 
-            <div style="font-size: 10px; color: var(--text-sub); margin-top: 5px; opacity: 0.7; font-weight: 500;">(Мастер: >90% • Хорошо: >70%)</div>
         `;
     mainContent.appendChild(accEl);
   }
@@ -477,131 +521,109 @@ function createCardBack(item: Word): HTMLElement {
   const backContent = document.createElement("div");
   backContent.className = "card-back-content";
 
-  const imgContainer = document.createElement("div");
-  imgContainer.className = "card-image-container";
-  const imgUrl = item.image;
-  const img = document.createElement("img");
-  img.className = "card-image";
-  img.draggable = false;
-  if (imgUrl) {
-    img.dataset.src = imgUrl; // Используем data-src для ленивой загрузки
-    img.onerror = () => {
-      img.style.display = "none";
-    };
-  } else {
-    img.style.display = "none";
-  }
-  imgContainer.appendChild(img);
-
-  const ctrls = document.createElement("div");
-  ctrls.className = "img-controls";
-  const fileInput = document.createElement("input");
-  fileInput.type = "file";
-  fileInput.accept = "image/*";
-  fileInput.style.display = "none";
-  fileInput.onchange = async (e) => {
-    const target = e.target as HTMLInputElement;
-    const file = target.files ? target.files[0] : null;
-    if (!file) return;
-    try {
-      showToast("⏳ Загрузка...");
-
-      if (item.image && item.image.includes(item.id + "_")) {
-        const oldPath = (item.image.split("/").pop() || "").split("?")[0];
-        await client.storage.from("image-files").remove([oldPath]);
-      }
-
-      const ext = file.name.split(".").pop();
-      const path = `${item.id}_${Date.now()}.${ext}`;
-      const { error: upErr } = await client.storage
-        .from("image-files")
-        .upload(path, file, { upsert: true });
-      if (upErr) throw upErr;
-      const {
-        data: { publicUrl },
-      } = client.storage.from("image-files").getPublicUrl(path);
-      const { error: dbErr } = await client
-        .from("vocabulary")
-        .update({ image: publicUrl, image_source: "user" })
-        .eq("id", item.id);
-      if (dbErr) throw dbErr;
-      item.image = publicUrl;
-      img.src = publicUrl;
-      img.style.display = "block";
-      showToast("✅ Фото обновлено");
-    } catch (err) {
-      console.error(err);
-      showToast("❌ Ошибка загрузки");
-    } finally {
-      fileInput.value = "";
-    }
-  };
-  const upBtn = document.createElement("button");
-  upBtn.className = "btn-mini";
-  upBtn.innerHTML = "📷";
-  upBtn.title = "Загрузить фото";
-  upBtn.onclick = (e) => {
-    e.stopPropagation();
-    fileInput.click();
-  };
-  ctrls.appendChild(fileInput);
-  ctrls.appendChild(upBtn);
-
+  // --- 1. Image Section (Toggleable) ---
   if (item.image) {
-    const delBtn = document.createElement("button");
-    delBtn.className = "btn-mini delete";
-    delBtn.innerHTML = "🗑";
-    delBtn.title = "Удалить свое фото";
-    delBtn.onclick = async (e) => {
-      e.stopPropagation();
-      if (!confirm("Удалить загруженное фото?")) return;
-      try {
-        const { error } = await client
-          .from("vocabulary")
-          .update({ image: null, image_source: null })
-          .eq("id", item.id);
-        if (error) throw error;
-        item.image = undefined;
-        item.image_source = undefined;
-        img.style.display = "none";
-        delBtn.remove();
-        showToast("🗑 Фото удалено");
-      } catch (err) {
-        console.error(err);
-        showToast("❌ Ошибка");
-      }
-    };
-    ctrls.appendChild(delBtn);
-  }
-  imgContainer.appendChild(ctrls);
-  backContent.appendChild(imgContainer);
+    const imgSection = document.createElement("div");
+    imgSection.className = "card-section";
+    imgSection.style.padding = "0";
 
+    const toggleDiv = document.createElement("div");
+    toggleDiv.className = "card-image-toggle hidden"; // По умолчанию скрыто
+    toggleDiv.title = "Нажмите, чтобы показать/скрыть";
+    toggleDiv.onclick = (e) => {
+      e.stopPropagation();
+      toggleDiv.classList.toggle("hidden");
+    };
+
+    const img = document.createElement("img");
+    img.className = "card-image";
+    img.draggable = false;
+    img.dataset.src = item.image; // Lazy load
+    
+    toggleDiv.appendChild(img);
+    imgSection.appendChild(toggleDiv);
+    backContent.appendChild(imgSection);
+  }
+
+  // --- 2. Translation & Relations ---
+  const transSection = document.createElement("div");
+  transSection.className = "card-section";
+  
   const trans = document.createElement("div");
   trans.className = "translation";
   trans.textContent = item.translation || "";
-  backContent.appendChild(trans);
+  transSection.appendChild(trans);
 
-  if (item.synonyms || item.antonyms || item.collocations) {
-    const tagsDiv = document.createElement("div");
-    tagsDiv.className = "card-tags";
-    if (item.synonyms)
-      tagsDiv.innerHTML += `<span class="info-tag tag-syn">≈ ${item.synonyms}</span>`;
-    if (item.antonyms)
-      tagsDiv.innerHTML += `<span class="info-tag tag-ant">≠ ${item.antonyms}</span>`;
-    if (item.collocations)
-      tagsDiv.innerHTML += `<div class="info-tag tag-coll">🔗 ${item.collocations}</div>`;
-    backContent.appendChild(tagsDiv);
+  if (item.synonyms || item.antonyms) {
+    const relContainer = document.createElement("div");
+    relContainer.className = "relations-container";
+
+    if (item.synonyms) {
+      item.synonyms.split(/[,;]/).forEach((s) => {
+        if (s.trim()) {
+          const chip = document.createElement("span");
+          chip.className = "relation-chip";
+          chip.textContent = `≈ ${s.trim()}`;
+          relContainer.appendChild(chip);
+        }
+      });
+    }
+    if (item.antonyms) {
+      item.antonyms.split(/[,;]/).forEach((a) => {
+        if (a.trim()) {
+          const chip = document.createElement("span");
+          chip.className = "relation-chip antonym";
+          chip.textContent = `≠ ${a.trim()}`;
+          relContainer.appendChild(chip);
+        }
+      });
+    }
+    transSection.appendChild(relContainer);
+  }
+  backContent.appendChild(transSection);
+
+  // --- 3. Info (Collocations, Notes, Grammar) ---
+  if (item.collocations || item.my_notes || item.grammar_info) {
+    const infoSection = document.createElement("div");
+    infoSection.className = "card-section";
+
+    if (item.collocations) {
+      const block = document.createElement("div");
+      block.className = "info-block";
+      block.innerHTML = `<div class="info-label">Коллокации</div><div class="info-text">${item.collocations}</div>`;
+      infoSection.appendChild(block);
+    }
+
+    if (item.grammar_info) {
+      const block = document.createElement("div");
+      block.className = "info-block";
+      block.innerHTML = `<div class="info-label">Грамматика</div><div class="info-text">${item.grammar_info}</div>`;
+      infoSection.appendChild(block);
+    }
+
+    if (item.my_notes) {
+      const block = document.createElement("div");
+      block.className = "info-block";
+      block.innerHTML = `<div class="info-label">Нюансы / Заметки</div><div class="info-text">${item.my_notes}</div>`;
+      infoSection.appendChild(block);
+    }
+    backContent.appendChild(infoSection);
   }
 
-  if (item.example_kr || item.example_ru)
-    backContent.innerHTML += `<div class="example-box"><div class="ex-kr">${item.example_kr || ""}</div><div class="ex-ru">${item.example_ru || ""}</div></div>`;
-  if (item.my_notes)
-    backContent.innerHTML += `<div class="note-box"><div style="font-size:16px;">💡</div><div>${item.my_notes}</div></div>`;
-  if (item.grammar_info)
-    backContent.innerHTML += `<div class="note-box"><div style="font-size:16px;">📘</div><div>${item.grammar_info}</div></div>`;
+  // --- 4. Examples ---
+  if (item.example_kr) {
+    const exSection = document.createElement("div");
+    exSection.className = "card-section";
+    const exBox = document.createElement("div");
+    exBox.className = "example-box";
+    exBox.innerHTML = `<div class="example-kr">${item.example_kr}</div><div class="example-ru">${item.example_ru || ""}</div>`;
+    exSection.appendChild(exBox);
+    backContent.appendChild(exSection);
+  }
 
   back.appendChild(backContent);
 
+  // --- 5. Actions ---
   const actions = document.createElement("div");
   actions.className = "card-actions";
 
@@ -649,17 +671,6 @@ function createCardBack(item: Word): HTMLElement {
     actions.appendChild(learnedBtn);
   }
 
-  const practiceBtn = document.createElement("button");
-  practiceBtn.className = "action-btn";
-  practiceBtn.textContent = "🗣️";
-  practiceBtn.title = "Проверить произношение";
-  practiceBtn.style.background = "var(--info)";
-  practiceBtn.style.flex = "0.5";
-  practiceBtn.onclick = (e) => {
-    e.stopPropagation();
-    window.checkPronunciation(item.word_kr, practiceBtn);
-  };
-  actions.appendChild(practiceBtn);
   back.appendChild(actions);
 
   return back;
@@ -808,10 +819,16 @@ export function setupGridEffects() {
     const y = e.clientY - rect.top;
     const centerX = rect.width / 2;
     const centerY = rect.height / 2;
-    const rotateX = ((y - centerY) / centerY) * -10;
-    const rotateY = ((x - centerX) / centerX) * 10;
+    const rotateX = ((y - centerY) / centerY) * -8;
+    const rotateY = ((x - centerX) / centerX) * 8;
+
+    const shadowX = ((x - centerX) / centerX) * -25;
+    const shadowY = ((y - centerY) / centerY) * -25 + 15;
+
     card.style.setProperty("--rx", `${rotateX}deg`);
     card.style.setProperty("--ry", `${rotateY}deg`);
+    card.style.setProperty("--sx", `${shadowX}px`);
+    card.style.setProperty("--sy", `${shadowY}px`);
   });
   grid.addEventListener("mouseout", (e: MouseEvent) => {
     const target = e.target as HTMLElement;
@@ -819,6 +836,8 @@ export function setupGridEffects() {
     if (card && !card.contains(e.relatedTarget as Node)) {
       card.style.setProperty("--rx", "0deg");
       card.style.setProperty("--ry", "0deg");
+      card.style.removeProperty("--sx");
+      card.style.removeProperty("--sy");
     }
   });
 }

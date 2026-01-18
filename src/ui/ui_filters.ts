@@ -62,8 +62,8 @@ function createMultiselectItem(value: string, label: string): HTMLElement {
   const itemDiv = document.createElement("div");
   itemDiv.className = "multiselect-item";
 
-  const isChecked = state.currentTopic.includes(value);
-  itemDiv.innerHTML = `<input type="checkbox" ${isChecked ? "checked" : ""} readonly> <span>${label}</span>`;
+  const isChecked = state.currentTopic.includes(value) || (value === "all" && state.currentTopic.includes("all"));
+  itemDiv.innerHTML = `<input type="checkbox" ${isChecked ? "checked" : ""}> <span>${label}</span>`;
 
   itemDiv.onclick = (e) => {
     e.stopPropagation();
@@ -85,9 +85,10 @@ export function populateFilters() {
   const btn = document.createElement("div");
   btn.className = "multiselect-btn";
   btn.style.cursor = "pointer";
-  const countLabel = state.currentTopic.includes("all")
+  
+  const countLabel = state.currentTopic.includes("all") || state.currentTopic.length === 0
     ? "Все темы"
-    : `Темы: ${state.currentTopic.length}`;
+    : `Выбрано: ${state.currentTopic.length}`;
   btn.innerHTML = `<span>${countLabel}</span><span style="font-size: 10px; opacity: 0.6;">▼</span>`;
   btn.onclick = (e) => {
     e.stopPropagation();

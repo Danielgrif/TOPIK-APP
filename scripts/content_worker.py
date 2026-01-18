@@ -13,6 +13,9 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 from urllib.parse import urlparse, parse_qs, quote, unquote
 from io import BytesIO
 import json
+import warnings
+
+warnings.simplefilter(action='ignore', category=FutureWarning)
 
 # Настройка логирования в файл log.txt
 logging.basicConfig(
@@ -54,8 +57,8 @@ if not os.getenv("SUPABASE_URL"):
     load_dotenv(os.path.join(project_root, "env"))
 
 # 1. Настройки
-SUPABASE_URL = os.getenv("SUPABASE_URL")
-SUPABASE_KEY = os.getenv("SUPABASE_SERVICE_KEY") # Нужен ключ с правами записи!
+SUPABASE_URL = os.getenv("SUPABASE_URL") or os.getenv("VITE_SUPABASE_URL")
+SUPABASE_KEY = os.getenv("SUPABASE_SERVICE_KEY") or os.getenv("SUPABASE_KEY") or os.getenv("VITE_SUPABASE_KEY") # Нужен ключ с правами записи!
 PIXABAY_API_KEY = os.getenv("PIXABAY_API_KEY")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 BUCKET_NAME = "audio-files"
@@ -73,7 +76,7 @@ if GEMINI_API_KEY == "ваш_ключ_здесь":
     GEMINI_API_KEY = None
 
 if not SUPABASE_URL or not SUPABASE_KEY:
-    logging.error("❌ ОШИБКА: Не найдены переменные окружения SUPABASE_URL или SUPABASE_SERVICE_KEY.")
+    logging.error("❌ ОШИБКА: Не найдены переменные окружения SUPABASE_URL или SUPABASE_SERVICE_KEY (или их VITE_ аналоги).")
     logging.error("Убедитесь, что файл .env создан и содержит эти ключи.")
     sys.exit(1)
 
@@ -82,6 +85,7 @@ parser = argparse.ArgumentParser(description="Генератор контент�
 parser.add_argument("--topic", type=str, help="Обработать только слова из конкретной темы (фильтр по колонке 'topic')")
 parser.add_argument("--force-images", action="store_true", help="Принудительно обновить изображения (перезаписать старые)")
 parser.add_argument("--force-audio", action="store_true", help="Принудительно обновить аудио (перезаписать старые)")
+parser.add_argument("--force-quotes", action="store_true", help="Принудительно обновить аудио только для цитат")
 parser.add_argument("--check", action="store_true", help="Запустить проверку целостности файлов и ссылок (удаление битых)")
 parser.add_argument("--concurrency", type=int, default=0, help="Количество одновременных потоков (0 = авто-подбор, по умолчанию 0)")
 args = parser.parse_args()
@@ -663,6 +667,44 @@ async def process_word_request(request):
         logging.error(f"❌ Ошибка AI обработки для {word_kr}: {e}")
         supabase.table('word_requests').update({'status': 'error'}).eq('id', req_id).execute()
 
+async def handle_quote_audio(row, force_audio=False):
+    """Обработка аудио для цитаты (EdgeTTS)"""
+    if row.get('audio_url') and not force_audio: return {}
+    
+    text = row.get('quote_kr')
+    if not text: return {}
+    
+    # Генерируем хеш от текста цитаты для имени файла
+    quote_hash = hashlib.md5(text.encode('utf-8')).hexdigest()
+    filename = f"quote_{quote_hash}.mp3"
+    filepath = f"temp_{filename}"
+    
+    # Используем тот же голос, что и для слов (SunHi)
+    if await generate_edge_tts(text, filepath, "ko-KR-SunHiNeural"):
+        try:
+            if row.get('audio_url'):
+                await delete_old_file(BUCKET_NAME, row.get('audio_url'))
+            with open(filepath, 'rb') as f:
+                await upload_to_supabase(BUCKET_NAME, filename, f, "audio/mpeg")
+            url = supabase.storage.from_(BUCKET_NAME).get_public_url(filename)
+            logging.info(f"✅ Quote Audio: {text[:15]}...")
+            return {'audio_url': url}
+        finally:
+            if os.path.exists(filepath): os.remove(filepath)
+    return {}
+
+async def process_quote(sem, session, row):
+    """Асинхронная обработка одной цитаты"""
+    async with sem:
+        row_id = row.get('id')
+        try:
+            updates = await handle_quote_audio(row, args.force_audio or args.force_quotes)
+            if updates:
+                loop = asyncio.get_running_loop()
+                await loop.run_in_executor(None, lambda: supabase.table('quotes').update(updates).eq("id", row_id).execute())
+        except Exception as e:
+            logging.error(f"❌ Ошибка цитаты {row_id}: {e}")
+
 async def measure_network_quality():
     """Измеряет задержку сети и возвращает оптимальное количество потоков."""
     logging.info("📡 Анализ скорости соединения...")
@@ -714,27 +756,52 @@ async def main_loop():
                 except Exception as e:
                     logging.error(f"Ошибка обработки заявок: {e}")
 
+            # 0.5. Обработка цитат (Quotes)
+            try:
+                q_query = supabase.table('quotes').select("*")
+                if not (args.force_audio or args.force_quotes):
+                    # Обрабатываем те, у которых нет аудио (NULL или пустая строка)
+                    q_query = q_query.or_("audio_url.is.null,audio_url.eq.")
+                
+                q_res = q_query.execute()
+                quotes = q_res.data or []
+                
+                if quotes:
+                    logging.info(f"📜 Найдено {len(quotes)} цитат для озвучки.")
+                    q_sem = asyncio.Semaphore(concurrency)
+                    async with aiohttp.ClientSession() as session:
+                        await asyncio.gather(*[process_quote(q_sem, session, r) for r in quotes])
+            except Exception as e:
+                logging.warning(f"⚠️ Пропуск цитат (возможно нет колонки audio_url): {e}")
+
             # Запрос к БД (синхронный, но быстрый)
             try:
-                if args.force_images or args.force_audio:
-                    query = supabase.table('vocabulary').select("*")
+                # Если включен режим только для цитат, пропускаем слова
+                if args.force_quotes and not (args.force_images or args.force_audio):
+                    words = []
                 else:
-                    # Берем больше слов за раз для эффективности
-                    query = supabase.table('vocabulary').select("*").or_("audio_url.is.null,audio_male.is.null,image.is.null,example_audio.is.null").limit(200)
-                
-                if args.topic:
-                    query = query.ilike("topic", f"%{args.topic}%")
+                    if args.force_images or args.force_audio:
+                        query = supabase.table('vocabulary').select("*")
+                    else:
+                        # Берем больше слов за раз для эффективности
+                        query = supabase.table('vocabulary').select("*").or_("audio_url.is.null,audio_male.is.null,image.is.null,example_audio.is.null").limit(200)
+                    
+                    if args.topic:
+                        query = query.ilike("topic", f"%{args.topic}%")
 
-                response = query.execute()
-                words = response.data or []
-                # Фильтруем слова, которые уже пытались обработать и не смогли
-                words = [w for w in words if isinstance(w, dict) and w.get('id') not in ignore_ids]
+                    response = query.execute()
+                    words = response.data or []
+                    # Фильтруем слова, которые уже пытались обработать и не смогли
+                    words = [w for w in words if isinstance(w, dict) and w.get('id') not in ignore_ids]
             except Exception as e:
                 logging.error(f"Ошибка БД: {e}")
                 words = []
 
             if not words:
-                if not args.force_images and not args.force_audio:
+                if args.force_quotes:
+                    logging.info("🏁 Обработка цитат завершена.")
+                    break
+                elif not args.force_images and not args.force_audio:
                     logging.info("💤 Нет новых слов. Жду 60 сек...")
                     await asyncio.sleep(60)
                 else:

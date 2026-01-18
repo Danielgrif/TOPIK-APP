@@ -1,3 +1,5 @@
+/// <reference types="vite/client" />
+
 declare global {
   interface Window {
     // --- External Libraries (CDN) ---
@@ -17,6 +19,7 @@ declare global {
     }) => void;
 
     /** Chart.js */
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     Chart: any;
 
     // --- Browser APIs ---
@@ -27,7 +30,7 @@ declare global {
     // --- App Global Functions (exposed for HTML event handlers) ---
 
     /** PWA Install prompt handler */
-    installApp: () => void;
+    installApp?: () => void;
 
     /** TTS Helper */
     speak: (text: string | null, url?: string | null) => Promise<void>;
@@ -36,7 +39,7 @@ declare global {
     checkPronunciation: (
       word: string,
       btn?: HTMLElement,
-      callback?: (score: number, text: string) => void,
+      callback?: (score: number, text: string, audioUrl?: string) => void,
     ) => void;
     setBackgroundMusicVolume: (volume: string | number) => void;
     scheduleSaveState: () => void;
@@ -61,8 +64,9 @@ declare global {
     signInWithGoogle: () => void;
 
     // Shop
-    buyItem: (id: string) => void;
-    claimDailyReward: () => void;
+    buyItem: (id: string, btn?: HTMLElement) => void;
+    claimDailyReward: (btn?: HTMLElement) => void;
+    switchShopTab: (tab: string) => void;
   }
 }
 

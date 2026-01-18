@@ -1,6 +1,6 @@
 import { state } from "./state.ts";
 import { client } from "./supabaseClient.ts";
-import { showToast } from "../utils/utils.ts";
+import { showToast, playTone } from "../utils/utils.ts";
 import { scheduleSaveState } from "./db.ts";
 import { showLevelUpAnimation } from "../ui/ui_interactions.ts";
 import { Scheduler } from "./scheduler.ts";
@@ -166,7 +166,7 @@ export function setStudyGoal(type: "words" | "time", target: string | number) {
   showToast("Цель обновлена! 🎯");
 }
 
-let leaderboardSubscription: any = null;
+let leaderboardSubscription: { unsubscribe: () => void } | null = null;
 
 export function getAchievementDefinitions() {
   const getMasteredCount = () =>
@@ -335,6 +335,7 @@ export function checkAchievements(showAlert = true) {
       state.achievements.push({ id: ach.id, date: Date.now() });
       if (showAlert) {
         showToast(`🎉 Новое достижение: ${ach.emoji} ${ach.title}`);
+        playTone("achievement-unlock");
         if (typeof window.confetti === "function") {
           window.confetti({
             particleCount: 150,
@@ -455,9 +456,9 @@ export async function renderLeaderboard() {
         },
       )
       .subscribe();
-  } catch (e: any) {
+  } catch (e: unknown) {
     console.error(e);
-    container.innerHTML = `<div style="color:var(--danger); text-align:center;">Ошибка загрузки: ${e.message}</div><button class="btn" style="width:100%; margin-top:10px;" onclick="window.renderDetailedStats()">Назад</button>`;
+    container.innerHTML = `<div style="color:var(--danger); text-align:center;">Ошибка загрузки: ${(e as Error).message}</div><button class="btn" style="width:100%; margin-top:10px;" onclick="window.renderDetailedStats()">Назад</button>`;
   }
 }
 

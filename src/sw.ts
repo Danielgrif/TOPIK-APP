@@ -1,3 +1,4 @@
+/// <reference lib="webworker" />
 import { precacheAndRoute, cleanupOutdatedCaches } from "workbox-precaching";
 import { clientsClaim } from "workbox-core";
 
@@ -12,6 +13,12 @@ precacheAndRoute(self.__WB_MANIFEST);
 
 const AUDIO_CACHE_NAME = "topik-audio-v1";
 const MAX_AUDIO_ITEMS = 200;
+
+self.addEventListener("message", (event) => {
+  if (event.data && event.data.type === "SKIP_WAITING") {
+    self.skipWaiting();
+  }
+});
 
 async function trimCache(cacheName: string, maxItems: number) {
   const cache = await caches.open(cacheName);

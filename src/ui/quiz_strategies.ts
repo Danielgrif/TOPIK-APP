@@ -66,7 +66,7 @@ interface Strategy {
 export const QuizStrategies: Record<string, Strategy> = {
   "multiple-choice": {
     render(word, container, onAnswer, qEl) {
-      qEl.innerText = `Что означает "${word.word_kr}"?`;
+      qEl.innerHTML = `<div class="quiz-question-text">${word.word_kr}</div><div class="quiz-question-sub">Выберите перевод</div>`;
       container.innerHTML = "";
       getOptions(word).forEach((opt) => {
         const btn = document.createElement("button");
@@ -83,13 +83,14 @@ export const QuizStrategies: Record<string, Strategy> = {
 
   flashcard: {
     render(word, container, onAnswer, qEl) {
-      qEl.innerText = word.word_kr;
+      qEl.innerHTML = `<div class="quiz-question-text">${word.word_kr}</div><div class="quiz-question-sub">Вспомните перевод</div>`;
       container.innerHTML = "";
       const btn = document.createElement("button");
-      btn.className = "quiz-option";
+      btn.className = "btn btn-quiz";
+      btn.style.width = "100%";
       btn.textContent = "Показать ответ";
       btn.onclick = () => {
-        qEl.innerText = word.translation;
+        qEl.innerHTML = `<div class="quiz-question-text" style="color:var(--primary)">${word.translation}</div><div class="quiz-question-sub">${word.word_kr}</div>`;
         container.innerHTML = "";
         const ok = document.createElement("button");
         ok.className = "quiz-option correct";
@@ -110,18 +111,11 @@ export const QuizStrategies: Record<string, Strategy> = {
 
   reverse: {
     render(word, container, onAnswer, qEl) {
-      qEl.innerHTML = "";
-      const textNode = document.createTextNode(
-        `Выберите корейское слово: "${word.translation}"`,
-      );
-      qEl.appendChild(textNode);
+      let html = `<div class="quiz-question-text">${word.translation}</div><div class="quiz-question-sub">Выберите корейское слово</div>`;
       if (word.my_notes) {
-        const hint = document.createElement("div");
-        hint.style.cssText =
-          "font-size:14px; color:var(--text-sub); font-weight:normal;";
-        hint.textContent = `(${word.my_notes})`;
-        qEl.appendChild(hint);
+        html += `<div style="font-size:14px; color:var(--text-sub); margin-top:5px;">(${word.my_notes})</div>`;
       }
+      qEl.innerHTML = html;
       container.innerHTML = "";
       getOptions(word).forEach((opt) => {
         const btn = document.createElement("button");
@@ -146,10 +140,7 @@ export const QuizStrategies: Record<string, Strategy> = {
         ? `<button class="speak-btn" onclick="window.speak(null, '${word.example_audio}')">🔊</button>`
         : "";
 
-      qEl.innerHTML = "";
-      const textSpan = document.createElement("span");
-      textSpan.textContent = `Вставьте слово: "${display}" `;
-      qEl.appendChild(textSpan);
+      qEl.innerHTML = `<div class="quiz-question-text" style="font-size:22px;">"${display}"</div><div class="quiz-question-sub">Вставьте пропущенное слово</div>`;
       if (word.example_audio) qEl.innerHTML += audioBtn;
 
       container.innerHTML = "";
@@ -168,19 +159,16 @@ export const QuizStrategies: Record<string, Strategy> = {
 
   typing: {
     render(word, container, onAnswer, qEl) {
-      qEl.innerHTML = "";
+      let html = "";
       if (word.image) {
-        const img = document.createElement("img");
-        img.src = word.image;
-        img.className = "quiz-image";
-        qEl.appendChild(img);
+        html += `<img src="${word.image}" class="quiz-image">`;
       }
-      const txt = document.createElement("div");
-      txt.textContent = `Напишите перевод для: "${word.translation}"`;
+      html += `<div class="quiz-question-text">${word.translation}</div><div class="quiz-question-sub">Напишите на корейском</div>`;
+      
       if (word.my_notes) {
-        txt.innerHTML += `<br><span style="font-size:14px; color:var(--text-sub); font-weight:normal;">(${word.my_notes.replace(/</g, "&lt;")})</span>`;
+        html += `<div style="font-size:14px; color:var(--text-sub); margin-top:5px;">(${word.my_notes.replace(/</g, "&lt;")})</div>`;
       }
-      qEl.appendChild(txt);
+      qEl.innerHTML = html;
       if (typeof this._renderInput === "function")
         this._renderInput(word, container, onAnswer);
     },
@@ -247,16 +235,7 @@ export const QuizStrategies: Record<string, Strategy> = {
 
   essay: {
     render(word, container, onAnswer, qEl) {
-      qEl.innerHTML = "";
-      const label = document.createElement("div");
-      label.style.cssText =
-        "font-size:15px; margin-bottom:10px; color:var(--text-sub);";
-      label.textContent = "Переведите предложение на корейский:";
-      const sentence = document.createElement("div");
-      sentence.style.cssText = "font-size:18px; font-weight:bold;";
-      sentence.textContent = `"${word.example_ru || "..."}"`;
-      qEl.appendChild(label);
-      qEl.appendChild(sentence);
+      qEl.innerHTML = `<div class="quiz-question-text" style="font-size:20px;">"${word.example_ru || "..."}"</div><div class="quiz-question-sub">Переведите предложение</div>`;
 
       container.innerHTML = "";
 
@@ -317,12 +296,20 @@ export const QuizStrategies: Record<string, Strategy> = {
 
   dictation: {
     render(word, container, onAnswer, qEl) {
-      const safeWord = word.word_kr.replace(/'/g, "\\'");
-      qEl.innerHTML = `<div style="text-align:center; margin-bottom:20px;">
-                <button class="audio-btn-lg" onclick="speak('${safeWord}')">🔊</button>
-                <div style="margin-top:15px; font-weight:bold;">Напишите услышанное</div>
-            </div>`;
-      setTimeout(() => speak(word.word_kr, null), 300);
+      const currentVoice = state.currentVoice;
+      const url =
+        currentVoice === "male" && word.audio_male
+          ? word.audio_male
+          : word.audio_url;
+
+      qEl.innerHTML = `<div style="margin-bottom:15px;"><button class="audio-btn-lg" id="dictation-play-btn">🔊</button></div><div class="quiz-question-sub">Напишите услышанное</div>`;
+      
+      const btn = qEl.querySelector("#dictation-play-btn") as HTMLElement;
+      if (btn) {
+        btn.onclick = () => speak(word.word_kr, url || null);
+      }
+
+      setTimeout(() => speak(word.word_kr, url || null), 300);
       const typingStrat = QuizStrategies["typing"];
       if (typingStrat && typingStrat._renderInput) {
         typingStrat._renderInput(word, container, onAnswer);
@@ -346,15 +333,7 @@ export const QuizStrategies: Record<string, Strategy> = {
           isCorrectPair = true;
         }
       }
-      qEl.innerHTML = "";
-      const wDiv = document.createElement("div");
-      wDiv.style.cssText = "font-size:32px; margin-bottom:10px;";
-      wDiv.textContent = word.word_kr;
-      const tDiv = document.createElement("div");
-      tDiv.style.cssText = "color:var(--text-sub); font-size:20px;";
-      tDiv.textContent = shownTranslation;
-      qEl.appendChild(wDiv);
-      qEl.appendChild(tDiv);
+      qEl.innerHTML = `<div class="quiz-question-text">${word.word_kr}</div><div class="quiz-question-sub" style="font-size:20px; color:var(--primary)">${shownTranslation}</div>`;
 
       container.innerHTML = "";
       const yes = document.createElement("button");
@@ -374,11 +353,7 @@ export const QuizStrategies: Record<string, Strategy> = {
 
   audio: {
     render(word, container, onAnswer, qEl) {
-      qEl.innerHTML = "";
-
       const wrapper = document.createElement("div");
-      wrapper.style.textAlign = "center";
-      wrapper.style.marginBottom = "20px";
 
       const btn = document.createElement("button");
       btn.className = "audio-btn-lg";
@@ -396,9 +371,10 @@ export const QuizStrategies: Record<string, Strategy> = {
       btn.onclick = play;
 
       wrapper.appendChild(btn);
-      wrapper.innerHTML += `<div style="margin-top:15px; color:var(--text-sub);">Прослушайте слово</div>`;
+      qEl.innerHTML = "";
       qEl.appendChild(wrapper);
-      setTimeout(play, 400);
+      qEl.innerHTML += `<div class="quiz-question-sub" style="margin-top:15px;">Выберите перевод</div>`;
+      setTimeout(play, 300);
 
       container.innerHTML = "";
       getOptions(word).forEach((opt) => {
@@ -439,8 +415,7 @@ export const QuizStrategies: Record<string, Strategy> = {
       const sentence = (word.example_kr || "").trim();
       const parts = sentence.split(/\s+/).filter((p) => p);
 
-      qEl.innerHTML = `<div style="font-size:15px; margin-bottom:10px; color:var(--text-sub);">Соберите предложение:</div>
-            <div id="scramble-ru" style="font-size:18px; font-weight:bold; margin-bottom:20px; color:var(--primary);"></div>
+      qEl.innerHTML = `<div id="scramble-ru" class="quiz-question-text" style="font-size:20px; color:var(--primary);"></div>
             <div id="scramble-target" class="scramble-container" style="background:white; border-color:var(--primary);"></div>
             <div id="scramble-source" class="scramble-container"></div>`;
 
@@ -452,6 +427,19 @@ export const QuizStrategies: Record<string, Strategy> = {
       if (!sourceEl || !targetEl) return;
 
       container.innerHTML = "";
+
+      const resetBtn = document.createElement("button");
+      resetBtn.className = "btn";
+      resetBtn.style.cssText = "margin-bottom: 15px; padding: 8px 16px; font-size: 14px; display: none; background: var(--surface-3); color: var(--text-main);";
+      resetBtn.innerHTML = "↺ Сброс";
+      resetBtn.onclick = () => {
+        currentAnswer.length = 0;
+        if (targetEl) targetEl.style.background = "";
+        if (targetEl) targetEl.style.borderColor = "";
+        renderChips();
+      };
+      container.appendChild(resetBtn);
+
       const currentAnswer: Array<{ text: string; id: number }> = [];
       const pool = parts
         .map((text, i) => ({ text, id: i }))
@@ -459,6 +447,7 @@ export const QuizStrategies: Record<string, Strategy> = {
       const renderChips = () => {
         if (sourceEl) sourceEl.innerHTML = "";
         if (targetEl) targetEl.innerHTML = "";
+        resetBtn.style.display = currentAnswer.length > 0 ? "inline-block" : "none";
         currentAnswer.forEach((item, idx) => {
           const chip = document.createElement("div");
           chip.className = "scramble-chip";
@@ -499,8 +488,14 @@ export const QuizStrategies: Record<string, Strategy> = {
                 container.appendChild(feedback);
               }
               onAnswer(isCorrect, false);
-              if (QuizStrategies.typing._addNextBtn)
-                QuizStrategies.typing._addNextBtn(container, onAnswer);
+              
+              const nextBtn = document.createElement("button");
+              nextBtn.className = "btn btn-quiz";
+              nextBtn.style.marginTop = "15px";
+              nextBtn.style.width = "100%";
+              nextBtn.textContent = "Далее ➡";
+              nextBtn.onclick = () => onAnswer(null, true, true);
+              container.appendChild(nextBtn);
             }
           };
           if (sourceEl) sourceEl.appendChild(chip);
@@ -512,12 +507,7 @@ export const QuizStrategies: Record<string, Strategy> = {
 
   confusing: {
     render(word, container, onAnswer, qEl) {
-      qEl.innerHTML = `Выберите правильное слово:`;
-      const tDiv = document.createElement("div");
-      tDiv.style.cssText =
-        "font-size:24px; color:var(--primary); margin-top:10px;";
-      tDiv.textContent = `"${word.translation}"`;
-      qEl.appendChild(tDiv);
+      qEl.innerHTML = `<div class="quiz-question-text" style="color:var(--primary)">"${word.translation}"</div><div class="quiz-question-sub">Выберите правильное слово</div>`;
       container.innerHTML = "";
 
       const allGroups = findConfusingWords();
@@ -549,12 +539,7 @@ export const QuizStrategies: Record<string, Strategy> = {
 
   synonyms: {
     render(word, container, onAnswer, qEl) {
-      qEl.innerHTML = `Найдите синоним к слову:`;
-      const wDiv = document.createElement("div");
-      wDiv.style.cssText =
-        "font-size:32px; font-weight:bold; margin:10px 0; color:var(--primary);";
-      wDiv.textContent = word.word_kr;
-      qEl.appendChild(wDiv);
+      qEl.innerHTML = `<div class="quiz-question-text" style="color:var(--primary)">${word.word_kr}</div><div class="quiz-question-sub">Найдите синоним</div>`;
       container.innerHTML = "";
 
       const syns = (word.synonyms || "")
@@ -595,12 +580,7 @@ export const QuizStrategies: Record<string, Strategy> = {
 
   antonyms: {
     render(word, container, onAnswer, qEl) {
-      qEl.innerHTML = `Найдите антоним к слову:`;
-      const wDiv = document.createElement("div");
-      wDiv.style.cssText =
-        "font-size:32px; font-weight:bold; margin:10px 0; color:var(--danger);";
-      wDiv.textContent = word.word_kr;
-      qEl.appendChild(wDiv);
+      qEl.innerHTML = `<div class="quiz-question-text" style="color:var(--danger)">${word.word_kr}</div><div class="quiz-question-sub">Найдите антоним</div>`;
       container.innerHTML = "";
 
       const ants = (word.antonyms || "")
@@ -640,8 +620,8 @@ export const QuizStrategies: Record<string, Strategy> = {
   },
 
   association: {
-    render(word, container, onAnswer, qEl) {
-      qEl.innerHTML = `<div style="font-size:18px; margin-bottom:15px;">Соедините слово с переводом</div>`;
+    render(_word, container, onAnswer, qEl) {
+      qEl.innerHTML = `<div class="quiz-question-sub">Соедините слово с переводом</div>`;
       container.innerHTML = "";
 
       const pairs = findAssociations();
@@ -695,6 +675,12 @@ export const QuizStrategies: Record<string, Strategy> = {
                 selectedLeft = null;
                 matchesFound++;
                 if (matchesFound === pairs.length) onAnswer(true);
+                
+                // FIX: Записываем успех для конкретного слова
+                if (w1) {
+ import("../core/db.ts").then(m => m.recordAttempt(w1.id, true));
+ import("../core/db.ts").then(m => m.recordAttempt(w.id, true));
+                }
               } else {
                 btn.classList.add("incorrect");
                 if (selectedLeft) selectedLeft.classList.add("incorrect");
@@ -721,15 +707,7 @@ export const QuizStrategies: Record<string, Strategy> = {
 
   pronunciation: {
     render(word, container, onAnswer, qEl) {
-      qEl.innerHTML = "";
-      const wDiv = document.createElement("div");
-      wDiv.style.cssText = "font-size:32px; margin-bottom:10px;";
-      wDiv.textContent = word.word_kr;
-      const tDiv = document.createElement("div");
-      tDiv.style.cssText = "color:var(--text-sub); font-size:18px;";
-      tDiv.textContent = word.translation;
-      qEl.appendChild(wDiv);
-      qEl.appendChild(tDiv);
+      qEl.innerHTML = `<div class="quiz-question-text">${word.word_kr}</div><div class="quiz-question-sub">${word.translation}</div>`;
       container.innerHTML = "";
 
       const btn = document.createElement("button");
@@ -741,18 +719,47 @@ export const QuizStrategies: Record<string, Strategy> = {
       feedback.style.marginTop = "20px";
       feedback.style.fontSize = "18px";
       feedback.style.minHeight = "30px";
+      feedback.style.display = "flex";
+      feedback.style.flexDirection = "column";
+      feedback.style.alignItems = "center";
+      feedback.style.gap = "10px";
 
       btn.onclick = () => {
         checkPronunciation(
           word.word_kr,
           btn,
-          (similarity: number, text: string) => {
+          (similarity: number, text: string, audioUrl?: string) => {
             const isPass = similarity >= 60;
             feedback.innerHTML = isPass
               ? `<span style="color:var(--success)">✅ ${similarity}% ("${text}")</span>`
               : `<span style="color:var(--danger)">❌ ${similarity}% ("${text}")</span>`;
 
-            setTimeout(() => onAnswer(isPass, false), 1500);
+            if (audioUrl) {
+              const playBtn = document.createElement("button");
+              playBtn.className = "btn";
+              playBtn.style.cssText = "padding: 8px 16px; font-size: 14px;";
+              playBtn.textContent = "▶️ Моя запись";
+              const audio = new Audio(audioUrl);
+              audio.onended = () => (playBtn.textContent = "▶️ Моя запись");
+              playBtn.onclick = () => {
+                if (audio.paused) {
+                  audio.play();
+                  playBtn.textContent = "⏸️ Моя запись";
+                } else {
+                  audio.pause();
+                  playBtn.textContent = "▶️ Моя запись";
+                }
+              };
+              feedback.appendChild(playBtn);
+            }
+
+            const nextBtn = document.createElement("button");
+            nextBtn.className = "btn btn-quiz";
+            nextBtn.textContent = "Далее ➡";
+            nextBtn.onclick = () => onAnswer(null, true, true);
+            feedback.appendChild(nextBtn);
+
+            onAnswer(isPass, false);
           },
         );
       };

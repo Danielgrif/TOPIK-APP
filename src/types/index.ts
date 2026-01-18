@@ -39,6 +39,7 @@ export interface Achievement {
 }
 
 export interface UserStats {
+  survivalHealth: any;
   user_id?: string;
   xp: number;
   level: number;

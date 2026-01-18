@@ -1,17 +1,11 @@
 import { state } from "../core/state.ts";
-import {
-  showToast,
-  showComboEffect,
-  parseBilingualString,
-  playTone,
-} from "../utils/utils.ts";
+import { showToast, parseBilingualString, playTone } from "../utils/utils.ts";
 import { ensureSessionStarted, playAndSpeak, saveAndRender } from "./ui.ts";
 import { closeModal, openModal } from "./ui_modal.ts";
 import { recordAttempt, scheduleSaveState } from "../core/db.ts";
-import { addXP, updateStats } from "../core/stats.ts";
+import { addXP } from "../core/stats.ts";
 import { applyBackgroundMusic } from "./ui_settings.ts";
 import { QuizStrategies } from "./quiz_strategies.ts";
-import { findConfusingWords } from "../core/confusing_words.ts";
 import { Word } from "../types/index.ts";
 import { getQuizConfig, QuizConfig } from "./quiz_modes_config.ts";
 
@@ -28,6 +22,7 @@ let quizCorrectCount: number = 0;
 let quizTimerValue: number = 0;
 let survivalLives: number = 0;
 let isQuizPaused: boolean = false;
+let advanceTimer: number | null = null;
 let currentConfig: QuizConfig | null = null;
 
 export function updateDailyChallengeUI() {
@@ -35,10 +30,16 @@ export function updateDailyChallengeUI() {
   if (!btn) return;
 
   const today = new Date().toDateString();
-  const isCompleted =
-    state.dailyChallenge &&
-    state.dailyChallenge.lastDate === today &&
-    state.dailyChallenge.completed;
+  const d = new Date();
+  d.setDate(d.getDate() - 1);
+  const yesterday = d.toDateString();
+  const challenge = state.dailyChallenge || { lastDate: null, completed: false, streak: 0 };
+  
+  const isCompleted = challenge.lastDate === today && challenge.completed;
+  // Серия под угрозой, если она > 0, задание на сегодня не выполнено, и последнее выполнение было вчера
+  const isAtRisk = (challenge.streak || 0) > 0 && !isCompleted && challenge.lastDate === yesterday;
+  const isMaster = (challenge.streak || 0) >= 7;
+
   const isSunday = new Date().getDay() === 0;
 
   if (isSunday) {
@@ -51,8 +52,23 @@ export function updateDailyChallengeUI() {
     btn.title = "Ежедневный вызов";
   }
 
-  if (!isCompleted) btn.classList.add("has-notification");
-  else btn.classList.remove("has-notification");
+  if (!isCompleted) {
+    btn.classList.add("has-notification");
+    if (isAtRisk) {
+      btn.classList.add("streak-risk");
+    } else {
+      btn.classList.remove("streak-risk");
+    }
+  } else {
+    btn.classList.remove("has-notification");
+    btn.classList.remove("streak-risk");
+  }
+
+  if (isMaster) {
+    btn.classList.add("streak-master");
+  } else {
+    btn.classList.remove("streak-master");
+  }
 }
 
 export function checkSuperChallengeNotification() {
@@ -411,6 +427,11 @@ export function startDailyChallenge() {
     ensureSessionStarted();
 
     quizWords = currentConfig.getWords(state.dataStore);
+    
+    if (!quizWords || quizWords.length === 0) {
+      showToast("⚠️ Не удалось подобрать слова для вызова. Попробуйте позже.");
+      return;
+    }
 
     quizIndex = 0;
     quizStart = Date.now();
@@ -599,7 +620,7 @@ export function nextQuizQuestion() {
           quizIndex++;
           nextQuizQuestion();
         } else {
-          endQuiz(true);
+          endQuiz(false); // FIX: Естественное завершение через кнопку "Далее" не должно считаться провалом
         }
         return;
       }
@@ -623,14 +644,17 @@ function preloadNextAudio() {
         }
       }
     }
-  } catch (_e) {
+  } catch {
     /* ignore */
   }
 }
 
 function recordQuizAnswer(isCorrect: boolean, autoAdvance: boolean = true) {
   const word = quizWords[quizIndex];
-  recordAttempt(word.id, isCorrect);
+  // FIX: Не записываем статистику для фиктивных слов (режим Ассоциации)
+  if (word.id !== "dummy") {
+    recordAttempt(word.id, isCorrect);
+  }
 
   let hasExtraInfo = false;
   if (
@@ -713,9 +737,10 @@ function recordQuizAnswer(isCorrect: boolean, autoAdvance: boolean = true) {
   }
 
   const advance = () => {
-    if (currentQuizMode === "essay" || !autoAdvance) return;
+    if (!autoAdvance) return;
     const delay = hasExtraInfo ? 2500 : 500;
-    setTimeout(() => {
+    if (advanceTimer) clearTimeout(advanceTimer);
+    advanceTimer = window.setTimeout(() => {
       if (quizIndex < quizWords.length - 1) {
         quizIndex++;
         nextQuizQuestion();
@@ -736,14 +761,27 @@ function recordQuizAnswer(isCorrect: boolean, autoAdvance: boolean = true) {
   }
 }
 
-function endQuiz(_forceEnd: boolean = false) {
+function endQuiz(forceEnd: boolean = false) {
   if (quizInterval) {
     clearInterval(quizInterval);
     quizInterval = null;
   }
+  if (advanceTimer) {
+    clearTimeout(advanceTimer);
+    advanceTimer = null;
+  }
 
-  if (currentConfig && currentConfig.onEnd) {
-    currentConfig.onEnd(quizCorrectCount);
+  // FIX: Проверяем, был ли квиз действительно завершен для Ежедневного вызова
+  const isDaily = currentQuizMode === "daily" || currentQuizMode === "super-daily";
+  // Квиз завершен, если это не принудительный выход И мы дошли до конца
+  const isCompleted = !forceEnd && quizWords.length > 0 && quizIndex >= quizWords.length - 1;
+
+  if (isDaily && !isCompleted) {
+    showToast("⚠️ Вызов прерван. Награда не получена.");
+  } else {
+    if (currentConfig && currentConfig.onEnd) {
+      currentConfig.onEnd(quizCorrectCount);
+    }
   }
 
   if (currentQuizMode === "daily" || currentQuizMode === "super-daily") {
@@ -789,7 +827,11 @@ export function quitQuiz() {
     clearInterval(quizInterval);
     quizInterval = null;
   }
-  endQuiz(false);
+  if (advanceTimer) {
+    clearTimeout(advanceTimer);
+    advanceTimer = null;
+  }
+  endQuiz(true); // FIX: Ручной выход теперь считается принудительным завершением
 }
 
 export function updateQuizCount() {

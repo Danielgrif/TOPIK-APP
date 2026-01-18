@@ -1,19 +1,22 @@
 import { client } from "./supabaseClient.ts";
+import { state } from "./state.ts";
 import { loadFromSupabase } from "./db.ts";
 import { showToast } from "../utils/utils.ts";
 import { saveAndRender } from "../ui/ui.ts";
 import { openModal, closeModal, openConfirm } from "../ui/ui_modal.ts";
 
-export function updateAuthUI(user: { email: string } | null) {
+export function updateAuthUI(user: any) {
   const profileBtn = document.getElementById("profile-button");
   const avatar = document.getElementById("profile-avatar");
   const name = document.getElementById("profile-name");
   if (!profileBtn || !avatar || !name) return;
 
   if (user) {
-    avatar.textContent = user.email.charAt(0).toUpperCase();
-    name.textContent = user.email.split("@")[0];
-    profileBtn.title = `Вошли как ${user.email}`;
+    const email = user.email || "";
+    const displayName = user.user_metadata?.full_name || email.split("@")[0] || "Гость";
+    avatar.textContent = email.charAt(0).toUpperCase();
+    name.textContent = displayName;
+    profileBtn.title = `Вошли как ${email}`;
   } else {
     avatar.textContent = "👤";
     name.textContent = "Профиль";
@@ -51,50 +54,110 @@ export function openLoginModal() {
   toggleResetMode(false);
 
   passInput.onkeydown = (e) => {
-    if (e.key === "Enter") handleAuth("login");
+    if (e.key === "Enter") {
+      const loginBtn = document.querySelector(
+        'button[data-action="auth"][data-value="login"]',
+      ) as HTMLElement;
+      if (loginBtn) loginBtn.click();
+    }
   };
 }
 
 export function openProfileModal() {
   client.auth
     .getSession()
-    .then(({ data, error }) => {
-      if (error) throw error;
-      const session = data?.session;
-      if (session && session.user) {
-        const emailEl = document.getElementById("profile-email");
-        if (emailEl) emailEl.textContent = session.user.email;
-        const avatarEl = document.getElementById("profile-avatar-large");
-        if (avatarEl)
-          avatarEl.textContent = session.user.email.charAt(0).toUpperCase();
+    .then(
+      ({
+        data,
+        error,
+      }: {
+        data: { session: { user: any } | null } | null;
+        error: { message: string } | null;
+      }) => {
+        if (error) throw error;
+        const session = data?.session;
+        if (session && session.user) {
+          const user = session.user;
+          const displayName = user.user_metadata?.full_name || user.email?.split("@")[0] || "Гость";
 
-        const input = document.getElementById(
-          "new-password",
-        ) as HTMLInputElement | null;
-        const bar = document.getElementById("new-strength-bar");
-        const container = document.getElementById("new-strength-container");
+          const nameDisplay = document.getElementById("profile-name-display");
+          const nameInput = document.getElementById("profile-name-input") as HTMLInputElement;
+          const editBtn = document.getElementById("edit-profile-name-btn");
 
-        if (input && bar && container) {
-          input.value = "";
-          container.style.display = "none";
-          bar.style.width = "0%";
-          setupPasswordStrengthMeter(input, bar, container);
+          if (nameDisplay) nameDisplay.textContent = displayName;
+
+          const avatarEl = document.getElementById("profile-avatar-large");
+          if (avatarEl)
+            avatarEl.textContent = (user.email || "U").charAt(0).toUpperCase();
+
+          // Логика редактирования имени
+          if (editBtn && nameInput && nameDisplay) {
+            editBtn.onclick = () => {
+              nameDisplay.style.display = "none";
+              editBtn.style.display = "none";
+              nameInput.style.display = "block";
+              nameInput.value = displayName;
+              nameInput.focus();
+            };
+
+            const saveName = async () => {
+              const newName = nameInput.value.trim();
+              if (newName && newName !== displayName) {
+                const { error } = await client.auth.updateUser({ data: { full_name: newName } });
+                if (!error) {
+                  nameDisplay.textContent = newName;
+                  showToast("Имя обновлено");
+                  updateAuthUI({ ...user, user_metadata: { ...user.user_metadata, full_name: newName } });
+                } else {
+                  showToast("Ошибка обновления: " + error.message);
+                }
+              }
+              nameInput.style.display = "none";
+              nameDisplay.style.display = "block";
+              editBtn.style.display = "inline-flex";
+            };
+
+            nameInput.onblur = saveName;
+            nameInput.onkeydown = (e) => {
+              if (e.key === "Enter") nameInput.blur();
+            };
+          }
+
+          // Обновляем звание пользователя на основе уровня
+          const roleEl = document.getElementById("profile-role");
+          if (roleEl) {
+            const lvl = state.userStats.level;
+            let role = "Новичок";
+            if (lvl >= 5) role = "Студент";
+            if (lvl >= 10) role = "Знаток";
+            if (lvl >= 20) role = "Мастер";
+            if (lvl >= 50) role = "Легенда";
+            roleEl.textContent = `${role} (LVL ${lvl})`;
+          }
+
+          const input = document.getElementById(
+            "new-password",
+          ) as HTMLInputElement | null;
+          const bar = document.getElementById("new-strength-bar");
+          const container = document.getElementById("new-strength-container");
+
+          if (input && bar && container) {
+            input.value = "";
+            container.style.display = "none";
+            bar.style.width = "0%";
+            setupPasswordStrengthMeter(input, bar, container);
+          }
+
+          openModal("profile-modal");
+        } else {
+          console.warn(
+            "Кнопка профиля нажата, но активная сессия не найдена. Исправляем UI.",
+          );
+          updateAuthUI(null);
+          openLoginModal();
         }
-
-        const installBtn = document.getElementById("install-app-btn");
-        if (!installBtn && (window as any).installApp) {
-          // Logic handled in app.ts
-        }
-
-        openModal("profile-modal");
-      } else {
-        console.warn(
-          "Кнопка профиля нажата, но активная сессия не найдена. Исправляем UI.",
-        );
-        updateAuthUI(null);
-        openLoginModal();
-      }
-    })
+      },
+    )
     .catch((err: unknown) => console.error("Profile check failed:", err));
 }
 
@@ -227,6 +290,14 @@ function showAuthError(msg: string) {
     errEl.textContent = msg;
     errEl.style.display = "block";
   }
+
+  const passwordInput = document.getElementById("auth-password") as HTMLInputElement | null;
+  // Очищаем и фокусим только если поле видимо (не в режиме сброса пароля)
+  if (passwordInput && passwordInput.offsetParent !== null) {
+    passwordInput.value = "";
+    passwordInput.focus();
+  }
+
   shakeModal();
 }
 
@@ -300,7 +371,8 @@ export async function handleChangePassword() {
 }
 
 export async function handleLogout() {
-  openConfirm("Выйти из аккаунта?", async () => {
+  openConfirm("Вы уверены, что хотите выйти?", async () => {
+    showToast("👋 До встречи!");
     await client.auth.signOut();
     location.reload();
   });
@@ -349,11 +421,19 @@ export function toggleResetMode(show: boolean) {
   }
 }
 
-export function togglePasswordVisibility() {
-  const input = document.getElementById(
-    "auth-password",
-  ) as HTMLInputElement | null;
-  const btn = document.getElementById("toggle-password-btn");
+export function togglePasswordVisibility(triggerBtn?: HTMLElement) {
+  let input: HTMLInputElement | null = null;
+  const btn = triggerBtn || document.getElementById("toggle-password-btn");
+
+  if (btn) {
+    const targetId = btn.getAttribute("data-value");
+    if (targetId) {
+      input = document.getElementById(targetId) as HTMLInputElement;
+    } else if (btn.id === "toggle-password-btn") {
+      input = document.getElementById("auth-password") as HTMLInputElement;
+    }
+  }
+
   if (!input || !btn) return;
   if (input.type === "password") {
     input.type = "text";

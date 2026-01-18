@@ -29,7 +29,7 @@ export function playAndSpeak(word: Word): Promise<void> {
     try {
       try {
         window.speechSynthesis.cancel();
-      } catch (_e) {
+      } catch {
         // Ignore
       }
       const text =
@@ -60,7 +60,7 @@ export function toggleViewMode(mode: string) {
     .forEach((btn) =>
       btn.classList.toggle(
         "active",
-        (btn as HTMLElement).dataset.mode === mode,
+        (btn as HTMLElement).dataset.value === mode,
       ),
     );
   render();
@@ -106,7 +106,7 @@ export function enableQuizKeyboard(container: HTMLElement) {
     options.forEach((o, i) => o.classList.toggle("selected", i === idx));
     try {
       if (idx >= 0) options[idx].focus();
-    } catch (_e) {
+    } catch {
       // Ignore
     }
   }

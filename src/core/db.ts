@@ -4,6 +4,7 @@ import { showToast, parseBilingualString } from "../utils/utils.ts";
 import { syncGlobalStats } from "./sync.ts";
 import { Scheduler } from "./scheduler.ts";
 import { Word } from "../types/index.ts";
+import { applyTheme, updateVoiceUI } from "../ui/ui_settings.ts";
 
 let _saveTimer: number | null = null;
 
@@ -60,6 +61,7 @@ export function immediateSaveState() {
       JSON.stringify([...state.dirtyWordIds]),
     );
     localStorage.setItem("custom_words_v1", JSON.stringify(state.customWords));
+    localStorage.setItem("favorite_quotes_v1", JSON.stringify(state.favoriteQuotes));
   } catch (e) {
     console.error("Save error:", e);
   }
@@ -134,61 +136,79 @@ export function recordAttempt(id: number | string, isCorrect: boolean) {
   scheduleSaveState();
 }
 
+function getDemoData(): Word[] {
+  return [
+    { id: 1, word_kr: "하다", translation: "делать", level: "★☆☆", type: "word", topic: "Basic" },
+    { id: 2, word_kr: "가다", translation: "идти", level: "★☆☆", type: "word", topic: "Basic" },
+    { id: 3, word_kr: "먹다", translation: "есть", level: "★☆☆", type: "word", topic: "Basic" },
+    { id: 4, word_kr: "사람", translation: "человек", level: "★☆☆", type: "word", topic: "Basic" },
+    { id: 5, word_kr: "학교", translation: "школа", level: "★☆☆", type: "word", topic: "Education" },
+    { id: 6, word_kr: "물", translation: "вода", level: "★☆☆", type: "word", topic: "Food" },
+    { id: 7, word_kr: "친구", translation: "друг", level: "★☆☆", type: "word", topic: "People" },
+    { id: 8, word_kr: "사랑", translation: "любовь", level: "★★☆", type: "word", topic: "Emotion" },
+    { id: 9, word_kr: "행복하다", translation: "счастливый", level: "★★☆", type: "word", topic: "Emotion" },
+    { id: 10, word_kr: "공부하다", translation: "учиться", level: "★☆☆", type: "word", topic: "Education" },
+  ] as any;
+}
+
+function processVocabularyData(serverData: Word[]) {
+  const serverWordsSet = new Set(serverData.map((w) => w.word_kr));
+  state.customWords = state.customWords.filter(
+    (cw) => !serverWordsSet.has(cw.word_kr),
+  );
+  immediateSaveState();
+
+  state.dataStore = [...serverData, ...state.customWords];
+
+  const uniqueMap = new Map();
+  state.dataStore.forEach((w) => {
+    if (w.id && !uniqueMap.has(w.id)) uniqueMap.set(w.id, w);
+  });
+  state.dataStore = Array.from(uniqueMap.values());
+
+  state.dataStore.forEach((w) => {
+    if (!w.type) w.type = "word";
+    w._parsedTopic = parseBilingualString(w.topic || w.topic_ru || w.topic_kr);
+    w._parsedCategory = parseBilingualString(w.category || w.category_ru || w.category_kr);
+    w._searchStr = [w.word_kr, w.translation, w.word_hanja, w.synonyms, w.my_notes].filter(Boolean).join(" ").toLowerCase();
+  });
+
+  validateSchema(state.dataStore);
+  cleanupInvalidStateIds();
+  immediateSaveState();
+}
+
 export async function fetchVocabulary() {
   try {
     const { data, error } = await client.from("vocabulary").select("*");
     if (error) throw error;
 
-    const serverData: Word[] = data || [];
+    let serverData: Word[] = data || [];
 
-    const serverWordsSet = new Set(serverData.map((w) => w.word_kr));
-    state.customWords = state.customWords.filter(
-      (cw) => !serverWordsSet.has(cw.word_kr),
-    );
-    immediateSaveState();
+    // Fallback: If no data (offline mode), load demo data
+    if (serverData.length === 0) {
+      console.info("ℹ️ No data from DB. Loading demo vocabulary.");
+      serverData = getDemoData();
+      showToast("⚠️ Режим демо-данных (нет подключения к БД)");
+    }
 
-    state.dataStore = [...serverData, ...state.customWords];
-
-    const uniqueMap = new Map();
-    state.dataStore.forEach((w) => {
-      if (w.id && !uniqueMap.has(w.id)) uniqueMap.set(w.id, w);
-    });
-    state.dataStore = Array.from(uniqueMap.values());
-
-    state.dataStore.forEach((w) => {
-      if (!w.type) w.type = "word";
-      w._parsedTopic = parseBilingualString(
-        w.topic || w.topic_ru || w.topic_kr,
-      );
-      w._parsedCategory = parseBilingualString(
-        w.category || w.category_ru || w.category_kr,
-      );
-      w._searchStr = [
-        w.word_kr,
-        w.translation,
-        w.word_hanja,
-        w.synonyms,
-        w.my_notes,
-      ]
-        .filter(Boolean)
-        .join(" ")
-        .toLowerCase();
-    });
-
-    validateSchema(state.dataStore);
-
-    cleanupInvalidStateIds();
-
-    immediateSaveState();
+    processVocabularyData(serverData);
   } catch (e) {
     console.error("Vocabulary fetch failed:", e);
-    showToast("Ошибка загрузки словаря");
+    if (typeof e === "object" && e !== null) {
+      // @ts-ignore
+      if ("message" in e) console.error("Error Message:", e.message);
+      // @ts-ignore
+      if ("details" in e) console.error("Error Details:", e.details);
+      // @ts-ignore
+      if ("hint" in e) console.error("Error Hint:", e.hint);
+    }
+    showToast("Ошибка сети. Используем демо-данные.");
+    processVocabularyData(getDemoData());
   }
 }
 
 export async function loadFromSupabase(user: { id: string }) {
-  const { applyTheme, updateVoiceUI } = await import("../ui/ui_settings.ts");
-
   if (!navigator.onLine) return;
   try {
     showToast("☁️ Синхронизация...");
@@ -227,6 +247,7 @@ export async function loadFromSupabase(user: { id: string }) {
         if (s.audioSpeed !== undefined) state.audioSpeed = s.audioSpeed;
         if (s.currentVoice !== undefined) state.currentVoice = s.currentVoice;
         if (s.autoUpdate !== undefined) state.autoUpdate = s.autoUpdate;
+        if (s.autoTheme !== undefined) state.autoTheme = s.autoTheme;
         if (s.studyGoal !== undefined) state.studyGoal = s.studyGoal;
         if (s.lastDailyReward !== undefined)
           state.userStats.lastDailyReward = s.lastDailyReward;
@@ -237,6 +258,8 @@ export async function loadFromSupabase(user: { id: string }) {
           state.backgroundMusicVolume = s.backgroundMusicVolume;
         if (s.streakLastDate !== undefined)
           state.streak.lastDate = s.streakLastDate;
+        if (s.survivalHealth !== undefined)
+          state.userStats.survivalHealth = s.survivalHealth;
 
         applyTheme();
         updateVoiceUI();
@@ -294,5 +317,32 @@ export async function loadFromSupabase(user: { id: string }) {
     showToast("✅ Профиль загружен");
   } catch (e) {
     console.error("Load Error:", e);
+  }
+}
+
+export async function fetchRandomQuote() {
+  try {
+    // 1. Узнаем общее количество цитат
+    const { count, error: countError } = await client
+      .from("quotes")
+      .select("*", { count: "exact", head: true });
+
+    if (countError || count === null || count === 0) return null;
+
+    // 2. Выбираем случайный индекс
+    const randomIndex = Math.floor(Math.random() * count);
+
+    // 3. Загружаем одну цитату по этому индексу
+    const { data, error } = await client
+      .from("quotes")
+      .select("*")
+      .range(randomIndex, randomIndex)
+      .single();
+
+    if (error) throw error;
+    return data;
+  } catch (e) {
+    console.warn("Quote fetch error:", e);
+    return null;
   }
 }

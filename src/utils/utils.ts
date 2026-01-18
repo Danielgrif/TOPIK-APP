@@ -1,9 +1,10 @@
 import { state } from "../core/state.ts";
+import { duckBackgroundMusic } from "../ui/ui_settings.ts";
 
 /**
  * Creates a debounced function that delays invoking `fn` until after `wait` milliseconds.
  */
-export function debounce<T extends (...args: any[]) => any>(
+export function debounce<T extends (...args: unknown[]) => unknown>(
   fn: T,
   wait: number = 200,
 ): (...args: Parameters<T>) => void {
@@ -34,7 +35,7 @@ export function showToast(msg: string, timeout: number = 3500): void {
     setTimeout(() => {
       try {
         container.removeChild(el);
-      } catch (_e) {
+      } catch {
         // Ignore
       }
     }, timeout);
@@ -129,7 +130,7 @@ function _ensureAudio(): AudioContext | null {
       _audioCtx = new (window.AudioContext || window.webkitAudioContext)();
     if (_audioCtx.state === "suspended") _audioCtx.resume();
     return _audioCtx;
-  } catch (_e) {
+  } catch {
     return null;
   }
 }
@@ -138,7 +139,7 @@ function _ensureAudio(): AudioContext | null {
  * Plays a synthesized tone using Web Audio API.
  */
 
-type ToneType = "success" | "failure" | "survival-success" | "life-lost";
+type ToneType = "success" | "failure" | "survival-success" | "life-lost" | "cash-register" | "achievement-unlock";
 
 export function playTone(
   type: ToneType = "success",
@@ -150,7 +151,7 @@ export function playTone(
       if (!ctx) return resolve();
       try {
         if (_osc) _osc.stop();
-      } catch (_e) {
+      } catch {
         // Ignore
       }
       const o = ctx.createOscillator();
@@ -165,6 +166,13 @@ export function playTone(
         o.frequency.exponentialRampToValueAtTime(1174, now + 0.1);
         g.gain.setValueAtTime(0.1, now);
         g.gain.exponentialRampToValueAtTime(0.01, now + 0.1);
+      } else if (type === "cash-register") {
+        o.type = "square";
+        o.frequency.setValueAtTime(800, now);
+        o.frequency.setValueAtTime(1600, now + 0.1); // Скачок частоты (дзынь-дзынь)
+        g.gain.setValueAtTime(0.05, now);
+        g.gain.setValueAtTime(0.05, now + 0.1);
+        g.gain.exponentialRampToValueAtTime(0.001, now + 0.4);
       } else if (type === "survival-success") {
         o.type = "square";
         o.frequency.setValueAtTime(880, now);
@@ -177,6 +185,16 @@ export function playTone(
         o.frequency.exponentialRampToValueAtTime(50, now + 0.4);
         g.gain.setValueAtTime(0.3, now);
         g.gain.exponentialRampToValueAtTime(0.01, now + 0.4);
+      } else if (type === "achievement-unlock") {
+        o.type = "sine";
+        o.frequency.setValueAtTime(523.25, now); // C5
+        o.frequency.setValueAtTime(659.25, now + 0.1); // E5
+        o.frequency.setValueAtTime(783.99, now + 0.2); // G5
+        o.frequency.setValueAtTime(1046.50, now + 0.3); // C6
+        g.gain.setValueAtTime(0.1, now);
+        g.gain.linearRampToValueAtTime(0.1, now + 0.3);
+        g.gain.exponentialRampToValueAtTime(0.001, now + 0.8);
+        duration = 800;
       } else {
         o.type = "sawtooth";
         o.frequency.setValueAtTime(200, now);
@@ -190,15 +208,39 @@ export function playTone(
       setTimeout(() => {
         try {
           o.stop();
-        } catch (_e) {
+        } catch {
           // Ignore
         }
         _osc = null;
         resolve();
       }, duration);
-    } catch (_e) {
+    } catch {
       resolve();
     }
+  });
+}
+
+/**
+ * Simulates a typewriter effect on an element.
+ */
+export function typeText(element: HTMLElement, text: string, speed: number = 40): Promise<void> {
+  return new Promise((resolve) => {
+    element.textContent = "";
+    element.classList.add("typing-effect");
+    let i = 0;
+    
+    function type() {
+      if (i < text.length) {
+        element.textContent += text.charAt(i);
+        i++;
+        setTimeout(type, speed);
+      } else {
+        element.classList.remove("typing-effect");
+        resolve();
+      }
+    }
+    
+    type();
   });
 }
 
@@ -210,7 +252,7 @@ export function speak(
   url: string | null | undefined,
 ): Promise<void> {
   // Приглушаем музыку в начале
-  import("../ui/ui_settings.js").then((m) => m.duckBackgroundMusic(true));
+  duckBackgroundMusic(true);
 
   const promise = new Promise<void>((resolve) => {
     if (url) {
@@ -267,7 +309,7 @@ export function speak(
 
   // Когда озвучка завершена (успешно или с ошибкой), восстанавливаем громкость
   promise.finally(() => {
-    import("../ui/ui_settings.js").then((m) => m.duckBackgroundMusic(false));
+    duckBackgroundMusic(false);
   });
 
   return promise;

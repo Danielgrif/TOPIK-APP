@@ -7,8 +7,7 @@ import {
 } from "./utils/utils.ts";
 import { QuizStrategies } from "./ui/quiz_strategies.ts";
 import { state } from "./core/state.ts";
-// @ts-ignore
-import { runCrossfadeTests } from "./test_crossfade.js";
+import { runCrossfadeTests } from "./test_crossfade.ts";
 import { Word } from "./types/index.ts";
 
 /**
@@ -252,7 +251,7 @@ export async function runTests() {
     failed++;
   }
 
-  if (runCrossfadeTests) await runCrossfadeTests(assert, assertRange);
+  await runCrossfadeTests(assert, assertRange);
 
   console.log(`\n🏁 Result: ${passed} Passed, ${failed} Failed`);
   console.groupEnd();

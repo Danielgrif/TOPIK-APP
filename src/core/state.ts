@@ -29,6 +29,7 @@ export interface AppState {
   searchHistory: string[];
   customWords: Word[];
   studyGoal: StudyGoal;
+  favoriteQuotes: any[];
   dirtyWordIds: Set<string | number>;
 
   currentStar: string;
@@ -44,6 +45,7 @@ export interface AppState {
   viewMode: string;
   themeColor: string;
   autoUpdate: boolean;
+  autoTheme: boolean;
   backgroundMusicEnabled: boolean;
   backgroundMusicVolume: number;
   backgroundMusicTrack?: string;
@@ -73,6 +75,7 @@ export const state: AppState = {
     streakFreeze: 0,
     lastDailyReward: null,
     achievements: [],
+    survivalHealth: 0,
   },
   learned: new Set(),
   mistakes: new Set(),
@@ -85,6 +88,7 @@ export const state: AppState = {
   searchHistory: [],
   customWords: [],
   studyGoal: { type: "words", target: 10 },
+  favoriteQuotes: [],
   dirtyWordIds: new Set(),
 
   currentStar: "all",
@@ -103,6 +107,7 @@ export const state: AppState = {
   viewMode: localStorage.getItem("view_mode_v1") || "grid",
   themeColor: localStorage.getItem("theme_color_v1") || "purple",
   autoUpdate: localStorage.getItem("auto_update_v1") !== "false",
+  autoTheme: localStorage.getItem("auto_theme_v1") === "true",
   backgroundMusicEnabled:
     localStorage.getItem("background_music_enabled_v1") === "true",
   backgroundMusicVolume:
@@ -140,7 +145,7 @@ export const state: AppState = {
 };
 
 try {
-  const load = (key: string, def: any) => {
+  const load = <T>(key: string, def: T): T => {
     const val = localStorage.getItem(key);
     return val ? JSON.parse(val) : def;
   };
@@ -169,6 +174,7 @@ try {
   state.searchHistory = load("search_history_v1", []);
   state.customWords = load("custom_words_v1", []);
   state.studyGoal = load("study_goal_v1", { type: "words", target: 10 });
+  state.favoriteQuotes = load("favorite_quotes_v1", []);
   state.dirtyWordIds = new Set(load("dirty_ids_v1", []));
   state.quizDifficulty = localStorage.getItem("quiz_difficulty_v1") || "all";
   state.quizTopic = localStorage.getItem("quiz_topic_v1") || "all";
@@ -183,6 +189,8 @@ try {
     state.userStats.streakFreeze = 0;
   if (state.userStats.lastDailyReward === undefined)
     state.userStats.lastDailyReward = null;
+  if (state.userStats.survivalHealth === undefined)
+    state.userStats.survivalHealth = 0;
 } catch (e) {
   console.error("State init error:", e);
 }

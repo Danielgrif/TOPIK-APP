@@ -1,45 +1,5 @@
-# Dependencies
-node_modules/
-
-# Environment Variables
+node_modules
+dist
 .env
-.env.*
-env/
-
-# Build Output
-dist/
-
-# Logs
-*.log
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-
-# Python
-__pycache__/
-*.py[cod]
-venv/
-.venv/
-.pytest_cache/
-
-# TypeScript
-*.tsbuildinfo
-
-# IDE & OS
-.vscode/
-.idea/
 .DS_Store
 Thumbs.db
-ehthumbs.db
-Desktop.ini
-*.swp
-*.swo
-.spotlight-V100
-.trashes
-
-# Testing
-coverage/
-
-# Project Specific
-# Временные файлы генератора контента
-temp_*.mp3

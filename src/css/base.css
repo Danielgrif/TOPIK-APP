@@ -1,0 +1,61 @@
+*, *::before, *::after { box-sizing: border-box; }
+
+html {
+    scroll-behavior: smooth;
+    -webkit-tap-highlight-color: transparent;
+}
+
+:root {
+    /* --- Modern Palette (Soft & Vibrant) --- */
+    --primary: #7c3aed;
+    --primary-hover: #6d28d9;
+    --primary-light: rgba(124, 58, 237, 0.15);
+    --accent: #a78bfa;
+    
+    /* --- Functional Colors --- */
+    --success: #059669;
+    --danger: #e11d48;
+    --warning: #d97706;
+    --info: #2563eb;
+    --gold: #f59e0b;
+
+    /* --- Backgrounds --- */
+    --bg: #f5f3ff;
+    --surface-1: #ffffff;
+    --surface-2: #ede9fe;
+    --surface-3: #ddd6fe;
+    --input-bg: #ede9fe;
+
+    /* --- Borders & Text --- */
+    --border-color: #ddd6fe;
+    --text-main: #111827;     /* Gray-900 - High contrast */
+    --text-sub: #4b5563;      /* Gray-600 - Readable secondary */
+    --text-tertiary: #9ca3af; /* Gray-400 */
+    --text-inverse: #ffffff;
+
+    /* --- Effects --- */
+    --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+    --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+    --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+    --shadow-xl: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
+    
+    --radius-sm: 8px;
+    --radius-md: 12px;
+    --radius-lg: 20px;
+    --radius-full: 9999px;
+}
+
+body { 
+    font-family: "Pretendard Variable", Pretendard, -apple-system, BlinkMacSystemFont, system-ui, Roboto, "Helvetica Neue", "Segoe UI", "Apple SD Gothic Neo", "Noto Sans KR", "Malgun Gothic", "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", sans-serif;
+    background: var(--bg);
+    padding: 0;
+    color: var(--text-main); 
+    margin: 0;
+    min-height: 100vh;
+    transition: background-color 0.3s ease, color 0.3s ease;
+    transition: background-color 0.4s cubic-bezier(0.25, 0.8, 0.25, 1), color 0.4s cubic-bezier(0.25, 0.8, 0.25, 1);
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    line-height: 1.6; /* Improved readability */
+}
