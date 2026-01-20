@@ -1,5 +1,5 @@
 import { state } from "../core/state.ts";
-import { showToast, parseBilingualString, playTone } from "../utils/utils.ts";
+import { showToast, parseBilingualString, playTone, playComboSound } from "../utils/utils.ts";
 import { ensureSessionStarted, playAndSpeak, saveAndRender } from "./ui.ts";
 import { closeModal, openModal } from "./ui_modal.ts";
 import { recordAttempt, scheduleSaveState } from "../core/db.ts";
@@ -24,6 +24,8 @@ let survivalLives: number = 0;
 let isQuizPaused: boolean = false;
 let advanceTimer: number | null = null;
 let currentConfig: QuizConfig | null = null;
+let quizXPGained: number = 0;
+let quizStreak: number = 0;
 
 export function updateDailyChallengeUI() {
   const btn = document.querySelector(".fire-btn") as HTMLElement;
@@ -98,73 +100,50 @@ export function buildQuizModes() {
   const quizGame = document.getElementById("quiz-game");
   if (quizGame) quizGame.style.display = "none";
   const modeSelector = document.getElementById("quiz-mode-selector");
-  if (modeSelector) modeSelector.style.display = "grid";
+  if (modeSelector) modeSelector.style.display = "flex";
   const quizDiff = document.getElementById("quiz-difficulty");
   if (quizDiff) quizDiff.style.display = "flex";
   const quizFilters = document.getElementById("quiz-filters");
   if (quizFilters) quizFilters.style.display = "flex";
 
   const modes = [
-    { id: "mix", emoji: "🔀", label: "Микс (Все режимы)", mode: "mix" },
-    {
-      id: "multiple-choice",
-      emoji: "🎯",
-      label: "Множественный выбор",
-      mode: "multiple-choice",
-    },
-    { id: "flashcard", emoji: "🔄", label: "Флешкарты", mode: "flashcard" },
-    { id: "reverse", emoji: "🔄", label: "Обратно (Рус→Кор)", mode: "reverse" },
-    {
-      id: "sentence",
-      emoji: "📝",
-      label: "Заполнить предложение",
-      mode: "sentence",
-    },
-    { id: "typing", emoji: "⌨️", label: "Написание (Хардкор)", mode: "typing" },
-    {
-      id: "dictation",
-      emoji: "✍️",
-      label: "Диктант (На слух)",
-      mode: "dictation",
-    },
-    { id: "audio", emoji: "🎧", label: "Аудирование (Слух)", mode: "audio" },
-    {
-      id: "dialogue",
-      emoji: "🗣️",
-      label: "Диалог (Контекст)",
-      mode: "dialogue",
-    },
-    {
-      id: "true-false",
-      emoji: "✅",
-      label: "Правда / Ложь",
-      mode: "true-false",
-    },
-    { id: "sprint", emoji: "⚡", label: "Спринт (Таймер)", mode: "sprint" },
-    { id: "survival", emoji: "☠️", label: "Выживание", mode: "survival" },
-    {
-      id: "scramble",
-      emoji: "🧩",
-      label: "Конструктор фраз",
-      mode: "scramble",
-    },
-    { id: "essay", emoji: "✍️", label: "Эссе (Письмо)", mode: "essay" },
-    { id: "confusing", emoji: "🤔", label: "Похожие слова", mode: "confusing" },
-    { id: "synonyms", emoji: "🤝", label: "Синонимы", mode: "synonyms" },
-    { id: "antonyms", emoji: "↔️", label: "Антонимы", mode: "antonyms" },
-    {
-      id: "association",
-      emoji: "🔗",
-      label: "Соедини пары",
-      mode: "association",
-    },
-    {
-      id: "pronunciation",
-      emoji: "🎤",
-      label: "Произношение",
-      mode: "pronunciation",
-    },
+    // Challenges
+    { id: "mix", emoji: "🔀", label: "Микс", mode: "mix", category: "challenge" },
+    { id: "sprint", emoji: "⚡", label: "Спринт", mode: "sprint", category: "challenge" },
+    { id: "survival", emoji: "☠️", label: "Выживание", mode: "survival", category: "challenge" },
+
+    // Basics
+    { id: "multiple-choice", emoji: "🎯", label: "Выбор", mode: "multiple-choice", category: "basics" },
+    { id: "reverse", emoji: "🔄", label: "Обратно", mode: "reverse", category: "basics" },
+    { id: "flashcard", emoji: "🃏", label: "Карточки", mode: "flashcard", category: "basics" },
+    { id: "true-false", emoji: "✅", label: "Верно/Нет", mode: "true-false", category: "basics" },
+
+    // Writing & Context
+    { id: "typing", emoji: "⌨️", label: "Написание", mode: "typing", category: "writing" },
+    { id: "sentence", emoji: "📝", label: "Пропуски", mode: "sentence", category: "writing" },
+    { id: "scramble", emoji: "🧩", label: "Конструктор", mode: "scramble", category: "writing" },
+    { id: "essay", emoji: "✍️", label: "Эссе", mode: "essay", category: "writing" },
+
+    // Audio
+    { id: "audio", emoji: "🎧", label: "Аудио", mode: "audio", category: "audio" },
+    { id: "dictation", emoji: "✍️", label: "Диктант", mode: "dictation", category: "audio" },
+    { id: "dialogue", emoji: "🗣️", label: "Диалог", mode: "dialogue", category: "audio" },
+    { id: "pronunciation", emoji: "🎤", label: "Речь", mode: "pronunciation", category: "audio" },
+
+    // Advanced
+    { id: "association", emoji: "🔗", label: "Пары", mode: "association", category: "advanced" },
+    { id: "confusing", emoji: "🤔", label: "Похожие", mode: "confusing", category: "advanced" },
+    { id: "synonyms", emoji: "🤝", label: "Синонимы", mode: "synonyms", category: "advanced" },
+    { id: "antonyms", emoji: "↔️", label: "Антонимы", mode: "antonyms", category: "advanced" },
   ];
+
+  const categories: Record<string, string> = {
+    challenge: "🔥 Вызовы",
+    basics: "📚 Основы",
+    writing: "✍️ Письмо",
+    audio: "🎧 Аудирование",
+    advanced: "🧠 Продвинутый"
+  };
 
   quizTopic = state.quizTopic || "all";
   quizCategory = state.quizCategory || "all";
@@ -191,16 +170,58 @@ export function buildQuizModes() {
   const selector = document.getElementById("quiz-mode-selector");
   if (selector) {
     selector.innerHTML = "";
-    modes.forEach((m) => {
-      const btn = document.createElement("button");
-      btn.className = "quiz-mode-btn";
-      btn.dataset.mode = m.mode;
-      btn.innerHTML = `<span class="mode-icon">${m.emoji}</span><span class="mode-label">${m.label}</span>`;
-      btn.onclick = () => startQuizMode(m.mode);
-      selector.appendChild(btn);
+    
+    // Group modes by category
+    const grouped: Record<string, typeof modes> = {};
+    modes.forEach(m => {
+      if (!grouped[m.category]) grouped[m.category] = [];
+      grouped[m.category].push(m);
+    });
+
+    // Render categories
+    Object.entries(categories).forEach(([catKey, catTitle]) => {
+      if (grouped[catKey]) {
+        const header = document.createElement("div");
+        header.className = "quiz-category-header";
+        header.textContent = catTitle;
+        selector.appendChild(header);
+
+        const grid = document.createElement("div");
+        grid.className = "quiz-group-grid";
+
+        grouped[catKey].forEach((m) => {
+          const btn = document.createElement("button");
+          btn.className = "quiz-mode-btn";
+          btn.dataset.mode = m.mode;
+          btn.innerHTML = `<span class="mode-icon">${m.emoji}</span><span class="mode-label">${m.label}</span>`;
+          btn.onclick = (e) => {
+            createRipple(e, btn);
+            setTimeout(() => startQuizMode(m.mode), 300);
+          };
+          grid.appendChild(btn);
+        });
+        selector.appendChild(grid);
+      }
     });
   }
   updateQuizCount();
+}
+
+function createRipple(event: MouseEvent, button: HTMLElement) {
+  const circle = document.createElement("span");
+  const diameter = Math.max(button.clientWidth, button.clientHeight);
+  const radius = diameter / 2;
+  const rect = button.getBoundingClientRect();
+
+  circle.style.width = circle.style.height = `${diameter}px`;
+  circle.style.left = `${event.clientX - rect.left - radius}px`;
+  circle.style.top = `${event.clientY - rect.top - radius}px`;
+  circle.classList.add("ripple");
+
+  const ripple = button.getElementsByClassName("ripple")[0];
+  if (ripple) ripple.remove();
+
+  button.appendChild(circle);
 }
 
 function populateQuizFilters() {
@@ -342,9 +363,14 @@ export function startQuizMode(mode: string) {
   quizIndex = 0;
   quizStart = Date.now();
   quizCorrectCount = 0;
+  quizXPGained = 0;
+  quizStreak = 0;
   quizTimerValue = currentConfig.initialTimer;
   survivalLives = currentConfig.initialLives;
   isQuizPaused = false;
+
+  const comboEl = document.getElementById("quiz-combo");
+  if (comboEl) comboEl.style.display = "none";
 
   const bar = document.getElementById("quiz-progress-fill");
   if (bar) {
@@ -372,6 +398,11 @@ export function startQuizMode(mode: string) {
       if (el) {
         el.innerText = ui.text;
         el.style.color = ui.isDanger ? "var(--danger)" : "";
+        if (ui.isDanger) {
+          playTone("tick");
+          el.style.transform = "scale(1.15)";
+          setTimeout(() => (el.style.transform = ""), 200);
+        }
       }
       if (bar) {
         bar.style.width = `${ui.barPercent}%`;
@@ -381,9 +412,15 @@ export function startQuizMode(mode: string) {
           bar.style.backgroundColor = "";
         }
       }
+      
+      // Update sprint button timers if they exist
+      const sprintBars = document.querySelectorAll(".sprint-timer-bar");
+      sprintBars.forEach((sb) => {
+        (sb as HTMLElement).style.width = `${ui.barPercent}%`;
+      });
     }
 
-    if (gameOver) endQuiz(true);
+    if (gameOver) endQuiz(false);
   }, 1000);
 
   const quizDiff = document.getElementById("quiz-difficulty");
@@ -405,6 +442,9 @@ export function startQuizMode(mode: string) {
   const quizGame = document.getElementById("quiz-game");
   if (quizGame) quizGame.style.display = "flex";
   applyBackgroundMusic(true);
+
+  const modalContent = document.querySelector("#quiz-modal .modal-content");
+  if (modalContent) modalContent.classList.add("game-active");
 
   nextQuizQuestion();
 }
@@ -436,6 +476,8 @@ export function startDailyChallenge() {
     quizIndex = 0;
     quizStart = Date.now();
     quizCorrectCount = 0;
+    quizXPGained = 0;
+    quizStreak = 0;
 
     const quizDiff = document.getElementById("quiz-difficulty");
     if (quizDiff) quizDiff.style.display = "none";
@@ -539,7 +581,7 @@ function openDailyStatusModal() {
   openModal("daily-status-modal");
 }
 
-export function nextQuizQuestion() {
+function nextQuizQuestion() {
   if (quizIndex >= quizWords.length) {
     endQuiz();
     return;
@@ -548,6 +590,9 @@ export function nextQuizQuestion() {
 
   const infoEl = document.getElementById("quiz-extra-info");
   if (infoEl) infoEl.remove();
+
+  // Reset container classes (remove grid-2 etc from previous questions)
+  if (container) container.className = "quiz-options";
 
   if (container)
     container
@@ -687,7 +732,9 @@ function recordQuizAnswer(isCorrect: boolean, autoAdvance: boolean = true) {
     quizCorrectCount++;
     state.learned.add(word.id);
     state.mistakes.delete(word.id);
+    quizStreak++;
     addXP(10);
+    quizXPGained += 10;
 
     if (currentConfig) {
       const { timeChange, livesChange } = currentConfig.onAnswer(
@@ -698,16 +745,21 @@ function recordQuizAnswer(isCorrect: boolean, autoAdvance: boolean = true) {
       quizTimerValue += timeChange;
       survivalLives += livesChange;
     }
+    updateComboUI(quizStreak);
 
     document.body.classList.add("correct-flash");
     setTimeout(() => document.body.classList.remove("correct-flash"), 700);
   } else {
     state.mistakes.add(word.id);
+    quizStreak = 0;
     addXP(-2);
-    const gameEl = document.getElementById("quiz-game");
-    if (gameEl) {
-      gameEl.classList.add("shake");
-      setTimeout(() => gameEl.classList.remove("shake"), 700);
+    quizXPGained -= 2;
+    const questionEl = document.getElementById("quiz-q");
+    if (questionEl) {
+      questionEl.classList.remove("shake");
+      void questionEl.offsetWidth;
+      questionEl.classList.add("shake");
+      setTimeout(() => questionEl.classList.remove("shake"), 500);
     }
 
     if (currentConfig) {
@@ -723,17 +775,30 @@ function recordQuizAnswer(isCorrect: boolean, autoAdvance: boolean = true) {
       if (scoreEl && currentQuizMode === "survival")
         scoreEl.innerText = `❤️ ${survivalLives}`;
 
+      if (currentQuizMode === "survival" && livesChange < 0) {
+        playTone("life-lost");
+        document.body.classList.remove("damage-flash");
+        void document.body.offsetWidth;
+        document.body.classList.add("damage-flash");
+        setTimeout(() => document.body.classList.remove("damage-flash"), 600);
+      }
+
       if (gameOver) {
-        endQuiz(true);
+        endQuiz(false);
         return;
       }
     }
     document.body.classList.add("wrong-flash");
     setTimeout(() => document.body.classList.remove("wrong-flash"), 700);
+    updateComboUI(0);
   }
   saveAndRender();
   if (currentQuizMode !== "survival" || isCorrect) {
-    playTone(isCorrect ? "success" : "failure");
+    if (isCorrect && quizStreak > 1) {
+      playComboSound(quizStreak);
+    } else {
+      playTone(isCorrect ? "success" : "failure");
+    }
   }
 
   const advance = () => {
@@ -803,12 +868,15 @@ function endQuiz(forceEnd: boolean = false) {
   const quizGameEl = document.getElementById("quiz-game");
   if (quizGameEl) quizGameEl.style.display = "none";
   const quizModeSelectorEl = document.getElementById("quiz-mode-selector");
-  if (quizModeSelectorEl) quizModeSelectorEl.style.display = "grid";
+  if (quizModeSelectorEl) quizModeSelectorEl.style.display = "flex";
   const quizDifficultyEl = document.getElementById("quiz-difficulty");
   if (quizDifficultyEl) quizDifficultyEl.style.display = "flex";
   const quizFiltersEl = document.getElementById("quiz-filters");
   if (quizFiltersEl) quizFiltersEl.style.display = "flex";
   applyBackgroundMusic();
+
+  const modalContent = document.querySelector("#quiz-modal .modal-content");
+  if (modalContent) modalContent.classList.remove("game-active");
 
   const searchInputEl = document.getElementById("quiz-search-input");
   if (searchInputEl) searchInputEl.style.display = "block";
@@ -819,7 +887,16 @@ function endQuiz(forceEnd: boolean = false) {
   ) as HTMLElement;
   if (header) header.style.display = "flex";
 
-  showToast("🏁 Квиз завершен!");
+  if (!forceEnd) {
+    let total = quizWords.length;
+    if (currentQuizMode === "survival" || currentQuizMode === "sprint") {
+      total = quizIndex + 1;
+      total = Math.min(total, quizWords.length);
+    }
+    showQuizSummaryModal(quizCorrectCount, total, Math.max(0, quizXPGained));
+  } else {
+    showToast("Тренировка прервана");
+  }
 }
 
 export function quitQuiz() {
@@ -857,7 +934,7 @@ export function updateQuizCount() {
   updateResetButton();
 }
 
-export function updateQuizModesAvailability() {
+function updateQuizModesAvailability() {
   const selector = document.getElementById("quiz-mode-selector");
   if (!selector) return;
   const buttons = selector.querySelectorAll(".quiz-mode-btn");
@@ -970,5 +1047,83 @@ function updateResetButton() {
     btn.style.display = "inline-flex";
   } else {
     if (btn) btn.style.display = "none";
+  }
+}
+
+function showQuizSummaryModal(correct: number, total: number, xp: number) {
+  let modal = document.getElementById("quiz-summary-modal");
+  if (!modal) {
+    modal = document.createElement("div");
+    modal.id = "quiz-summary-modal";
+    modal.className = "modal";
+    modal.setAttribute("role", "dialog");
+    modal.onclick = (e) => {
+      if (e.target === modal) closeModal("quiz-summary-modal");
+    };
+    document.body.appendChild(modal);
+  }
+
+  const accuracy = total > 0 ? Math.round((correct / total) * 100) : 0;
+  let title = "Неплохо!";
+  let emoji = "🙂";
+  let color = "var(--text-main)";
+  
+  if (accuracy === 100) { 
+    title = "Идеально!"; 
+    emoji = "🏆"; 
+    color = "var(--gold)"; 
+    if (typeof window.confetti === "function") {
+      window.confetti({
+        particleCount: 150,
+        spread: 70,
+        origin: { y: 0.6 },
+        zIndex: 20005,
+      });
+    }
+  }
+  else if (accuracy >= 80) { title = "Отлично!"; emoji = "🔥"; color = "var(--success)"; }
+  else if (accuracy >= 50) { title = "Хорошо"; emoji = "👍"; color = "var(--primary)"; }
+  else { title = "Надо потренироваться"; emoji = "💪"; color = "var(--text-sub)"; }
+
+  modal.innerHTML = `
+    <div class="modal-content modal-centered" style="text-align: center; max-width: 350px; padding: 30px 20px;">
+        <div style="font-size: 64px; margin-bottom: 15px; animation: bounce 1s;">${emoji}</div>
+        <div style="font-size: 24px; font-weight: 800; margin-bottom: 5px; color: ${color};">${title}</div>
+        <div style="font-size: 14px; color: var(--text-sub); margin-bottom: 30px;">Тренировка завершена</div>
+        
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 30px;">
+            <div style="background: var(--surface-2); padding: 15px; border-radius: 16px; border: 1px solid var(--border-color);">
+                <div style="font-size: 12px; color: var(--text-sub); margin-bottom: 5px; font-weight: 600;">Точность</div>
+                <div style="font-size: 24px; font-weight: 900; color: ${accuracy >= 80 ? 'var(--success)' : 'var(--text-main)'};">${accuracy}%</div>
+            </div>
+            <div style="background: var(--surface-2); padding: 15px; border-radius: 16px; border: 1px solid var(--border-color);">
+                <div style="font-size: 12px; color: var(--text-sub); margin-bottom: 5px; font-weight: 600;">XP</div>
+                <div style="font-size: 24px; font-weight: 900; color: var(--gold);">+${xp}</div>
+            </div>
+        </div>
+
+        <div style="font-size: 15px; color: var(--text-main); margin-bottom: 25px; background: var(--surface-2); padding: 10px; border-radius: 12px;">
+            Правильных ответов: <b>${correct}</b> из <b>${total}</b>
+        </div>
+        
+        <button class="btn btn-quiz" style="width: 100%; padding: 15px; font-size: 16px; border-radius: 16px;" onclick="closeModal('quiz-summary-modal')">Продолжить</button>
+    </div>
+  `;
+  
+  openModal("quiz-summary-modal");
+}
+
+function updateComboUI(streak: number | undefined) {
+  const el = document.getElementById("quiz-combo");
+  if (!el) return;
+  
+  if (streak && streak > 1) {
+    el.style.display = "block";
+    el.innerText = `🔥 ${streak}`;
+    el.classList.remove("pop");
+    void el.offsetWidth;
+    el.classList.add("pop");
+  } else {
+    el.style.display = "none";
   }
 }

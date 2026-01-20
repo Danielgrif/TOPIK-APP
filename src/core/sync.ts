@@ -1,12 +1,20 @@
 import { client } from "./supabaseClient.ts";
 import { state } from "./state.ts";
+import { showToast } from "../utils/utils.ts";
 
 export async function syncGlobalStats() {
-  if (state.isSyncing || !navigator.onLine) return;
+  if (state.isSyncing) return;
 
-  const { data, error } = await client.auth.getUser();
-  if (error || !data?.user) return;
-  const user = data.user;
+  // FIX: Используем getSession вместо getUser для поддержки офлайн-режима.
+  // getUser требует сети, а getSession берет токен из localStorage.
+  const { data, error } = await client.auth.getSession();
+
+  if (error || !data?.session?.user) {
+    // console.warn("Sync skipped: No active session.");
+    return;
+  }
+
+  const user = data.session.user;
 
   state.isSyncing = true;
   const syncBtn = document.getElementById("sync-btn");
@@ -26,6 +34,7 @@ export async function syncGlobalStats() {
       themeColor: state.themeColor,
       backgroundMusicEnabled: state.backgroundMusicEnabled,
       backgroundMusicVolume: state.backgroundMusicVolume,
+      ttsVolume: state.ttsVolume,
       streakLastDate: state.streak.lastDate,
       survivalHealth: state.userStats.survivalHealth,
     };
@@ -65,15 +74,11 @@ export async function syncGlobalStats() {
           is_favorite: state.favorites.has(id),
           attempts: h.attempts,
           correct: h.correct,
-          last_review: h.lastReview
-            ? new Date(h.lastReview).toISOString()
-            : null,
+          last_review: h.lastReview,
           sm2_interval: h.sm2?.interval || 0,
           sm2_repetitions: h.sm2?.repetitions || 0,
           sm2_ef: h.sm2?.ef || 2.5,
-          sm2_next_review: h.sm2?.nextReview
-            ? new Date(h.sm2.nextReview).toISOString()
-            : null,
+          sm2_next_review: h.sm2?.nextReview || null,
           updated_at: new Date().toISOString(),
         });
       }
@@ -91,6 +96,12 @@ export async function syncGlobalStats() {
     }
   } catch (e) {
     console.error("Sync failed:", e);
+    // @ts-ignore
+    if (e?.message?.includes("JWT") || e?.code === "PGRST301") {
+        // Токен мог истечь во время выполнения запроса
+        showToast("⚠️ Ошибка синхронизации: требуется повторный вход");
+        // Здесь можно вызвать logout или открыть модалку входа, если это критично
+    }
   } finally {
     state.isSyncing = false;
     if (syncBtn) syncBtn.classList.remove("rotating");

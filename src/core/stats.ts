@@ -1,25 +1,33 @@
 import { state } from "./state.ts";
-import { client } from "./supabaseClient.ts";
 import { showToast, playTone } from "../utils/utils.ts";
-import { scheduleSaveState } from "./db.ts";
 import { showLevelUpAnimation } from "../ui/ui_interactions.ts";
 import { Scheduler } from "./scheduler.ts";
+import { scheduleSaveState } from "./db.ts";
 
 export function getXPForNextLevel(lvl: number): number {
-  return 100 + lvl * 50;
+  // Было: 100 + lvl * 50 (Линейная)
+  // Стало: 100 * (lvl ^ 1.2) (Слегка экспоненциальная, сложнее на высоких уровнях)
+  return Math.floor(100 * Math.pow(lvl, 1.2));
 }
 
 export function addXP(val: number) {
-  state.userStats.xp += val;
-  if (val > 0) state.userStats.coins += val;
-  let required = getXPForNextLevel(state.userStats.level);
-  while (state.userStats.xp >= required) {
-    state.userStats.xp -= required;
-    state.userStats.level++;
-    required = getXPForNextLevel(state.userStats.level);
-    showLevelUpAnimation(state.userStats.level);
+  state.userStats.xp = (state.userStats.xp || 0) + val;
+  if (val > 0) state.userStats.coins = (state.userStats.coins || 0) + val;
+
+  let currentLevel = Number(state.userStats.level || 1);
+  let requiredForCurrentLevel = getXPForNextLevel(currentLevel);
+
+  while (state.userStats.xp >= requiredForCurrentLevel) {
+    state.userStats.xp -= requiredForCurrentLevel;
+    currentLevel++;
+    showLevelUpAnimation(currentLevel);
+    
+    requiredForCurrentLevel = getXPForNextLevel(currentLevel);
   }
+  
+  state.userStats.level = currentLevel;
   updateXPUI();
+  scheduleSaveState();
 }
 
 export function updateXPUI() {
@@ -47,51 +55,50 @@ export function updateStats() {
   if (headerCoins) headerCoins.innerText = String(state.userStats.coins);
 
   const strip = document.getElementById("stats-strip");
-  if (!strip) return;
+  if (strip) {
+    const accuracy = calculateOverallAccuracy();
+    const stats = [
+      {
+        label: "Серия",
+        value: state.streak.count,
+        icon: "🔥",
+        color: "var(--danger)",
+        isChart: false,
+      },
+      {
+        label: "Изучено",
+        value: state.learned.size,
+        icon: "📚",
+        color: "var(--success)",
+        isChart: false,
+      },
+      {
+        label: "Точность",
+        value: accuracy,
+        icon: "🎯",
+        color: "var(--primary)",
+        isChart: true,
+      },
+      {
+        label: "Ошибок",
+        value: state.mistakes.size,
+        icon: "⚠️",
+        color: "var(--warning)",
+        isChart: false,
+      },
+      {
+        label: "Сессии",
+        value: state.sessions.length,
+        icon: "⏱",
+        color: "var(--info)",
+        isChart: false,
+      },
+    ];
 
-  const accuracy = calculateOverallAccuracy();
-  const stats = [
-    {
-      label: "Серия",
-      value: state.streak.count,
-      icon: "🔥",
-      color: "var(--danger)",
-      isChart: false,
-    },
-    {
-      label: "Изучено",
-      value: state.learned.size,
-      icon: "📚",
-      color: "var(--success)",
-      isChart: false,
-    },
-    {
-      label: "Точность",
-      value: accuracy,
-      icon: "🎯",
-      color: "var(--primary)",
-      isChart: true,
-    },
-    {
-      label: "Ошибок",
-      value: state.mistakes.size,
-      icon: "⚠️",
-      color: "var(--warning)",
-      isChart: false,
-    },
-    {
-      label: "Сессии",
-      value: state.sessions.length,
-      icon: "⏱",
-      color: "var(--info)",
-      isChart: false,
-    },
-  ];
-
-  strip.innerHTML = stats
-    .map((s) => {
-      if (s.isChart) {
-        return `
+    strip.innerHTML = stats
+      .map((s) => {
+        if (s.isChart) {
+          return `
                 <div class="stat-card-primary" style="border-bottom: 3px solid ${s.color}">
                     <div class="stat-chart-wrapper">
                         <svg viewBox="0 0 36 36" class="circular-chart">
@@ -103,18 +110,19 @@ export function updateStats() {
                     <div class="stat-label-primary">${s.label}</div>
                 </div>
             `;
-      }
-      return `
-        <div class="stat-card-primary" style="border-bottom: 3px solid ${s.color}">
-            <div class="stat-icon-primary">${s.icon}</div>
-            <div class="stat-info-primary">
-                <div class="stat-value-primary">${s.value}</div>
-                <div class="stat-label-primary">${s.label}</div>
-            </div>
-        </div>
-    `;
-    })
-    .join("");
+        }
+        return `
+          <div class="stat-card-primary" style="border-bottom: 3px solid ${s.color}">
+              <div class="stat-icon-primary">${s.icon}</div>
+              <div class="stat-info-primary">
+                  <div class="stat-value-primary">${s.value}</div>
+                  <div class="stat-label-primary">${s.label}</div>
+              </div>
+          </div>
+      `;
+      })
+      .join("");
+  }
 }
 
 export function updateSRSBadge() {
@@ -125,9 +133,19 @@ export function updateSRSBadge() {
     });
     const q = Scheduler.getQueue({ limit: 999 });
     const badge = document.getElementById("srs-badge");
+    
     if (badge) {
+      const currentCount = parseInt(badge.textContent || "0");
+      const newCount = q.length;
+      
       badge.textContent = String(q.length);
       badge.style.display = q.length > 0 ? "inline-block" : "none";
+
+      if (newCount > 0 && newCount !== currentCount) {
+        badge.classList.remove("badge-pop");
+        void badge.offsetWidth; // Force reflow
+        badge.classList.add("badge-pop");
+      }
     }
 
     const reviewBtn = document.querySelector(
@@ -157,16 +175,6 @@ export function calculateOverallAccuracy(): number {
   if (totalAttempts === 0) return 0;
   return Math.round((totalCorrect / totalAttempts) * 100);
 }
-
-export function setStudyGoal(type: "words" | "time", target: string | number) {
-  state.studyGoal = { type, target: parseInt(String(target)) };
-  localStorage.setItem("study_goal_v1", JSON.stringify(state.studyGoal));
-  scheduleSaveState();
-  renderDetailedStats();
-  showToast("Цель обновлена! 🎯");
-}
-
-let leaderboardSubscription: { unsubscribe: () => void } | null = null;
 
 export function getAchievementDefinitions() {
   const getMasteredCount = () =>
@@ -400,68 +408,6 @@ export function renderAchievements() {
   });
 }
 
-export async function renderLeaderboard() {
-  const container = document.getElementById("stats-details");
-  if (!container) return;
-
-  if (leaderboardSubscription) {
-    client.removeChannel(leaderboardSubscription);
-    leaderboardSubscription = null;
-  }
-
-  container.innerHTML =
-    '<div style="text-align:center; padding:40px;"><div class="loader-circle" style="width:40px; height:40px; border-width:4px; position:relative; margin:0 auto;"></div><div style="margin-top:15px;">Загрузка топа...</div></div>';
-
-  try {
-    const { data, error } = await client
-      .from("user_global_stats")
-      .select("xp, level, user_id")
-      .order("xp", { ascending: false })
-      .limit(10);
-    if (error) throw error;
-
-    let html = `<div style="margin-bottom:20px; display:flex; align-items:center; justify-content:space-between;"><h3 style="margin:0;">🏆 Топ-10 Студентов</h3><button class="btn-mini" onclick="window.renderDetailedStats()">✕</button></div><div class="leaderboard-list" style="display:flex; flex-direction:column; gap:10px;">`;
-
-    const currentUserId = (await client.auth.getUser()).data.user?.id;
-
-    data?.forEach(
-      (user: { user_id: string; level: number; xp: number }, idx: number) => {
-        const isMe = user.user_id === currentUserId;
-        const medal =
-          idx === 0
-            ? "🥇"
-            : idx === 1
-              ? "🥈"
-              : idx === 2
-                ? "🥉"
-                : `#${idx + 1}`;
-        const bg = isMe ? "var(--bg-learned)" : "var(--surface-1)";
-        const border = isMe
-          ? "2px solid var(--success)"
-          : "1px solid var(--border-color)";
-        html += `<div style="display:flex; align-items:center; padding:12px; background:${bg}; border-radius:12px; border:${border};"><div style="font-size:20px; width:40px; font-weight:bold;">${medal}</div><div style="flex:1; font-weight:600;">Студент LVL ${user.level}</div><div style="font-weight:800; color:var(--primary);">${user.xp} XP</div></div>`;
-      },
-    );
-
-    html += "</div>";
-    container.innerHTML = html;
-
-    leaderboardSubscription = client
-      .channel("public:user_global_stats")
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "user_global_stats" },
-        () => {
-          renderLeaderboard();
-        },
-      )
-      .subscribe();
-  } catch (e: unknown) {
-    console.error(e);
-    container.innerHTML = `<div style="color:var(--danger); text-align:center;">Ошибка загрузки: ${(e as Error).message}</div><button class="btn" style="width:100%; margin-top:10px;" onclick="window.renderDetailedStats()">Назад</button>`;
-  }
-}
-
 export function renderTopicMastery() {
   const container = document.getElementById("topic-mastery-list");
   if (!container) return;
@@ -493,6 +439,18 @@ export function renderTopicMastery() {
 }
 
 const chartInstances: Record<string, unknown> = {};
+
+// Helper for chart styling
+function getChartTheme() {
+  const isDark = document.body.classList.contains("dark-mode");
+  return {
+    textColor: isDark ? "rgba(255, 255, 255, 0.7)" : "#64748b",
+    gridColor: isDark ? "rgba(255, 255, 255, 0.05)" : "rgba(0, 0, 0, 0.05)",
+    tooltipBg: isDark ? "#1e1b4b" : "#ffffff",
+    tooltipText: isDark ? "#ffffff" : "#1e293b",
+    fontFamily: "'Pretendard Variable', sans-serif",
+  };
+}
 
 function destroyChart(key: string) {
   const instance = chartInstances[key] as { destroy: () => void } | undefined;
@@ -533,7 +491,8 @@ export function renderDetailedStats() {
   }
 
   const days = getLast7DaysActivity();
-  const streakHtml = `
+  const additionalHtml = ''; // Define additionalHtml to prevent error
+  let streakHtml = `
     <div id="streak-calendar-card" class="streak-calendar-card" style="background: var(--surface-1); padding: 20px; border-radius: 16px; border: 1px solid var(--border-color); margin-bottom: 20px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 15px;">
       <div style="display: flex; align-items: center; gap: 15px;">
         <div style="font-size: 32px;">🔥</div>
@@ -561,17 +520,33 @@ export function renderDetailedStats() {
     </div>
   `;
 
+  // Add Mistake Analysis Button if there are mistakes
+  if (state.mistakes.size > 0) {
+    streakHtml += `
+      <button class="btn" data-action="open-mistakes" style="width: 100%; margin-bottom: 20px; background: rgba(239, 68, 68, 0.1); color: var(--danger); border: 1px solid var(--danger);">
+        ⚠️ Анализ ошибок (${state.mistakes.size})
+      </button>
+    `;
+  }
+
   const existingStreak = document.getElementById("streak-calendar-card");
-  if (existingStreak) {
-    existingStreak.outerHTML = streakHtml;
+  if (existingStreak && existingStreak.parentElement) {
+    existingStreak.outerHTML = streakHtml + additionalHtml;
   } else if (!document.getElementById("activityChart")) {
     container.innerHTML = `
       ${streakHtml}
+      ${additionalHtml}
       <div class="charts-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; margin-top: 20px;">
         <div class="chart-card" style="background: var(--surface-1); padding: 15px; border-radius: 16px; border: 1px solid var(--border-color);">
           <h3 style="margin: 0 0 15px 0; font-size: 16px; font-weight: 700;">📊 Активность (7 дней)</h3>
           <div style="position: relative; height: 200px;">
             <canvas id="activityChart"></canvas>
+          </div>
+        </div>
+        <div class="chart-card" style="background: var(--surface-1); padding: 15px; border-radius: 16px; border: 1px solid var(--border-color);">
+          <h3 style="margin: 0 0 15px 0; font-size: 16px; font-weight: 700;">📅 Изучено слов</h3>
+          <div style="position: relative; height: 200px;">
+            <canvas id="learnedChart"></canvas>
           </div>
         </div>
         <div class="chart-card" style="background: var(--surface-1); padding: 15px; border-radius: 16px; border: 1px solid var(--border-color);">
@@ -595,7 +570,7 @@ export function renderDetailedStats() {
       </div>
     `;
   } else {
-    container.insertAdjacentHTML("afterbegin", streakHtml);
+    container.insertAdjacentHTML("afterbegin", streakHtml + additionalHtml);
   }
 }
 
@@ -609,6 +584,7 @@ export function renderActivityChart() {
   const labels = [];
   const dataPoints = [];
   const now = new Date();
+  const theme = getChartTheme();
 
   for (let i = 6; i >= 0; i--) {
     const d = new Date();
@@ -626,16 +602,23 @@ export function renderActivityChart() {
     dataPoints.push(count);
   }
 
+  // Gradient
+  const gradient = ctx.createLinearGradient(0, 0, 0, 200);
+  gradient.addColorStop(0, "rgba(108, 92, 231, 0.8)");
+  gradient.addColorStop(1, "rgba(108, 92, 231, 0.2)");
+
   chartInstances["activity"] = new window.Chart(ctx, {
     type: "bar",
     data: {
       labels,
       datasets: [
         {
-          label: "Слов",
+          label: "Изучено слов",
           data: dataPoints,
-          backgroundColor: "rgba(108, 92, 231, 0.6)",
-          borderRadius: 4,
+          backgroundColor: gradient,
+          borderRadius: 6,
+          borderSkipped: false,
+          barThickness: 20,
         },
       ],
     },
@@ -643,13 +626,112 @@ export function renderActivityChart() {
       responsive: true,
       maintainAspectRatio: false,
       plugins: { legend: { display: false } },
-      scales: { y: { beginAtZero: true }, x: { grid: { display: false } } },
+      scales: {
+        y: {
+          beginAtZero: true,
+          grid: { color: theme.gridColor, drawBorder: false },
+          ticks: { color: theme.textColor, font: { family: theme.fontFamily }, precision: 0 }
+        },
+        x: {
+          grid: { display: false },
+          ticks: { color: theme.textColor, font: { family: theme.fontFamily } }
+        }
+      },
+      animation: {
+        duration: 1000,
+        easing: 'easeOutQuart'
+      },
+      tooltip: {
+        backgroundColor: theme.tooltipBg,
+        titleColor: theme.tooltipText,
+        bodyColor: theme.tooltipText,
+        borderColor: theme.gridColor,
+        borderWidth: 1,
+        padding: 10,
+        cornerRadius: 8,
+        displayColors: false,
+        callbacks: {
+          label: (context: any) => `📝 ${context.raw} слов`,
+        }
+      }
     },
   });
 }
 
 export function renderLearnedChart() {
-  /* Placeholder */
+  const ctx = (
+    document.getElementById("learnedChart") as HTMLCanvasElement
+  )?.getContext("2d");
+  if (!ctx) return;
+  destroyChart("learned");
+
+  const theme = getChartTheme();
+
+  // Group learned words by level
+  const levels = { "★☆☆": 0, "★★☆": 0, "★★★": 0 };
+  const totals = { "★☆☆": 0, "★★☆": 0, "★★★": 0 };
+  
+  state.dataStore.forEach(w => {
+    if (w.level && w.level in totals) {
+      // @ts-ignore
+      totals[w.level]++;
+      if (state.learned.has(w.id)) {
+        // @ts-ignore
+        levels[w.level]++;
+      }
+    }
+  });
+
+  chartInstances["learned"] = new window.Chart(ctx, {
+    type: "bar",
+    data: {
+      labels: Object.keys(levels),
+      datasets: [{
+        label: "Изучено",
+        data: Object.values(levels),
+        backgroundColor: ["#00b894", "#0984e3", "#6c5ce7"],
+        borderRadius: 6,
+        barThickness: 25,
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: theme.tooltipBg,
+          titleColor: theme.tooltipText,
+          bodyColor: theme.tooltipText,
+          borderColor: theme.gridColor,
+          borderWidth: 1,
+          padding: 10,
+          cornerRadius: 8,
+          callbacks: {
+            label: (context: any) => {
+              const lvl = context.label;
+              // @ts-ignore
+              const total = totals[lvl] || 0;
+              const val = context.raw;
+              const pct = total > 0 ? Math.round((val / total) * 100) : 0;
+              return `📚 ${val} из ${total} (${pct}%)`;
+            }
+          }
+        }
+      },
+      scales: {
+        y: {
+          beginAtZero: true,
+          grid: { color: theme.gridColor, drawBorder: false },
+          ticks: { color: theme.textColor, font: { family: theme.fontFamily }, precision: 0 }
+        },
+        x: {
+          grid: { display: false },
+          ticks: { color: theme.textColor, font: { family: theme.fontFamily } }
+        }
+      }
+    }
+  });
 }
 
 export function renderAccuracyChart() {
@@ -659,9 +741,25 @@ export function renderAccuracyChart() {
   if (!ctx) return;
   destroyChart("accuracy");
 
+  const theme = getChartTheme();
   const recentSessions = state.sessions.slice(-10);
-  const labels = recentSessions.map((_, i) => i + 1);
+  
+  if (recentSessions.length === 0) {
+    // Если нет данных, можно очистить канвас или нарисовать "Нет данных"
+    // В данном случае просто выходим, оставляя пустой канвас (или старый график, если он был, но destroyChart его удалил)
+    return;
+  }
+
+  // Format dates for labels
+  const labels = recentSessions.map((s) => {
+    const d = new Date(s.date);
+    return `${d.getDate()}.${d.getMonth() + 1}`;
+  });
   const data = recentSessions.map((s) => s.accuracy || 0);
+
+  const gradient = ctx.createLinearGradient(0, 0, 0, 200);
+  gradient.addColorStop(0, "rgba(0, 184, 148, 0.4)");
+  gradient.addColorStop(1, "rgba(0, 184, 148, 0.0)");
 
   chartInstances["accuracy"] = new window.Chart(ctx, {
     type: "line",
@@ -672,15 +770,47 @@ export function renderAccuracyChart() {
           label: "Точность %",
           data,
           borderColor: "#00b894",
-          tension: 0.3,
+          backgroundColor: gradient,
+          borderWidth: 3,
+          pointBackgroundColor: "#ffffff",
+          pointBorderColor: "#00b894",
+          pointRadius: 4,
+          pointHoverRadius: 6,
+          fill: true,
+          tension: 0.4,
         },
       ],
     },
     options: {
       responsive: true,
       maintainAspectRatio: false,
-      plugins: { legend: { display: false } },
-      scales: { y: { beginAtZero: true, max: 100 }, x: { display: false } },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: theme.tooltipBg,
+          titleColor: theme.tooltipText,
+          bodyColor: theme.tooltipText,
+          borderColor: theme.gridColor,
+          borderWidth: 1,
+          padding: 10,
+          cornerRadius: 8,
+          callbacks: {
+            label: (context: any) => `🎯 ${context.raw}%`
+          }
+        }
+      },
+      scales: {
+        y: {
+          beginAtZero: true,
+          max: 100,
+          grid: { color: theme.gridColor, drawBorder: false },
+          ticks: { color: theme.textColor, font: { family: theme.fontFamily } }
+        },
+        x: {
+          grid: { display: false },
+          ticks: { color: theme.textColor, font: { family: theme.fontFamily }, maxRotation: 0, autoSkip: true }
+        }
+      },
     },
   });
 }
@@ -692,12 +822,19 @@ export function renderForgettingCurve() {
   if (!ctx) return;
   destroyChart("forgetting");
 
+  const theme = getChartTheme();
   const labels = [];
   const data = [];
-  for (let t = 0; t <= 14; t++) {
-    labels.push(t + "д");
-    data.push(Math.exp(-t / 7) * 100);
+  for (let t = 0; t <= 7; t++) {
+    labels.push(t === 0 ? "Сейчас" : t + "д");
+    // Ebbinghaus curve approximation: R = e^(-t/S)
+    // Assuming S (stability) ~ 2.5 days for new words without review
+    data.push(Math.exp(-t / 2.5) * 100);
   }
+
+  const gradient = ctx.createLinearGradient(0, 0, 0, 200);
+  gradient.addColorStop(0, "rgba(225, 112, 85, 0.5)");
+  gradient.addColorStop(1, "rgba(225, 112, 85, 0.0)");
 
   chartInstances["forgetting"] = new window.Chart(ctx, {
     type: "line",
@@ -708,16 +845,43 @@ export function renderForgettingCurve() {
           label: "Память %",
           data,
           borderColor: "#e17055",
-          backgroundColor: "rgba(225, 112, 85, 0.1)",
+          backgroundColor: gradient,
+          borderWidth: 3,
+          pointRadius: 0,
+          pointHoverRadius: 4,
           fill: true,
+          tension: 0.4,
         },
       ],
     },
     options: {
       responsive: true,
       maintainAspectRatio: false,
-      plugins: { legend: { display: false } },
-      scales: { y: { beginAtZero: true, max: 100 } },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: theme.tooltipBg,
+          titleColor: theme.tooltipText,
+          bodyColor: theme.tooltipText,
+          borderColor: theme.gridColor,
+          borderWidth: 1,
+          callbacks: {
+            label: (context: any) => `🧠 ${Math.round(context.raw)}%`
+          }
+        }
+      },
+      scales: {
+        y: {
+          beginAtZero: true,
+          max: 100,
+          grid: { color: theme.gridColor, drawBorder: false },
+          ticks: { color: theme.textColor, font: { family: theme.fontFamily } }
+        },
+        x: {
+          grid: { display: false },
+          ticks: { color: theme.textColor, font: { family: theme.fontFamily } }
+        }
+      },
     },
   });
 }
@@ -729,6 +893,7 @@ export function renderSRSDistributionChart() {
   if (!ctx) return;
   destroyChart("srs");
 
+  const theme = getChartTheme();
   const counts = [0, 0, 0, 0];
   state.dataStore.forEach((w) => {
     const h = state.wordHistory[w.id];
@@ -745,7 +910,8 @@ export function renderSRSDistributionChart() {
       datasets: [
         {
           data: counts,
-          backgroundColor: ["#b2bec3", "#fab1a0", "#74b9ff", "#00b894"],
+          backgroundColor: ["#dfe6e9", "#fab1a0", "#74b9ff", "#00b894"],
+          hoverOffset: 4,
           borderWidth: 0,
         },
       ],
@@ -753,7 +919,35 @@ export function renderSRSDistributionChart() {
     options: {
       responsive: true,
       maintainAspectRatio: false,
-      plugins: { legend: { position: "right", labels: { boxWidth: 10 } } },
+      cutout: "65%",
+      plugins: {
+        legend: {
+          position: "right",
+          labels: {
+            boxWidth: 12,
+            color: theme.textColor,
+            font: { family: theme.fontFamily, size: 11 },
+            padding: 15
+          }
+        },
+        tooltip: {
+          backgroundColor: theme.tooltipBg,
+          titleColor: theme.tooltipText,
+          bodyColor: theme.tooltipText,
+          borderColor: theme.gridColor,
+          borderWidth: 1,
+          padding: 10,
+          cornerRadius: 8,
+          callbacks: {
+            label: (context: any) => {
+              const val = context.raw;
+              const total = context.dataset.data.reduce((a: number, b: number) => a + b, 0);
+              const pct = total > 0 ? Math.round((val / total) * 100) : 0;
+              return ` ${context.label}: ${val} (${pct}%)`;
+            }
+          }
+        }
+      },
     },
   });
 }

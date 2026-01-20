@@ -1,6 +1,11 @@
 /// <reference lib="webworker" />
 import { precacheAndRoute, cleanupOutdatedCaches } from "workbox-precaching";
 import { clientsClaim } from "workbox-core";
+import { registerRoute } from "workbox-routing";
+import { NetworkOnly, CacheFirst } from "workbox-strategies";
+import { BackgroundSyncPlugin } from "workbox-background-sync";
+import { ExpirationPlugin } from "workbox-expiration";
+import { CacheableResponsePlugin } from "workbox-cacheable-response";
 
 declare let self: ServiceWorkerGlobalScope;
 
@@ -13,6 +18,55 @@ precacheAndRoute(self.__WB_MANIFEST);
 
 const AUDIO_CACHE_NAME = "topik-audio-v1";
 const MAX_AUDIO_ITEMS = 200;
+const FONT_CACHE_NAME = "font-cache-v1";
+const IMAGE_CACHE_NAME = "topik-images-v1";
+
+// Кэширование шрифтов с CDN
+registerRoute(
+  ({ url }) => url.hostname === 'cdn.jsdelivr.net',
+  new CacheFirst({
+    cacheName: FONT_CACHE_NAME,
+    plugins: [
+      new CacheableResponsePlugin({
+        statuses: [0, 200], // Кэшируем непрозрачные ответы от CDN
+      }),
+      new ExpirationPlugin({
+        maxAgeSeconds: 60 * 60 * 24 * 365, // 1 год
+        maxEntries: 30,
+      }),
+    ],
+  })
+);
+
+// Кэширование изображений из Supabase Storage
+registerRoute(
+  ({ url }) => url.hostname.includes("supabase.co") && url.pathname.includes("/storage/v1/object/public/image-files/"),
+  new CacheFirst({
+    cacheName: IMAGE_CACHE_NAME,
+    plugins: [
+      new CacheableResponsePlugin({
+        statuses: [0, 200],
+      }),
+      new ExpirationPlugin({
+        maxAgeSeconds: 60 * 60 * 24 * 30, // 30 дней
+        maxEntries: 100,
+      }),
+    ],
+  })
+);
+
+// Настройка Background Sync
+const bgSyncPlugin = new BackgroundSyncPlugin('supabase-queue', {
+  maxRetentionTime: 24 * 60 // Повторять попытки в течение 24 часов (в минутах)
+});
+
+// Перехватываем запросы на изменение данных в Supabase (POST, PUT, PATCH, DELETE)
+registerRoute(
+  ({ url, request }) => url.hostname.includes("supabase.co") && request.method !== 'GET',
+  new NetworkOnly({
+    plugins: [bgSyncPlugin]
+  })
+);
 
 self.addEventListener("message", (event) => {
   if (event.data && event.data.type === "SKIP_WAITING") {

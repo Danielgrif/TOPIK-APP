@@ -1,6 +1,6 @@
 import { state } from "../core/state.ts";
 import { Scheduler } from "../core/scheduler.ts";
-import { showToast } from "../utils/utils.ts";
+import { showToast, playTone } from "../utils/utils.ts";
 import { openModal } from "./ui_modal.ts"; // closeModal используется в HTML строке
 import { ensureSessionStarted } from "./ui.ts";
 import { updateSRSBadge } from "../core/stats.ts";
@@ -25,7 +25,7 @@ export function openReviewMode() {
   }
 }
 
-export function buildReviewModal(queue: Word[]) {
+function buildReviewModal(queue: Word[]) {
   const modalId = "review-modal";
   let modalEl = document.getElementById(modalId);
   if (!modalEl) {
@@ -89,11 +89,13 @@ export function buildReviewModal(queue: Word[]) {
         if (state.mistakes.has(w.id)) {
           state.mistakes.delete(w.id);
         }
+        playTone("success");
       } else {
         stats.forgotten++;
         state.mistakes.add(w.id);
         state.learned.delete(w.id);
         showToast("⚠️ Добавлено в ошибки", 900);
+        playTone("failure");
       }
 
       scheduleSaveState();

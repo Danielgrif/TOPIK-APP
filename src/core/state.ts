@@ -6,6 +6,7 @@ import {
   StudyGoal,
   MusicTrack,
 } from "../types/index.ts";
+import { decompress } from "../utils/utils.ts";
 
 export interface Session {
   date: string;
@@ -48,6 +49,7 @@ export interface AppState {
   autoTheme: boolean;
   backgroundMusicEnabled: boolean;
   backgroundMusicVolume: number;
+  ttsVolume: number;
   backgroundMusicTrack?: string;
 
   MUSIC_TRACKS: MusicTrack[];
@@ -114,6 +116,10 @@ export const state: AppState = {
     localStorage.getItem("background_music_volume_v1") !== null
       ? Number(localStorage.getItem("background_music_volume_v1"))
       : 0.3,
+  ttsVolume:
+    localStorage.getItem("tts_volume_v1") !== null
+      ? Number(localStorage.getItem("tts_volume_v1"))
+      : 1.0,
 
   MUSIC_TRACKS: [
     {
@@ -173,6 +179,19 @@ try {
     state.dailyChallenge.streak = 0;
   state.searchHistory = load("search_history_v1", []);
   state.customWords = load("custom_words_v1", []);
+  
+  // Загрузка сжатого словаря
+  const cachedVocab = localStorage.getItem("vocabulary_cache_v1");
+  if (cachedVocab) {
+    try {
+      // Пробуем распаковать. Если не получается (старый формат), парсим как есть.
+      const decompressed = cachedVocab.startsWith("[") ? cachedVocab : decompress(cachedVocab);
+      state.dataStore = JSON.parse(decompressed);
+    } catch (e) {
+      console.warn("Failed to decompress vocabulary cache, resetting.", e);
+      state.dataStore = [];
+    }
+  }
   state.studyGoal = load("study_goal_v1", { type: "words", target: 10 });
   state.favoriteQuotes = load("favorite_quotes_v1", []);
   state.dirtyWordIds = new Set(load("dirty_ids_v1", []));

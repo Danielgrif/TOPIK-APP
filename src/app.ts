@@ -1,15 +1,5 @@
 console.log("🚀 App starting...");
 
-// Статические импорты стилей (гарантируют загрузку до рендеринга)
-import "./css/base.css";
-import "./css/layout.css";
-import "./css/themes.css";
-import "./css/animations.css";
-import "./css/components.css";
-import "./css/pages.css";
-import "./css/quiz.css";
-import "./css/skeletons.css";
-
 import { client } from "./core/supabaseClient.ts";
 import { state } from "./core/state.ts";
 import {
@@ -74,6 +64,7 @@ import {
   setAccentColor,
   previewAccentColor,
   setAudioSpeed,
+  setTtsVolume,
   resetAllSettings,
   applyAccentColor,
 } from "./ui/ui_settings.ts";
@@ -204,6 +195,9 @@ function setupGlobalListeners() {
           break;
         case "open-profile":
           openProfileModal();
+          break;
+        case "open-mistakes":
+          import("./ui/ui_mistakes").then((m) => m.openMistakesModal());
           break;
         case "set-accent":
           if (value) setAccentColor(value);
@@ -336,6 +330,8 @@ function setupGlobalListeners() {
       setAudioSpeed(target.value);
     } else if (action === "set-music-volume") {
       setBackgroundMusicVolume(target.value);
+    } else if (action === "set-tts-volume") {
+      setTtsVolume(target.value);
     }
   });
 
@@ -504,13 +500,14 @@ function showWelcomeScreen(email?: string) {
 }
 
 async function init() {
-  // 🧹 ПРИНУДИТЕЛЬНАЯ ОЧИСТКА SERVICE WORKER (для решения проблем с кэшем)
+  // 🧹 Принудительная очистка Service Worker в режиме разработки, чтобы избежать проблем с кэшем.
+  // Это удалит старые воркеры для этого порта (origin) при каждой перезагрузке.
   if (import.meta.env.DEV && "serviceWorker" in navigator) {
-    const registrations = await navigator.serviceWorker.getRegistrations();
-    for (const registration of registrations) {
-      await registration.unregister();
-      console.log("🧹 Old Service Worker unregistered");
-    }
+    navigator.serviceWorker.getRegistrations().then((registrations) => {
+      for (const registration of registrations) {
+        registration.unregister();
+      }
+    });
   }
 
   console.log("🏁 Init sequence started");
@@ -724,6 +721,7 @@ Object.assign(window, {
   handleLogout,
   toggleResetMode,
   togglePasswordVisibility,
+  setTtsVolume,
   setAudioSpeed: (val: string | number) => setAudioSpeed(val),
   signInWithGoogle,
   speak,
@@ -740,7 +738,8 @@ Object.assign(window, {
     word: string,
     btn: HTMLElement,
     callback?: (score: number, text: string, audioUrl?: string) => void,
-  ) => checkPronunciation(word, btn, callback),
+    canvas?: HTMLCanvasElement,
+  ) => checkPronunciation(word, btn, callback, canvas),
   resetSearchHandler,
   runTests: () => import("./tests.ts").then((m) => m.runTests()),
   forceUpdateSW: async () => {

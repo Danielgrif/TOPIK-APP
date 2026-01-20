@@ -7,9 +7,14 @@
     <link rel="manifest" href="manifest.json">
     <link rel="icon" href="./favicon.svg" type="image/svg+xml">
     <meta name="theme-color" content="#6c5ce7">
+    <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+    <link rel="preload" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/woff2/Pretendard-Regular.woff2" as="font" type="font/woff2" crossorigin>
+    <link rel="preload" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/woff2/Pretendard-Bold.woff2" as="font" type="font/woff2" crossorigin>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css" />
+    <link rel="stylesheet" href="/src/css/style.css" />
     <audio id="music-player-a" loop preload="auto"></audio>
     <audio id="music-player-b" loop preload="auto"></audio>
     <style>
@@ -20,6 +25,7 @@
       #welcome-overlay,
       #onboarding-overlay,
       #error-overlay,
+      #loading-screen,
       #exit-focus-btn {
         display: none;
       }
@@ -29,7 +35,8 @@
       #level-up-overlay.active,
       #welcome-overlay.active,
       #onboarding-overlay.active,
-      #install-banner.show {
+      #install-banner.show,
+      #loading-screen.active {
         display: flex;
       }
 
@@ -73,6 +80,14 @@
       </div>
     </div>
 
+    <!-- Loading Screen -->
+    <div id="loading-screen" class="level-up-overlay">
+        <div class="level-up-content">
+            <div class="loader-circle"></div>
+            <div style="margin-top: 20px; font-weight: 600; font-size: 18px;">Загрузка...</div>
+        </div>
+    </div>
+
     <!-- Main Header with XP Bar -->
     <div id="main-header">
       <div class="header-top-row">
@@ -108,6 +123,7 @@
                 <button class="view-btn active" data-action="toggle-view" data-value="grid">▦</button>
                 <button class="view-btn" data-action="toggle-view" data-value="list">☰</button>
             </div>
+            <button class="tool-btn" data-action="toggle-session" title="Таймер сессии">⏱</button>
             <button class="tool-btn fire-btn" data-action="start-daily-challenge">🔥</button>
             <button class="tool-btn" data-action="toggle-filter-panel">
               <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="21" x2="4" y2="14"></line><line x1="4" y1="10" x2="4" y2="3"></line><line x1="12" y1="21" x2="12" y2="12"></line><line x1="12" y1="8" x2="12" y2="3"></line><line x1="20" y1="21" x2="20" y2="16"></line><line x1="20" y1="12" x2="20" y2="3"></line><line x1="1" y1="14" x2="7" y2="14"></line><line x1="9" y1="8" x2="15" y2="8"></line><line x1="17" y1="16" x2="23" y2="16"></line></svg>
@@ -229,26 +245,6 @@
 
         <div id="stats-details"></div>
         <div id="topic-mastery"></div>
-        <div style="font-weight: 600; margin-top: 20px">
-          📈 Активность (последние 7 дней)
-        </div>
-        <div id="activity-chart" class="chart-container"></div>
-        <div style="font-weight: 600; margin-top: 20px">
-          📅 Изучено слов (активность)
-        </div>
-        <div id="learned-chart" class="chart-container"></div>
-        <div style="font-weight: 600; margin-top: 20px">
-          🎯 Точность (за неделю)
-        </div>
-        <div id="accuracy-chart" class="chart-container"></div>
-        <div style="font-weight: 600; margin-top: 20px">
-          📉 Прогноз забывания (когда повторять)
-        </div>
-        <div id="forgetting-chart" class="chart-container" style="grid-template-columns: repeat(15, 1fr);"></div>
-        <div style="font-weight: 600; margin-top: 20px">
-          📊 Распределение SRS
-        </div>
-        <div id="srs-distribution-chart" class="chart-container"></div>
         </div>
       </div>
     </div>
@@ -618,6 +614,17 @@
                             <span style="font-size: 12px;">🐢</span>
                             <input type="range" id="speed-slider" min="0.5" max="1.5" step="0.1" value="0.9" style="flex: 1;" data-action="set-speed">
                             <span style="font-size: 12px;">🐇</span>
+                        </div>
+                    </div>
+                    <div class="setting-item" style="display: block;">
+                        <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
+                            <div class="setting-left"><span class="setting-icon">💬</span><span class="setting-label">Громкость озвучки</span></div>
+                            <span id="tts-volume-val" class="setting-value">100%</span>
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 10px;">
+                            <span style="font-size: 12px;">🔇</span>
+                            <input type="range" id="tts-volume-slider" min="0" max="1" step="0.05" value="1.0" style="flex: 1;" data-action="set-tts-volume">
+                            <span style="font-size: 12px;">🔊</span>
                         </div>
                     </div>
                     <div class="setting-item">

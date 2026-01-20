@@ -39,7 +39,6 @@ export interface Achievement {
 }
 
 export interface UserStats {
-  survivalHealth: any;
   user_id?: string;
   xp: number;
   level: number;
@@ -49,6 +48,7 @@ export interface UserStats {
   coins: number;
   lastDailyReward: number | null;
   achievements: Achievement[]; // Массив объектов достижений
+  survivalHealth: number;
 }
 
 export interface SM2State {

@@ -18,7 +18,7 @@
     backdrop-filter: blur(12px);
     -webkit-backdrop-filter: blur(12px);
     margin: 0;
-    padding: 15px 20px;
+    padding: 12px 16px;
     transition: transform 0.3s ease;
     transition: transform 0.3s ease, background-color 0.4s ease, border-color 0.4s ease;
     border-bottom: 1px solid var(--border-color);
@@ -186,6 +186,17 @@
     padding: 0 5px;
 }
 
+@media (max-width: 480px) {
+    .content-toolbar {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 12px;
+    }
+    .toolbar-actions {
+        justify-content: space-between;
+    }
+}
+
 .search-container {
     flex: 1;
     position: relative;
@@ -193,7 +204,7 @@
 
 .search-input {
     width: 100%;
-    padding: 12px 15px 12px 42px;
+    padding: 12px 15px 12px clamp(32px, 8vw, 42px);
     border-radius: 16px;
     border: 1px solid var(--border-color);
     background: var(--surface-1);
@@ -212,12 +223,43 @@
 
 .search-icon {
     position: absolute;
-    left: 14px;
+    left: clamp(8px, 3.5vw, 14px);
     top: 50%;
     transform: translateY(-50%);
     opacity: 0.5;
     pointer-events: none;
 }
+
+/* Search History Dropdown */
+.search-history-dropdown {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    background: var(--surface-1);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    box-shadow: var(--shadow-lg);
+    z-index: 1000;
+    margin-top: 5px;
+    display: none;
+    overflow: hidden;
+}
+
+.history-item {
+    padding: 12px 15px;
+    font-size: 14px;
+    color: var(--text-main);
+    cursor: pointer;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid var(--surface-2);
+}
+.history-item:last-child { border-bottom: none; }
+.history-item:hover { background: var(--surface-2); }
+.history-del { color: var(--text-tertiary); padding: 4px; font-size: 16px; }
+.history-del:hover { color: var(--danger); }
 
 /* Toolbar Actions & Buttons */
 .toolbar-actions {
@@ -315,7 +357,7 @@
 
 #vocabulary-grid.grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
     gap: 16px;
     position: relative;
     scroll-snap-type: y mandatory;
@@ -336,23 +378,29 @@
 
 #bottom-nav {
     position: fixed;
-    bottom: 20px;
-    left: 0;
-    right: 0;
-    width: calc(100% - 40px);
-    max-width: 600px;
-    margin: 0 auto;
-    background: rgba(255, 255, 255, 0.95);
-    backdrop-filter: blur(16px);
-    -webkit-backdrop-filter: blur(16px);
-    border: 1px solid rgba(255,255,255,0.5);
+    bottom: 24px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 90%;
+    max-width: 400px;
+    min-width: auto;
+    background: var(--surface-1);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid var(--border-color);
     border-radius: 24px;
     display: flex;
-    justify-content: space-around;
-    padding: 12px 10px;
-    transition: background-color 0.4s ease, border-color 0.4s ease;
+    justify-content: space-evenly;
+    align-items: center;
+    padding: 8px 4px;
+    transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
     z-index: 1000;
-    box-shadow: 0 10px 25px -5px rgba(0,0,0,0.1), 0 8px 10px -6px rgba(0,0,0,0.1);
+    box-shadow: 0 15px 35px -5px rgba(0,0,0,0.15), 0 5px 15px -5px rgba(0,0,0,0.08);
+}
+
+body.dark-mode #bottom-nav {
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    box-shadow: 0 20px 40px -5px rgba(0,0,0,0.6);
 }
 
 .nav-btn {
@@ -363,51 +411,112 @@
     align-items: center;
     justify-content: center;
     gap: 4px;
-    color: var(--text-tertiary);
+    color: var(--text-sub);
     font-size: 10px;
     font-weight: 600;
     cursor: pointer;
-    padding: 8px;
-    border-radius: 12px;
-    transition: all 0.2s ease;
-    position: relative;
+    padding: 6px;
     flex: 1;
+    border-radius: 16px;
+    transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+    position: relative;
+    min-width: 0;
+    overflow: visible;
 }
 
-.nav-btn.active { color: var(--primary); }
-.nav-btn:hover { background: var(--surface-2); color: var(--text-main); }
-.nav-btn.active:hover { color: var(--primary); }
+.nav-btn::before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%) scale(0);
+    width: 48px;
+    height: 48px;
+    background: var(--primary-light);
+    border-radius: 50%;
+    transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    z-index: -1;
+}
+
+.nav-btn.active {
+    color: var(--primary);
+}
+
+.nav-btn.active::before {
+    transform: translate(-50%, -50%) scale(1);
+}
+
+.nav-btn:hover:not(.active) {
+    color: var(--text-main);
+    background: transparent;
+}
+
+.nav-btn:hover:not(.active)::before {
+    transform: translate(-50%, -50%) scale(0.7);
+    background: var(--surface-2);
+}
 
 .nav-icon {
     font-size: 22px;
-    margin-bottom: 2px;
-    transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    margin-bottom: 0;
+    transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+    filter: drop-shadow(0 2px 4px rgba(0,0,0,0.05));
 }
-.nav-btn.active .nav-icon { transform: translateY(-2px); }
+.nav-btn.active .nav-icon {
+    transform: translateY(-3px) scale(1.1);
+    filter: drop-shadow(0 4px 8px var(--primary-light));
+}
 
-.nav-label { font-size: 10px; font-weight: 600; letter-spacing: 0.3px; }
+body.dark-mode .nav-btn.active .nav-icon {
+    filter: drop-shadow(0 0 10px var(--primary));
+}
+
+.nav-label {
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.3px;
+    opacity: 0.7;
+    transition: opacity 0.3s, transform 0.3s;
+}
+
+.nav-btn.active .nav-label {
+    opacity: 1;
+    transform: translateY(1px);
+}
 
 .badge-count {
     position: absolute;
-    top: 4px;
-    right: 20%;
+    top: 2px;
+    right: 10px;
     background: var(--danger);
     color: white;
     font-size: 10px;
-    font-weight: 700;
-    min-width: 16px;
-    height: 16px;
-    border-radius: 8px;
+    font-weight: 800;
+    min-width: 18px;
+    height: 18px;
+    border-radius: 9px;
     display: flex;
     align-items: center;
     justify-content: center;
     padding: 0 4px;
-    box-shadow: 0 2px 4px rgba(239, 68, 68, 0.4);
+    box-shadow: 0 2px 6px rgba(239, 68, 68, 0.5);
+    border: 2px solid var(--surface-1);
     transform: scale(1);
     transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     pointer-events: none;
     z-index: 2;
 }
+
+@keyframes popInBadge {
+    0% { transform: scale(0); }
+    50% { transform: scale(1.4); }
+    100% { transform: scale(1); }
+}
+
+.badge-pop {
+    animation: popInBadge 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
 .badge-count:empty, .badge-count[style*="display: none"] { transform: scale(0); }
 .nav-btn.has-reviews .nav-icon { animation: pulse-review 2s infinite; }
 

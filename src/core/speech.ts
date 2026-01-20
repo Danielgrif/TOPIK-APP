@@ -51,6 +51,7 @@ export function checkPronunciation(
   correctWord: string,
   btn?: HTMLElement,
   onResult?: (similarity: number, text: string, audioUrl?: string) => void,
+  visualizerCanvas?: HTMLCanvasElement,
 ) {
   const rec = getRecognition();
   if (!rec) return;
@@ -63,11 +64,61 @@ export function checkPronunciation(
 
   let mediaRecorder: MediaRecorder | null = null;
   let audioChunks: Blob[] = [];
+  
+  // Visualization state
+  let audioContext: AudioContext | null = null;
+  let analyser: AnalyserNode | null = null;
+  let animationId: number | null = null;
+  let stream: MediaStream | null = null;
 
   const startRecording = async () => {
     if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia && typeof MediaRecorder !== 'undefined') {
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        
+        // Setup Visualizer
+        if (visualizerCanvas && stream) {
+          try {
+            audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+            const source = audioContext.createMediaStreamSource(stream);
+            analyser = audioContext.createAnalyser();
+            analyser.fftSize = 2048;
+            source.connect(analyser);
+            
+            const bufferLength = analyser.frequencyBinCount;
+            const dataArray = new Uint8Array(bufferLength);
+            const canvasCtx = visualizerCanvas.getContext("2d");
+            
+            if (canvasCtx) {
+              const draw = () => {
+                if (!analyser) return;
+                animationId = requestAnimationFrame(draw);
+                analyser.getByteTimeDomainData(dataArray);
+                
+                canvasCtx.clearRect(0, 0, visualizerCanvas.width, visualizerCanvas.height);
+                canvasCtx.lineWidth = 2;
+                const style = getComputedStyle(document.body);
+                canvasCtx.strokeStyle = style.getPropertyValue('--primary') || '#7c3aed';
+                canvasCtx.beginPath();
+                const sliceWidth = visualizerCanvas.width * 1.0 / bufferLength;
+                let x = 0;
+                for(let i = 0; i < bufferLength; i++) {
+                  const v = dataArray[i] / 128.0;
+                  const y = v * visualizerCanvas.height / 2;
+                  if(i === 0) canvasCtx.moveTo(x, y);
+                  else canvasCtx.lineTo(x, y);
+                  x += sliceWidth;
+                }
+                canvasCtx.lineTo(visualizerCanvas.width, visualizerCanvas.height / 2);
+                canvasCtx.stroke();
+              };
+              draw();
+            }
+          } catch (e) {
+            console.warn("Visualizer setup failed:", e);
+          }
+        }
+
         mediaRecorder = new MediaRecorder(stream);
         mediaRecorder.ondataavailable = (e) => {
           if (e.data.size > 0) audioChunks.push(e.data);
@@ -88,15 +139,27 @@ export function checkPronunciation(
   showToast("🎤 Говорите...");
 
   const stopRecordingAndGetUrl = (cb: (url?: string) => void) => {
+    // Cleanup visualization
+    if (animationId) cancelAnimationFrame(animationId);
+    if (audioContext) {
+      audioContext.close().catch(() => {});
+      audioContext = null;
+    }
+    if (visualizerCanvas) {
+      const ctx = visualizerCanvas.getContext("2d");
+      if (ctx) ctx.clearRect(0, 0, visualizerCanvas.width, visualizerCanvas.height);
+    }
+
     if (mediaRecorder && mediaRecorder.state !== "inactive") {
       mediaRecorder.onstop = () => {
         const blob = new Blob(audioChunks, { type: "audio/webm" });
         const url = URL.createObjectURL(blob);
-        mediaRecorder?.stream.getTracks().forEach((t) => t.stop());
+        stream?.getTracks().forEach((t) => t.stop());
         cb(url);
       };
       mediaRecorder.stop();
     } else {
+      stream?.getTracks().forEach((t) => t.stop());
       cb(undefined);
     }
   };

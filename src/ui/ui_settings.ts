@@ -70,6 +70,18 @@ export function setAudioSpeed(val: string | number) {
 }
 
 /**
+ * Sets the TTS volume.
+ * @param {string|number} val
+ */
+export function setTtsVolume(val: string | number) {
+  state.ttsVolume = typeof val === "string" ? parseFloat(val) : val;
+  localStorage.setItem("tts_volume_v1", String(state.ttsVolume));
+  const el = document.getElementById("tts-volume-val");
+  if (el) el.textContent = `${Math.round(state.ttsVolume * 100)}%`;
+  scheduleSaveState();
+}
+
+/**
  * Toggles auto theme mode based on time.
  * @param {HTMLInputElement} el
  */
@@ -226,6 +238,7 @@ export function toggleFocusMode() {
   localStorage.setItem("focus_mode_v1", String(state.focusMode));
   applyFocusMode();
   showToast(`Режим фокусировки: ${state.focusMode ? "ВКЛ" : "ВЫКЛ"}`);
+  applyBackgroundMusic();
 }
 
 /**
@@ -259,28 +272,6 @@ export function toggleBackgroundMusic(el?: HTMLInputElement) {
   showToast(`Музыка: ${state.backgroundMusicEnabled ? "ВКЛ" : "ВЫКЛ"}`);
   immediateSaveState();
   syncGlobalStats();
-}
-
-/**
- * Populates the music track selection dropdown.
- */
-export function populateMusicTrackSelect() {
-  const selectEl = document.getElementById("background-music-select");
-  if (!selectEl) return;
-
-  selectEl.innerHTML = ""; // Clear existing options
-  state.MUSIC_TRACKS.forEach((track) => {
-    const option = document.createElement("option");
-    option.value = track.filename;
-    option.textContent = track.name;
-    if (
-      state.backgroundMusicTrack &&
-      track.filename === state.backgroundMusicTrack
-    ) {
-      option.selected = true;
-    }
-    selectEl.appendChild(option);
-  });
 }
 
 let activePlayerId = "a";
@@ -321,10 +312,12 @@ export function applyBackgroundMusic(forcePlay: boolean = false) {
   // Определяем, какой трек должен играть
   let trackId = "default";
   const quizGame = document.getElementById("quiz-game");
-  const isQuizActive = quizGame && quizGame.style.display === "block";
+  const isQuizActive = quizGame && quizGame.style.display !== "none";
 
   if (isQuizActive) {
     trackId = "quiz";
+  } else if (state.focusMode) {
+    trackId = "zen";
   }
 
   const targetTrack = state.MUSIC_TRACKS.find((t) => t.id === trackId);
@@ -332,10 +325,11 @@ export function applyBackgroundMusic(forcePlay: boolean = false) {
     return console.warn(`Музыкальный трек для ID "${trackId}" не найден.`);
   const targetTrackFilename = targetTrack.filename;
 
-  const targetSrc = `./audio/${targetTrackFilename}`;
+  // FIX: Используем относительный путь для совместимости с разными окружениями
+  const targetSrc = `./audio/${encodeURIComponent(targetTrackFilename)}`;
 
   // Если музыка выключена, просто останавливаем оба плеера
-  if (!state.backgroundMusicEnabled && !forcePlay) {
+  if (!state.backgroundMusicEnabled) {
     crossfade(activePlayer, inactivePlayer, 0, 0); // Fade out both
     return;
   }
@@ -362,7 +356,21 @@ export function applyBackgroundMusic(forcePlay: boolean = false) {
         activePlayerId = activePlayerId === "a" ? "b" : "a";
       })
       .catch((e) => {
-        if (e.name !== "AbortError") console.warn("Music play failed:", e);
+        if (e.name !== "AbortError") {
+          console.warn("Music play failed:", e);
+          showToast(`Ошибка аудио: ${e.message}`); // Показываем ошибку пользователю
+          
+          // Fallback: Пробуем найти любой другой рабочий трек, если текущий не грузится
+          const fallbackTrack = state.MUSIC_TRACKS.find((t) => t.id !== trackId && t.id === "default") || state.MUSIC_TRACKS[0];
+          if (fallbackTrack && fallbackTrack.id !== trackId) {
+              console.log("Attempting fallback track:", fallbackTrack.name);
+              inactivePlayer.src = `./audio/${encodeURIComponent(fallbackTrack.filename)}`;
+              inactivePlayer.play().then(() => {
+                crossfade(inactivePlayer, activePlayer, state.backgroundMusicVolume, 0);
+                activePlayerId = activePlayerId === "a" ? "b" : "a";
+              }).catch((err) => console.warn("Fallback failed:", err));
+          }
+        }
       });
   } else {
     // Если трек тот же, но был на паузе
@@ -380,6 +388,20 @@ export function applyBackgroundMusic(forcePlay: boolean = false) {
     } else {
       activePlayer.volume = state.backgroundMusicVolume;
     }
+  }
+}
+
+/**
+ * Temporarily lowers volume for TTS.
+ */
+export function duckBackgroundMusic(duck: boolean) {
+  if (!state.backgroundMusicEnabled) return;
+  const player = document.getElementById(
+    activePlayerId === "a" ? "music-player-a" : "music-player-b"
+  ) as HTMLAudioElement;
+  if (player) {
+    const target = duck ? state.backgroundMusicVolume * 0.2 : state.backgroundMusicVolume;
+    player.volume = target;
   }
 }
 
@@ -452,51 +474,6 @@ export function setBackgroundMusicVolume(val: string | number) {
   // FIX: Передаем true, чтобы музыка включилась, если была выключена, но громкость меняют
   applyBackgroundMusic(true);
   scheduleSaveState();
-}
-
-/**
- * Temporarily lowers or restores the background music volume (audio ducking).
- * @param {boolean} duck - True to lower volume, false to restore.
- */
-export function duckBackgroundMusic(duck: boolean) {
-  const activePlayer = document.getElementById(
-    activePlayerId === "a" ? "music-player-a" : "music-player-b",
-  ) as HTMLAudioElement | null;
-  if (!activePlayer || !state.backgroundMusicEnabled || activePlayer.paused)
-    return;
-
-  if (volumeAnimationInterval) {
-    clearInterval(volumeAnimationInterval);
-  }
-  // Если прервали кроссфейд, очищаем хвосты
-  if (currentFadeOutPlayer) {
-    currentFadeOutPlayer.volume = 0;
-    currentFadeOutPlayer.pause();
-    currentFadeOutPlayer = null;
-  }
-
-  const targetVolume = duck
-    ? state.backgroundMusicVolume * 0.2
-    : state.backgroundMusicVolume;
-  const startVolume = activePlayer.volume;
-
-  if (Math.abs(startVolume - targetVolume) < 0.01) return;
-
-  let stepCount = 0;
-  const totalSteps = 10;
-
-  volumeAnimationInterval = setInterval(() => {
-    stepCount++;
-    const progress = stepCount / totalSteps;
-
-    activePlayer.volume = startVolume + (targetVolume - startVolume) * progress;
-
-    if (stepCount >= totalSteps) {
-      activePlayer.volume = targetVolume;
-      if (volumeAnimationInterval) clearInterval(volumeAnimationInterval);
-      volumeAnimationInterval = null;
-    }
-  }, 20);
 }
 
 export function resetAllSettings() {

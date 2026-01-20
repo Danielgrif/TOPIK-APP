@@ -139,7 +139,7 @@ function _ensureAudio(): AudioContext | null {
  * Plays a synthesized tone using Web Audio API.
  */
 
-type ToneType = "success" | "failure" | "survival-success" | "life-lost" | "cash-register" | "achievement-unlock";
+type ToneType = "success" | "failure" | "survival-success" | "life-lost" | "cash-register" | "achievement-unlock" | "pop" | "flip" | "tick";
 
 export function playTone(
   type: ToneType = "success",
@@ -195,6 +195,27 @@ export function playTone(
         g.gain.linearRampToValueAtTime(0.1, now + 0.3);
         g.gain.exponentialRampToValueAtTime(0.001, now + 0.8);
         duration = 800;
+      } else if (type === "pop") {
+        o.type = "sine";
+        o.frequency.setValueAtTime(800, now);
+        o.frequency.exponentialRampToValueAtTime(100, now + 0.1);
+        g.gain.setValueAtTime(0.05, now);
+        g.gain.exponentialRampToValueAtTime(0.001, now + 0.1);
+        duration = 100;
+      } else if (type === "flip") {
+        o.type = "triangle";
+        o.frequency.setValueAtTime(150, now);
+        o.frequency.linearRampToValueAtTime(300, now + 0.1);
+        g.gain.setValueAtTime(0.05, now);
+        g.gain.linearRampToValueAtTime(0.001, now + 0.15);
+        duration = 150;
+      } else if (type === "tick") {
+        o.type = "triangle";
+        o.frequency.setValueAtTime(800, now);
+        o.frequency.exponentialRampToValueAtTime(1200, now + 0.05);
+        g.gain.setValueAtTime(0.1, now);
+        g.gain.exponentialRampToValueAtTime(0.001, now + 0.05);
+        duration = 100;
       } else {
         o.type = "sawtooth";
         o.frequency.setValueAtTime(200, now);
@@ -214,6 +235,49 @@ export function playTone(
         _osc = null;
         resolve();
       }, duration);
+    } catch {
+      resolve();
+    }
+  });
+}
+
+/**
+ * Plays a tone that increases in pitch based on the streak.
+ */
+export function playComboSound(streak: number): Promise<void> {
+  return new Promise<void>((resolve) => {
+    try {
+      const ctx = _ensureAudio();
+      if (!ctx) return resolve();
+      
+      // C Major Scale frequencies
+      const scale = [
+        261.63, 293.66, 329.63, 349.23, 392.00, 440.00, 493.88, // 4th octave
+        523.25, 587.33, 659.25, 698.46, 783.99, 880.00, 987.77, // 5th octave
+        1046.50 // C6
+      ];
+      
+      const index = Math.min(streak - 1, scale.length - 1);
+      const freq = scale[Math.max(0, index)];
+      
+      const o = ctx.createOscillator();
+      const g = ctx.createGain();
+      o.connect(g);
+      g.connect(ctx.destination);
+      
+      const now = ctx.currentTime;
+      
+      o.type = "triangle";
+      o.frequency.setValueAtTime(freq, now);
+      o.frequency.linearRampToValueAtTime(freq * 1.05, now + 0.1); // Slight slide up
+      
+      g.gain.setValueAtTime(0.1, now);
+      g.gain.exponentialRampToValueAtTime(0.001, now + 0.3);
+      
+      o.start();
+      o.stop(now + 0.3);
+      
+      setTimeout(resolve, 300);
     } catch {
       resolve();
     }
@@ -257,6 +321,7 @@ export function speak(
   const promise = new Promise<void>((resolve) => {
     if (url) {
       const audio = new Audio(url);
+      audio.volume = state.ttsVolume;
       audio.onended = () => resolve();
       audio.onerror = () => {
         // При ошибке файла пробуем озвучить через TTS
@@ -294,6 +359,7 @@ export function speak(
       const u = new SpeechSynthesisUtterance(t);
       u.lang = "ko-KR";
       u.rate = state.audioSpeed || 0.9;
+      u.volume = state.ttsVolume;
       u.onend = () => resolve();
       u.onerror = (e) => {
         console.warn("SpeechSynthesis error", e);
@@ -313,4 +379,53 @@ export function speak(
   });
 
   return promise;
+}
+
+/**
+ * Simple LZW compression for strings (to save localStorage space).
+ */
+export function compress(s: string): string {
+  const dict: Record<string, number> = {};
+  const data = (s + "").split("");
+  const out: number[] = [];
+  let currChar;
+  let phrase = data[0];
+  let code = 256;
+  for (let i = 1; i < data.length; i++) {
+    currChar = data[i];
+    if (dict[phrase + currChar] != null) {
+      phrase += currChar;
+    } else {
+      out.push(phrase.length > 1 ? dict[phrase] : phrase.charCodeAt(0));
+      dict[phrase + currChar] = code;
+      code++;
+      phrase = currChar;
+    }
+  }
+  out.push(phrase.length > 1 ? dict[phrase] : phrase.charCodeAt(0));
+  return out.map((c) => String.fromCharCode(c)).join("");
+}
+
+/**
+ * Simple LZW decompression.
+ */
+export function decompress(s: string): string {
+  const dict: Record<number, string> = {};
+  const data = (s + "").split("");
+  let currChar = data[0];
+  let oldPhrase = currChar;
+  const out = [currChar];
+  let code = 256;
+  let phrase;
+  for (let i = 1; i < data.length; i++) {
+    const currCode = data[i].charCodeAt(0);
+    if (currCode < 256) phrase = data[i];
+    else phrase = dict[currCode] ? dict[currCode] : oldPhrase + currChar;
+    out.push(phrase);
+    currChar = phrase.charAt(0);
+    dict[code] = oldPhrase + currChar;
+    code++;
+    oldPhrase = phrase;
+  }
+  return out.join("");
 }

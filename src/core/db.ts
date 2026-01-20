@@ -1,12 +1,13 @@
 import { client } from "./supabaseClient.ts";
 import { state, Session } from "./state.ts";
-import { showToast, parseBilingualString } from "../utils/utils.ts";
+import { showToast, parseBilingualString, compress } from "../utils/utils.ts";
 import { syncGlobalStats } from "./sync.ts";
 import { Scheduler } from "./scheduler.ts";
 import { Word } from "../types/index.ts";
 import { applyTheme, updateVoiceUI } from "../ui/ui_settings.ts";
 
 let _saveTimer: number | null = null;
+const VOCABULARY_CACHE_VERSION = "v1.1"; // Increment this when DB schema changes
 
 interface UserProgressRow {
   word_id: string | number;
@@ -15,11 +16,11 @@ interface UserProgressRow {
   is_favorite: boolean;
   attempts: number;
   correct: number;
-  last_review: string | null;
+  last_review: string | number | null;
   sm2_interval: number | null;
   sm2_repetitions: number | null;
   sm2_ef: number | null;
-  sm2_next_review: string | null;
+  sm2_next_review: string | number | null;
 }
 
 function validateSchema(data: Word[]) {
@@ -62,12 +63,16 @@ export function immediateSaveState() {
     );
     localStorage.setItem("custom_words_v1", JSON.stringify(state.customWords));
     localStorage.setItem("favorite_quotes_v1", JSON.stringify(state.favoriteQuotes));
+    // Сжимаем кэш словаря, так как он самый большой
+    localStorage.setItem("vocabulary_cache_v1", compress(JSON.stringify(state.dataStore)));
+    localStorage.setItem("tts_volume_v1", String(state.ttsVolume));
+    localStorage.setItem("vocabulary_version", VOCABULARY_CACHE_VERSION);
   } catch (e) {
     console.error("Save error:", e);
   }
 }
 
-export function cleanupInvalidStateIds() {
+function cleanupInvalidStateIds() {
   if (!state.dataStore || state.dataStore.length === 0) return;
 
   const validIds = new Set(state.dataStore.map((w) => String(w.id)));
@@ -136,21 +141,6 @@ export function recordAttempt(id: number | string, isCorrect: boolean) {
   scheduleSaveState();
 }
 
-function getDemoData(): Word[] {
-  return [
-    { id: 1, word_kr: "하다", translation: "делать", level: "★☆☆", type: "word", topic: "Basic" },
-    { id: 2, word_kr: "가다", translation: "идти", level: "★☆☆", type: "word", topic: "Basic" },
-    { id: 3, word_kr: "먹다", translation: "есть", level: "★☆☆", type: "word", topic: "Basic" },
-    { id: 4, word_kr: "사람", translation: "человек", level: "★☆☆", type: "word", topic: "Basic" },
-    { id: 5, word_kr: "학교", translation: "школа", level: "★☆☆", type: "word", topic: "Education" },
-    { id: 6, word_kr: "물", translation: "вода", level: "★☆☆", type: "word", topic: "Food" },
-    { id: 7, word_kr: "친구", translation: "друг", level: "★☆☆", type: "word", topic: "People" },
-    { id: 8, word_kr: "사랑", translation: "любовь", level: "★★☆", type: "word", topic: "Emotion" },
-    { id: 9, word_kr: "행복하다", translation: "счастливый", level: "★★☆", type: "word", topic: "Emotion" },
-    { id: 10, word_kr: "공부하다", translation: "учиться", level: "★☆☆", type: "word", topic: "Education" },
-  ] as any;
-}
-
 function processVocabularyData(serverData: Word[]) {
   const serverWordsSet = new Set(serverData.map((w) => w.word_kr));
   state.customWords = state.customWords.filter(
@@ -180,31 +170,44 @@ function processVocabularyData(serverData: Word[]) {
 
 export async function fetchVocabulary() {
   try {
+    const cachedVersion = localStorage.getItem("vocabulary_version");
+    const isCacheValid = cachedVersion === VOCABULARY_CACHE_VERSION;
+
+    if (!isCacheValid && navigator.onLine) {
+      console.log("🔄 Cache outdated or missing. Forcing refresh...");
+      state.dataStore = []; // Clear in-memory cache to force fetch
+    }
+
     const { data, error } = await client.from("vocabulary").select("*");
     if (error) throw error;
 
     let serverData: Word[] = data || [];
 
-    // Fallback: If no data (offline mode), load demo data
-    if (serverData.length === 0) {
-      console.info("ℹ️ No data from DB. Loading demo vocabulary.");
-      serverData = getDemoData();
-      showToast("⚠️ Режим демо-данных (нет подключения к БД)");
+    if (serverData.length === 0 || (!navigator.onLine && isCacheValid)) {
+      if (state.dataStore.length > 0) {
+        showToast("⚠️ Офлайн режим: используются кэшированные данные");
+        return;
+      }
     }
 
     processVocabularyData(serverData);
   } catch (e) {
     console.error("Vocabulary fetch failed:", e);
-    if (typeof e === "object" && e !== null) {
-      // @ts-ignore
-      if ("message" in e) console.error("Error Message:", e.message);
-      // @ts-ignore
-      if ("details" in e) console.error("Error Details:", e.details);
-      // @ts-ignore
-      if ("hint" in e) console.error("Error Hint:", e.hint);
+    
+    // Check for AbortError specifically
+    if (e instanceof Error && e.name === 'AbortError') {
+       console.warn("Request aborted. This might be due to a timeout or navigation.");
+    } else if (typeof e === "object" && e !== null) {
+       // @ts-ignore
+       if ("message" in e) console.error("Error Message:", e.message);
+       // @ts-ignore
+       if ("details" in e) console.error("Error Details:", e.details);
     }
-    showToast("Ошибка сети. Используем демо-данные.");
-    processVocabularyData(getDemoData());
+    if (state.dataStore.length > 0) {
+      showToast("⚠️ Ошибка сети. Используются кэшированные данные.");
+    } else {
+      showToast("❌ Не удалось загрузить словарь.");
+    }
   }
 }
 
@@ -214,7 +217,10 @@ export async function loadFromSupabase(user: { id: string }) {
     showToast("☁️ Синхронизация...");
 
     const { error: rpcError } = await client.rpc("cleanup_user_progress");
-    if (rpcError) console.warn("Server cleanup skipped:", rpcError.message);
+    if (rpcError) {
+        // Ignore AbortError for cleanup, it's not critical
+        if (rpcError.message && !rpcError.message.includes("AbortError")) console.warn("Server cleanup skipped:", rpcError.message);
+    }
 
     const { data: globalData } = await client
       .from("user_global_stats")
@@ -242,20 +248,52 @@ export async function loadFromSupabase(user: { id: string }) {
 
       if (globalData.settings) {
         const s = globalData.settings;
-        if (s.darkMode !== undefined) state.darkMode = s.darkMode;
-        if (s.hanjaMode !== undefined) state.hanjaMode = s.hanjaMode;
-        if (s.audioSpeed !== undefined) state.audioSpeed = s.audioSpeed;
-        if (s.currentVoice !== undefined) state.currentVoice = s.currentVoice;
-        if (s.autoUpdate !== undefined) state.autoUpdate = s.autoUpdate;
-        if (s.autoTheme !== undefined) state.autoTheme = s.autoTheme;
-        if (s.studyGoal !== undefined) state.studyGoal = s.studyGoal;
+        if (s.darkMode !== undefined) {
+          state.darkMode = s.darkMode;
+          localStorage.setItem("dark_mode_v1", String(state.darkMode));
+        }
+        if (s.hanjaMode !== undefined) {
+          state.hanjaMode = s.hanjaMode;
+          localStorage.setItem("hanja_mode_v1", String(state.hanjaMode));
+        }
+        if (s.audioSpeed !== undefined) {
+          state.audioSpeed = s.audioSpeed;
+          localStorage.setItem("audio_speed_v1", String(state.audioSpeed));
+        }
+        if (s.currentVoice !== undefined) {
+          state.currentVoice = s.currentVoice;
+          localStorage.setItem("voice_pref", state.currentVoice);
+        }
+        if (s.autoUpdate !== undefined) {
+          state.autoUpdate = s.autoUpdate;
+          localStorage.setItem("auto_update_v1", String(state.autoUpdate));
+        }
+        if (s.autoTheme !== undefined) {
+          state.autoTheme = s.autoTheme;
+          localStorage.setItem("auto_theme_v1", String(state.autoTheme));
+        }
+        if (s.studyGoal !== undefined) {
+          state.studyGoal = s.studyGoal;
+          localStorage.setItem("study_goal_v1", JSON.stringify(state.studyGoal));
+        }
         if (s.lastDailyReward !== undefined)
           state.userStats.lastDailyReward = s.lastDailyReward;
-        if (s.themeColor !== undefined) state.themeColor = s.themeColor;
-        if (s.backgroundMusicEnabled !== undefined)
+        if (s.themeColor !== undefined) {
+          state.themeColor = s.themeColor;
+          localStorage.setItem("theme_color_v1", state.themeColor);
+        }
+        if (s.backgroundMusicEnabled !== undefined) {
           state.backgroundMusicEnabled = s.backgroundMusicEnabled;
-        if (s.backgroundMusicVolume !== undefined)
+          localStorage.setItem("background_music_enabled_v1", String(state.backgroundMusicEnabled));
+        }
+        if (s.backgroundMusicVolume !== undefined) {
           state.backgroundMusicVolume = s.backgroundMusicVolume;
+          localStorage.setItem("background_music_volume_v1", String(state.backgroundMusicVolume));
+        }
+        if (s.ttsVolume !== undefined) {
+          state.ttsVolume = s.ttsVolume;
+          localStorage.setItem("tts_volume_v1", String(state.ttsVolume));
+        }
         if (s.streakLastDate !== undefined)
           state.streak.lastDate = s.streakLastDate;
         if (s.survivalHealth !== undefined)
@@ -299,14 +337,14 @@ export async function loadFromSupabase(user: { id: string }) {
           attempts: row.attempts,
           correct: row.correct,
           lastReview: row.last_review
-            ? new Date(row.last_review).getTime()
+            ? new Date(Number(row.last_review) || row.last_review).getTime()
             : null,
           sm2: {
             interval: row.sm2_interval ?? 0,
             repetitions: row.sm2_repetitions ?? 0,
             ef: row.sm2_ef ?? 2.5,
             nextReview: row.sm2_next_review
-              ? new Date(row.sm2_next_review).getTime()
+              ? new Date(Number(row.sm2_next_review) || row.sm2_next_review).getTime()
               : undefined,
           },
         };
@@ -314,6 +352,7 @@ export async function loadFromSupabase(user: { id: string }) {
     }
 
     cleanupInvalidStateIds();
+    immediateSaveState();
     showToast("✅ Профиль загружен");
   } catch (e) {
     console.error("Load Error:", e);

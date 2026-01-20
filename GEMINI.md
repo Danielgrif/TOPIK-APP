@@ -125,16 +125,17 @@
   - **Reliability:** Schema validation script (`validate_schema.py`) ensures DB integrity.
 **Weaknesses:**
   - **CSS:** ✅ **(Fixed)** `style.css` has been modularized.
-  - **Type Safety:** TypeScript integration is partial (JSDoc used, but full strict mode pending for all files).
-  - **Testing:** Unit tests cover Scheduler and Worker, but UI logic is largely untested.
+  - **Type Safety:** ✅ **(Fixed)** Full TypeScript migration completed.
+  - **Testing:** Unit tests cover Scheduler and Worker. UI logic needs more coverage.
 
 ### 🛣️ Improvement Program
 
 #### Phase 1: Stability & Quality (Completed/In Progress)
 1.  **Schema Validation:** ✅ Implemented `validate_schema.py` to check DB columns and buckets.
 2.  **Event Delegation:** ✅ Refactored `index.html` and `app.js` to remove inline `onclick` handlers.
-3.  **Type Safety:** 🔄 In Progress. `app.js` fully typed with JSDoc. Next: `ui/*.js`.
-4.  **CSS Modularization:** ✅ Split `style.css` into modules.
+3.  **Type Safety:** ✅ **(Done)** Project fully migrated to TypeScript (`.ts`).
+4.  **CSS Modularization:** ✅ Split `style.css` into modules. Fixed nesting syntax errors.
+5.  **Missing Logic:** ✅ Restored `quiz_strategies.ts` and implemented `renderLearnedChart`.
 4.  **Unit Tests:** 🔄 Added `test_content_worker.py`. Need more JS unit tests.
 
 #### Phase 2: UX & Content (Completed)
@@ -162,10 +163,10 @@
 
 #### Phase 4: Content & Community (Next Steps)
 1. **User Custom Words:** Allow users to add, edit, and delete their own words (stored locally or in Supabase).
-2. **Mistake Analysis:** A dedicated view to analyze *why* mistakes happen (e.g., confusing pairs, typo).
+2. **Mistake Analysis:** ✅ **(Done)** Implemented breakdown by Topic/Part of Speech in `ui_mistakes.ts`.
 3. **Advanced Search:** Filter by "Has Audio", "Has Image", "Has Example".
 
 #### Phase 5: Technical Debt & Performance (Long-term)
 1.  **CSS Modularization:** ✅ **(Done)**
-2.  **Virtual Scrolling:** Replace pagination with a virtual scroller for the main grid to support 10k+ words.
-3.  **Full TypeScript Migration:** Convert `.js` files to `.ts` for build-time safety.
+2.  **Virtual Scrolling:** ✅ **(Done)** Implemented virtual scroller for Grid and List views in `ui_card.ts`.
+3.  **Full TypeScript Migration:** ✅ **(Done)** All source files converted to TypeScript.

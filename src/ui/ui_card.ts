@@ -17,13 +17,9 @@ let scrollRafId: number | null = null;
 let currentFilteredData: Word[] = [];
 let resizeHandler: (() => void) | null = null;
 
-/** @type {IntersectionObserver | null} */
-const scrollObserver: IntersectionObserver | null = null;
-/** @type {IntersectionObserver | null} */
-let appearanceObserver: IntersectionObserver | null = null;
 let counterTimeout: number | null = null;
 
-function updateGridCardHeight() {
+export function updateGridCardHeight() {
   // Header (~70) + Toolbar (~60) + BottomNav (~80) + Margins (~30) = ~240px
   // Оставляем место для интерфейса, остальное отдаем карточке
   const uiOffset = 240;
@@ -36,6 +32,7 @@ function updateGridCardHeight() {
 export function renderSkeletons() {
   const grid = document.getElementById("vocabulary-grid");
   if (!grid) return;
+  updateGridCardHeight(); // FIX: Рассчитываем высоту ДО рендера скелетонов, чтобы избежать CLS
   grid.innerHTML = "";
   const fragment = document.createDocumentFragment();
   for (let i = 0; i < 12; i++) {
@@ -262,8 +259,9 @@ function renderVisibleGridItems(params: {
   const visibleData = sourceData.slice(startIndex, endIndex);
   const fragment = document.createDocumentFragment();
 
-  visibleData.forEach((item: Word) => {
-    fragment.appendChild(createCardElement(item));
+  visibleData.forEach((item: Word, i: number) => {
+    const absoluteIndex = startIndex + i;
+    fragment.appendChild(createCardElement(item, absoluteIndex));
   });
 
   content.appendChild(fragment);
@@ -317,7 +315,7 @@ function renderVisibleListItems(params: {
 
   visibleData.forEach((item: Word, index: number) => {
     const absoluteIndex = startIndex + index;
-    const el = createListItem(item);
+    const el = createListItem(item, absoluteIndex);
     el.style.position = "absolute";
     el.style.top = `${absoluteIndex * ITEM_HEIGHT_LIST}px`;
     el.style.width = "100%";
@@ -331,7 +329,43 @@ function renderVisibleListItems(params: {
   grid.appendChild(fragment);
 }
 
-function createCardElement(item: Word): HTMLElement {
+function prefetchNextImages(currentIndex: number, count: number = 3) {
+  if (currentIndex < 0) return;
+
+  for (let i = 1; i <= count; i++) {
+    const nextItemIndex = currentIndex + i;
+    if (nextItemIndex < currentFilteredData.length) {
+      const nextItem = currentFilteredData[nextItemIndex];
+      if (nextItem && nextItem.image) {
+        const img = new Image();
+        img.src = nextItem.image;
+        if (import.meta.env.DEV) console.log(`🖼️ Prefetching: ${nextItem.word_kr}`);
+      }
+    }
+  }
+}
+
+function prefetchNextAudio(currentIndex: number, count: number = 3) {
+  if (currentIndex < 0) return;
+
+  for (let i = 1; i <= count; i++) {
+    const nextItemIndex = currentIndex + i;
+    if (nextItemIndex < currentFilteredData.length) {
+      const nextItem = currentFilteredData[nextItemIndex];
+      let url = nextItem.audio_url;
+      if (state.currentVoice === "male" && nextItem.audio_male) url = nextItem.audio_male;
+
+      if (url) {
+        const audio = new Audio();
+        audio.src = url;
+        audio.preload = "auto";
+        if (import.meta.env.DEV) console.log(`🔊 Prefetching audio: ${nextItem.word_kr}`);
+      }
+    }
+  }
+}
+
+function createCardElement(item: Word, index: number): HTMLElement {
   const el = document.createElement("div");
   el.className = "card";
   if (state.hanjaMode) el.classList.add("hanja-mode");
@@ -341,7 +375,7 @@ function createCardElement(item: Word): HTMLElement {
 
   const inner = document.createElement("div");
   inner.className = "card-inner";
-  const front = createCardFront(item);
+  const front = createCardFront(item, index);
   const back = createCardBack(item);
 
   inner.appendChild(front);
@@ -362,13 +396,15 @@ function createCardElement(item: Word): HTMLElement {
       if (img && img.dataset.src) {
         img.src = img.dataset.src;
         imageLoaded = true;
+        prefetchNextImages(index);
+        prefetchNextAudio(index);
       }
     }
   };
   return el;
 }
 
-function createCardFront(item: Word): HTMLElement {
+function createCardFront(item: Word, index: number): HTMLElement {
   const front = document.createElement("div");
   front.className = "card-front";
   const isFav = state.favorites.has(item.id);
@@ -393,6 +429,7 @@ function createCardFront(item: Word): HTMLElement {
       speakBtn.style.color = "";
       speakBtn.style.borderColor = "";
     });
+    prefetchNextAudio(index);
   };
   const favBtn = document.createElement("button");
   favBtn.className = `icon-btn fav-btn ${isFav ? "active" : ""}`;
@@ -676,7 +713,7 @@ function createCardBack(item: Word): HTMLElement {
   return back;
 }
 
-function createListItem(item: Word): HTMLElement {
+function createListItem(item: Word, index: number): HTMLElement {
   const el = document.createElement("div");
   el.className = "list-item";
   if (state.learned.has(item.id)) el.classList.add("learned");
@@ -700,6 +737,7 @@ function createListItem(item: Word): HTMLElement {
   speakBtn.onclick = (e) => {
     e.stopPropagation();
     speak(item.word_kr, item.audio_url || null);
+    prefetchNextAudio(index);
   };
 
   const favBtn = document.createElement("button");
@@ -719,13 +757,13 @@ function createListItem(item: Word): HTMLElement {
   return el;
 }
 
-export function getAccuracy(id: string | number): number {
+function getAccuracy(id: string | number): number {
   const stats = state.wordHistory[id] || { attempts: 0, correct: 0 };
   if (stats.attempts === 0) return 0;
   return Math.min(100, Math.round((stats.correct / stats.attempts) * 100));
 }
 
-export function markLearned(id: string | number) {
+function markLearned(id: string | number) {
   ensureSessionStarted();
   state.learned.add(id);
   state.mistakes.delete(id);
@@ -736,7 +774,7 @@ export function markLearned(id: string | number) {
   saveAndRender();
 }
 
-export function markMistake(id: string | number) {
+function markMistake(id: string | number) {
   ensureSessionStarted();
   state.mistakes.add(id);
   state.learned.delete(id);
@@ -746,7 +784,7 @@ export function markMistake(id: string | number) {
   saveAndRender();
 }
 
-export function toggleFavorite(id: string | number, btn?: HTMLElement) {
+function toggleFavorite(id: string | number, btn?: HTMLElement) {
   if (state.favorites.has(id)) {
     state.favorites.delete(id);
     if (btn) {
@@ -766,7 +804,7 @@ export function toggleFavorite(id: string | number, btn?: HTMLElement) {
   if (state.currentStar === "favorites") render();
 }
 
-export function resetProgress(id: string | number) {
+function resetProgress(id: string | number) {
   state.learned.delete(id);
   state.mistakes.delete(id);
   delete state.wordHistory[id];
@@ -782,29 +820,6 @@ export function resetSearchHandler() {
     s.focus();
     s.dispatchEvent(new Event("input"));
   }
-}
-
-export function setupScrollObserver() {
-  if (scrollObserver) scrollObserver.disconnect();
-  if (appearanceObserver) appearanceObserver.disconnect();
-
-  const cards = document.querySelectorAll(".card:not(.visible)");
-  if (cards.length === 0) return;
-
-  const observer = new IntersectionObserver(
-    (entries) => {
-      entries.forEach((entry) => {
-        if (entry.isIntersecting) {
-          entry.target.classList.add("visible");
-          observer.unobserve(entry.target);
-        }
-      });
-    },
-    { threshold: 0.1, rootMargin: "50px" },
-  );
-  appearanceObserver = observer;
-
-  cards.forEach((card) => observer.observe(card));
 }
 
 export function setupGridEffects() {

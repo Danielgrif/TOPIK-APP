@@ -29,6 +29,7 @@ export interface QuizConfig {
     livesChange: number;
     gameOver: boolean;
     msg?: string;
+    streak?: number;
   };
   onEnd(correctCount: number): void;
 }
@@ -62,7 +63,7 @@ class BaseQuizConfig implements QuizConfig {
   }
 
   onAnswer(_isCorrect: boolean, _t: number, _l: number) {
-    return { timeChange: 0, livesChange: 0, gameOver: false };
+    return { timeChange: 0, livesChange: 0, gameOver: false, streak: 0 };
   }
 
   onEnd(_correctCount: number) {}
@@ -71,14 +72,18 @@ class BaseQuizConfig implements QuizConfig {
 class SprintQuizConfig extends BaseQuizConfig {
   initialTimer = 60;
   isTimerCountdown = true;
+  private streak = 0;
 
   getWords(pool: Word[]): Word[] {
     const unlearned = pool.filter((w) => !state.learned.has(w.id));
     const learned = pool.filter((w) => state.learned.has(w.id));
-    return unlearned
-      .concat(learned)
-      .sort(() => Math.random() - 0.5)
-      .slice(0, 100);
+    let words = unlearned.concat(learned).sort(() => Math.random() - 0.5);
+
+    if (words.length > 0 && words.length < 100) {
+      const original = [...words];
+      while (words.length < 100) words = words.concat(original);
+    }
+    return words.slice(0, 100);
   }
 
   onTick(t: number): TickResult {
@@ -97,11 +102,26 @@ class SprintQuizConfig extends BaseQuizConfig {
 
   onAnswer(isCorrect: boolean, _t: number, _l: number) {
     if (isCorrect) {
-      showToast("+2 сек!", 800);
-      return { timeChange: 2, livesChange: 0, gameOver: false };
+      this.streak++;
+      let bonus = 2;
+      let msg = "+2 сек!";
+
+      if (this.streak >= 10) {
+        bonus = 5;
+        msg = `🔥 КОМБО x${this.streak}! +5 сек`;
+        showComboEffect(msg);
+      } else if (this.streak >= 5) {
+        bonus = 3;
+        msg = `⚡ Комбо x${this.streak}! +3 сек`;
+        showToast(msg, 1000);
+      } else {
+        showToast(msg, 800);
+      }
+      return { timeChange: bonus, livesChange: 0, gameOver: false, streak: this.streak };
     } else {
+      this.streak = 0;
       showToast("-5 сек!", 800);
-      return { timeChange: -5, livesChange: 0, gameOver: false };
+      return { timeChange: -5, livesChange: 0, gameOver: false, streak: 0 };
     }
   }
 
@@ -114,17 +134,21 @@ class SprintQuizConfig extends BaseQuizConfig {
 }
 
 class SurvivalQuizConfig extends BaseQuizConfig {
-  initialTimer = 15; // Time bank
+  initialTimer = 30; // Time bank, increased from 15
   isTimerCountdown = true;
   initialLives = 3 + (state.userStats.survivalHealth || 0);
+  private streak = 0;
 
   getWords(pool: Word[]): Word[] {
     const unlearned = pool.filter((w) => !state.learned.has(w.id));
     const learned = pool.filter((w) => state.learned.has(w.id));
-    return unlearned
-      .concat(learned)
-      .sort(() => Math.random() - 0.5)
-      .slice(0, 200);
+    let words = unlearned.concat(learned).sort(() => Math.random() - 0.5);
+
+    if (words.length > 0 && words.length < 200) {
+      const original = [...words];
+      while (words.length < 200) words = words.concat(original);
+    }
+    return words.slice(0, 200);
   }
 
   onTick(t: number): TickResult {
@@ -143,16 +167,18 @@ class SurvivalQuizConfig extends BaseQuizConfig {
 
   onAnswer(isCorrect: boolean, _t: number, lives: number) {
     if (isCorrect) {
+      this.streak++;
       showComboEffect("+3 сек!");
-      return { timeChange: 3, livesChange: 0, gameOver: false };
+      return { timeChange: 3, livesChange: 0, gameOver: false, streak: this.streak };
     } else {
+      this.streak = 0;
       const newLives = lives - 1;
       if (newLives <= 0) {
         showToast("☠️ Жизни закончились!");
-        return { timeChange: 0, livesChange: -1, gameOver: true };
+        return { timeChange: 0, livesChange: -1, gameOver: true, streak: 0 };
       }
       showToast("💔 Минус жизнь!", 800);
-      return { timeChange: 0, livesChange: -1, gameOver: false };
+      return { timeChange: 0, livesChange: -1, gameOver: false, streak: 0 };
     }
   }
 

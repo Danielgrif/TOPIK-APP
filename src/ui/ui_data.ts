@@ -37,6 +37,7 @@ export async function resetAllProgress() {
       streakFreeze: 0,
       lastDailyReward: null,
       achievements: [],
+ survivalHealth: 0,
     };
     state.learned = new Set();
     state.mistakes = new Set();

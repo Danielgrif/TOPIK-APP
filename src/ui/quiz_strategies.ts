@@ -1,7 +1,7 @@
 import { state } from "../core/state.ts";
-import { levenshtein, generateDiffHtml, speak } from "../utils/utils.ts";
+import { levenshtein, generateDiffHtml, speak, playTone } from "../utils/utils.ts";
 import { enableQuizKeyboard } from "./ui.ts";
-import { findAssociations, checkAssociation } from "../core/associations.ts";
+import { findAssociations } from "../core/associations.ts";
 import { checkPronunciation } from "../core/speech.ts";
 import { quitQuiz } from "./quiz.ts";
 import { findConfusingWords } from "../core/confusing_words.ts";
@@ -83,26 +83,58 @@ export const QuizStrategies: Record<string, Strategy> = {
 
   flashcard: {
     render(word, container, onAnswer, qEl) {
-      qEl.innerHTML = `<div class="quiz-question-text">${word.word_kr}</div><div class="quiz-question-sub">Вспомните перевод</div>`;
+      qEl.innerHTML = `
+        <div class="quiz-question-flipper">
+            <div class="quiz-question-front">
+                <div class="quiz-question-text">${word.word_kr}</div>
+                <div class="quiz-question-sub">Вспомните перевод</div>
+            </div>
+            <div class="quiz-question-back">
+                <div class="quiz-question-text primary">${word.translation}</div>
+                <div class="quiz-question-sub">${word.word_kr}</div>
+            </div>
+        </div>
+      `;
       container.innerHTML = "";
       const btn = document.createElement("button");
       btn.className = "btn btn-quiz";
       btn.style.width = "100%";
       btn.textContent = "Показать ответ";
       btn.onclick = () => {
-        qEl.innerHTML = `<div class="quiz-question-text" style="color:var(--primary)">${word.translation}</div><div class="quiz-question-sub">${word.word_kr}</div>`;
+        playTone("flip");
+        const flipper = qEl.querySelector('.quiz-question-flipper');
+        if (flipper) {
+            (flipper as HTMLElement).classList.add('is-flipped');
+        }
         container.innerHTML = "";
+        container.classList.add("grid-2"); // Отображаем кнопки в 2 колонки
         const ok = document.createElement("button");
-        ok.className = "quiz-option correct";
-        ok.textContent = "✓ Знаю";
+        ok.className = "quiz-option flashcard-remember";
+        ok.textContent = "✓ Помню";
         ok.onclick = () => onAnswer(true);
         const no = document.createElement("button");
-        no.className = "quiz-option incorrect";
-        no.textContent = "✗ Не знаю";
+        no.className = "quiz-option flashcard-forgot";
+        no.textContent = "✗ Забыл";
         no.onclick = () => onAnswer(false);
+        container.appendChild(no); // Сначала "Забыл"
         container.appendChild(ok);
-        container.appendChild(no);
-        enableQuizKeyboard(container);
+        
+        // Custom keyboard handler for flashcards
+        const keyHandler = (e: KeyboardEvent) => {
+          if (e.key === "ArrowLeft") {
+            e.preventDefault();
+            no.click();
+          } else if (e.key === "ArrowRight") {
+            e.preventDefault();
+            ok.click();
+          }
+        };
+        
+        document.addEventListener("keydown", keyHandler, { once: true });
+        // Cleanup if user clicks manually or quits
+        const cleanup = () => document.removeEventListener("keydown", keyHandler);
+        ok.addEventListener("click", cleanup);
+        no.addEventListener("click", cleanup);
       };
       container.appendChild(btn);
       enableQuizKeyboard(container);
@@ -140,8 +172,8 @@ export const QuizStrategies: Record<string, Strategy> = {
         ? `<button class="speak-btn" onclick="window.speak(null, '${word.example_audio}')">🔊</button>`
         : "";
 
-      qEl.innerHTML = `<div class="quiz-question-text" style="font-size:22px;">"${display}"</div><div class="quiz-question-sub">Вставьте пропущенное слово</div>`;
-      if (word.example_audio) qEl.innerHTML += audioBtn;
+      qEl.innerHTML = `<div class="quiz-question-text small">"${display}"</div><div class="quiz-question-sub">Вставьте пропущенное слово</div>`;
+      if (word.example_audio) qEl.insertAdjacentHTML('beforeend', audioBtn);
 
       container.innerHTML = "";
       getOptions(word).forEach((opt) => {
@@ -235,7 +267,7 @@ export const QuizStrategies: Record<string, Strategy> = {
 
   essay: {
     render(word, container, onAnswer, qEl) {
-      qEl.innerHTML = `<div class="quiz-question-text" style="font-size:20px;">"${word.example_ru || "..."}"</div><div class="quiz-question-sub">Переведите предложение</div>`;
+      qEl.innerHTML = `<div class="quiz-question-text small">"${word.example_ru || "..."}"</div><div class="quiz-question-sub">Переведите предложение</div>`;
 
       container.innerHTML = "";
 
@@ -333,17 +365,20 @@ export const QuizStrategies: Record<string, Strategy> = {
           isCorrectPair = true;
         }
       }
-      qEl.innerHTML = `<div class="quiz-question-text">${word.word_kr}</div><div class="quiz-question-sub" style="font-size:20px; color:var(--primary)">${shownTranslation}</div>`;
+      qEl.innerHTML = `<div class="quiz-question-text">${word.word_kr}</div><div class="quiz-question-sub primary large">${shownTranslation}</div>`;
 
+      container.classList.add("grid-2");
       container.innerHTML = "";
       const yes = document.createElement("button");
       yes.className = "quiz-option sprint-btn yes";
       yes.textContent = "ВЕРНО";
+      yes.innerHTML += `<div class="sprint-timer-bar" style="width: 100%"></div>`;
       if (isCorrectPair) yes.dataset.correct = "true";
       yes.onclick = () => handleChoiceClick(isCorrectPair, yes, onAnswer);
       const no = document.createElement("button");
       no.className = "quiz-option sprint-btn no";
       no.textContent = "НЕВЕРНО";
+      no.innerHTML += `<div class="sprint-timer-bar" style="width: 100%"></div>`;
       if (!isCorrectPair) no.dataset.correct = "true";
       no.onclick = () => handleChoiceClick(!isCorrectPair, no, onAnswer);
       container.appendChild(yes);
@@ -397,16 +432,30 @@ export const QuizStrategies: Record<string, Strategy> = {
         "_______",
       );
 
-      qEl.innerHTML = `<div style="text-align:center; margin-bottom:20px;">
-                <button class="audio-btn-lg" onclick="speak(null, '${word.example_audio}')">▶️</button>
+      qEl.innerHTML = /*html*/`<div style="text-align:center; margin-bottom:20px;">
+                <button class="audio-btn-lg" id="dialogue-play-btn">▶️</button>
                 <div id="dialogue-text" style="margin-top:15px; font-size:18px; line-height:1.5; white-space: pre-line;"></div>
                 <div style="margin-top:10px; color:var(--text-sub); font-size:14px;">Какое слово пропущено?</div>
             </div>`;
       const dialogueText = qEl.querySelector("#dialogue-text");
       if (dialogueText) dialogueText.textContent = maskedText;
 
-      setTimeout(() => speak("", word.example_audio || null), 400);
-      QuizStrategies["multiple-choice"].render(word, container, onAnswer, qEl);
+      const playBtn = qEl.querySelector("#dialogue-play-btn") as HTMLElement;
+      const play = () => speak("", word.example_audio || null);
+      if(playBtn) playBtn.onclick = play;
+
+      setTimeout(play, 400);
+      
+      // Logic from multiple-choice, adapted for this mode
+      getOptions(word).forEach((opt) => {
+        const btn = document.createElement("button");
+        btn.className = "quiz-option";
+        btn.textContent = opt.word_kr; // Show Korean words as options
+        if (opt.id === word.id) btn.dataset.correct = "true";
+        btn.onclick = () => handleChoiceClick(opt.id === word.id, btn, onAnswer);
+        container.appendChild(btn);
+      });
+      enableQuizKeyboard(container);
     },
   },
 
@@ -415,7 +464,7 @@ export const QuizStrategies: Record<string, Strategy> = {
       const sentence = (word.example_kr || "").trim();
       const parts = sentence.split(/\s+/).filter((p) => p);
 
-      qEl.innerHTML = `<div id="scramble-ru" class="quiz-question-text" style="font-size:20px; color:var(--primary);"></div>
+      qEl.innerHTML = `<div id="scramble-ru" class="quiz-question-text small primary"></div>
             <div id="scramble-target" class="scramble-container" style="background:white; border-color:var(--primary);"></div>
             <div id="scramble-source" class="scramble-container"></div>`;
 
@@ -453,6 +502,7 @@ export const QuizStrategies: Record<string, Strategy> = {
           chip.className = "scramble-chip";
           chip.textContent = item.text;
           chip.onclick = () => {
+            playTone("pop");
             currentAnswer.splice(idx, 1);
             renderChips();
           };
@@ -464,6 +514,7 @@ export const QuizStrategies: Record<string, Strategy> = {
           chip.className = "scramble-chip";
           chip.textContent = item.text;
           chip.onclick = () => {
+            playTone("pop");
             currentAnswer.push(item);
             renderChips();
             if (currentAnswer.length === parts.length) {
@@ -507,7 +558,7 @@ export const QuizStrategies: Record<string, Strategy> = {
 
   confusing: {
     render(word, container, onAnswer, qEl) {
-      qEl.innerHTML = `<div class="quiz-question-text" style="color:var(--primary)">"${word.translation}"</div><div class="quiz-question-sub">Выберите правильное слово</div>`;
+      qEl.innerHTML = `<div class="quiz-question-text primary">"${word.translation}"</div><div class="quiz-question-sub">Выберите правильное слово</div>`;
       container.innerHTML = "";
 
       const allGroups = findConfusingWords();
@@ -539,7 +590,7 @@ export const QuizStrategies: Record<string, Strategy> = {
 
   synonyms: {
     render(word, container, onAnswer, qEl) {
-      qEl.innerHTML = `<div class="quiz-question-text" style="color:var(--primary)">${word.word_kr}</div><div class="quiz-question-sub">Найдите синоним</div>`;
+      qEl.innerHTML = `<div class="quiz-question-text primary">${word.word_kr}</div><div class="quiz-question-sub">Найдите синоним</div>`;
       container.innerHTML = "";
 
       const syns = (word.synonyms || "")
@@ -580,7 +631,7 @@ export const QuizStrategies: Record<string, Strategy> = {
 
   antonyms: {
     render(word, container, onAnswer, qEl) {
-      qEl.innerHTML = `<div class="quiz-question-text" style="color:var(--danger)">${word.word_kr}</div><div class="quiz-question-sub">Найдите антоним</div>`;
+      qEl.innerHTML = `<div class="quiz-question-text danger">${word.word_kr}</div><div class="quiz-question-sub">Найдите антоним</div>`;
       container.innerHTML = "";
 
       const ants = (word.antonyms || "")
@@ -658,12 +709,13 @@ export const QuizStrategies: Record<string, Strategy> = {
               btn.dataset.wordId = String(w.id);
             } else {
               if (!selectedLeft) return;
-              const w1 = state.dataStore.find(
-                (x) =>
-                  String(x.id) ===
-                  (selectedLeft ? selectedLeft.dataset.wordId : ""),
-              );
-              const isMatch = checkAssociation(w1, w);
+              
+              const leftId = selectedLeft.dataset.wordId;
+              const rightId = String(w.id);
+              
+              // Check if this specific pair exists in the generated pairs
+              const isMatch = pairs.some(p => String(p.left.id) === leftId && String(p.right.id) === rightId);
+
               if (isMatch) {
                 if (selectedLeft) {
                   selectedLeft.classList.add("correct");
@@ -674,14 +726,18 @@ export const QuizStrategies: Record<string, Strategy> = {
                 btn.disabled = true;
                 selectedLeft = null;
                 matchesFound++;
-                if (matchesFound === pairs.length) onAnswer(true);
+                if (matchesFound === pairs.length) {
+                  onAnswer(true);
+                } else {
+                  playTone("success", 100);
+                }
                 
-                // FIX: Записываем успех для конкретного слова
-                if (w1) {
- import("../core/db.ts").then(m => m.recordAttempt(w1.id, true));
- import("../core/db.ts").then(m => m.recordAttempt(w.id, true));
+                // Record attempt for the word on the left (the "question" word)
+                if (leftId) {
+                  import("../core/db.ts").then(m => m.recordAttempt(leftId, true));
                 }
               } else {
+                playTone("failure", 100);
                 btn.classList.add("incorrect");
                 if (selectedLeft) selectedLeft.classList.add("incorrect");
                 setTimeout(() => {
@@ -710,62 +766,109 @@ export const QuizStrategies: Record<string, Strategy> = {
       qEl.innerHTML = `<div class="quiz-question-text">${word.word_kr}</div><div class="quiz-question-sub">${word.translation}</div>`;
       container.innerHTML = "";
 
+      const wrapper = document.createElement("div");
+      wrapper.style.display = "flex";
+      wrapper.style.flexDirection = "column";
+      wrapper.style.alignItems = "center";
+      wrapper.style.width = "100%";
+
       const btn = document.createElement("button");
       btn.className = "audio-btn-lg";
       btn.style.marginTop = "20px";
+      btn.style.marginBottom = "10px";
       btn.innerHTML = "🎤";
 
+      const hint = document.createElement("div");
+      hint.className = "quiz-hint";
+      hint.style.color = "var(--text-sub)";
+      hint.style.marginBottom = "20px";
+      hint.textContent = "Нажмите и произнесите слово";
+
+      const canvas = document.createElement("canvas");
+      canvas.width = 400;
+      canvas.height = 80;
+      canvas.style.width = "100%";
+      canvas.style.height = "80px";
+      canvas.style.borderRadius = "12px";
+      canvas.style.background = "var(--surface-3)";
+      canvas.style.marginBottom = "20px";
+      canvas.style.display = "none";
+
       const feedback = document.createElement("div");
-      feedback.style.marginTop = "20px";
-      feedback.style.fontSize = "18px";
-      feedback.style.minHeight = "30px";
-      feedback.style.display = "flex";
-      feedback.style.flexDirection = "column";
-      feedback.style.alignItems = "center";
-      feedback.style.gap = "10px";
+      feedback.className = "essay-feedback";
+      feedback.style.display = "none";
+      feedback.style.width = "100%";
+
+      wrapper.appendChild(btn);
+      wrapper.appendChild(hint);
+      wrapper.appendChild(canvas);
+      wrapper.appendChild(feedback);
+      container.appendChild(wrapper);
 
       btn.onclick = () => {
+        hint.textContent = "Слушаю...";
+        hint.style.color = "var(--primary)";
+        btn.style.backgroundColor = "var(--danger)";
+        btn.classList.add("pulse-red-effect"); // Используем существующую анимацию или стиль
+        
+        canvas.style.display = "block";
+
         checkPronunciation(
           word.word_kr,
           btn,
           (similarity: number, text: string, audioUrl?: string) => {
+            btn.style.backgroundColor = "";
+            btn.classList.remove("pulse-red-effect");
+            hint.style.display = "none";
+            canvas.style.display = "none";
+            
             const isPass = similarity >= 60;
-            feedback.innerHTML = isPass
-              ? `<span style="color:var(--success)">✅ ${similarity}% ("${text}")</span>`
-              : `<span style="color:var(--danger)">❌ ${similarity}% ("${text}")</span>`;
+            feedback.style.display = "block";
+            
+            const color = isPass ? "var(--success)" : "var(--danger)";
+            const icon = isPass ? "✅" : "❌";
+            const title = isPass ? "Отлично!" : "Попробуйте еще раз";
+
+            feedback.innerHTML = `
+              <div style="text-align: center; margin-bottom: 15px;">
+                <div style="font-size: 40px; margin-bottom: 5px;">${icon}</div>
+                <div style="font-size: 20px; font-weight: 800; color: ${color};">${title}</div>
+                <div style="font-size: 14px; color: var(--text-sub);">Точность: ${similarity}%</div>
+              </div>
+              
+              <div style="background: var(--surface-2); padding: 12px; border-radius: 12px; margin-bottom: 15px;">
+                <div style="font-size: 12px; color: var(--text-sub); margin-bottom: 4px;">Вы сказали:</div>
+                <div style="font-size: 16px; font-weight: 600; color: var(--text-main);">${text || "..."}</div>
+              </div>
+            `;
 
             if (audioUrl) {
               const playBtn = document.createElement("button");
               playBtn.className = "btn";
-              playBtn.style.cssText = "padding: 8px 16px; font-size: 14px;";
+              playBtn.style.cssText = "width: 100%; margin-bottom: 10px; background: var(--surface-3); color: var(--text-main);";
               playBtn.textContent = "▶️ Моя запись";
               const audio = new Audio(audioUrl);
-              audio.onended = () => (playBtn.textContent = "▶️ Моя запись");
               playBtn.onclick = () => {
-                if (audio.paused) {
-                  audio.play();
-                  playBtn.textContent = "⏸️ Моя запись";
-                } else {
-                  audio.pause();
-                  playBtn.textContent = "▶️ Моя запись";
-                }
+                audio.play();
               };
               feedback.appendChild(playBtn);
             }
 
             const nextBtn = document.createElement("button");
             nextBtn.className = "btn btn-quiz";
+            nextBtn.style.width = "100%";
             nextBtn.textContent = "Далее ➡";
             nextBtn.onclick = () => onAnswer(null, true, true);
             feedback.appendChild(nextBtn);
 
+            // Скрываем кнопку записи, чтобы сфокусировать внимание на результате
+            btn.style.display = "none";
+
             onAnswer(isPass, false);
           },
+          canvas
         );
       };
-
-      container.appendChild(btn);
-      container.appendChild(feedback);
     },
   },
 };
