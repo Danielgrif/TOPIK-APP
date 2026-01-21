@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>TOPIK II - Master Pro 2026</title>
     <link rel="manifest" href="manifest.json">
-    <link rel="icon" href="./favicon.svg" type="image/svg+xml">
+    <link rel="icon" href="/app-logo.svg" type="image/svg+xml">
     <meta name="theme-color" content="#6c5ce7">
     <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
     <link rel="preload" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/woff2/Pretendard-Regular.woff2" as="font" type="font/woff2" crossorigin>
@@ -14,7 +14,6 @@
     <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css" />
-    <link rel="stylesheet" href="/src/css/style.css" />
     <audio id="music-player-a" loop preload="auto"></audio>
     <audio id="music-player-b" loop preload="auto"></audio>
     <style>
@@ -25,7 +24,6 @@
       #welcome-overlay,
       #onboarding-overlay,
       #error-overlay,
-      #loading-screen,
       #exit-focus-btn {
         display: none;
       }
@@ -35,13 +33,78 @@
       #level-up-overlay.active,
       #welcome-overlay.active,
       #onboarding-overlay.active,
-      #install-banner.show,
-      #loading-screen.active {
+      #install-banner.show {
         display: flex;
       }
 
       body.focus-mode #exit-focus-btn {
         display: inline-flex;
+      }
+
+      /* Preloader Styles */
+      #loading-overlay {
+        position: fixed;
+        top: 0; left: 0; width: 100%; height: 100%;
+        background: #f5f3ff;
+        z-index: 9999;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: opacity 0.5s ease;
+        animation: bgPulse 6s ease-in-out infinite alternate;
+      }
+      @keyframes bgPulse {
+        0% { background-color: #f5f3ff; }
+        50% { background-color: #e0e7ff; }
+        100% { background-color: #ede9fe; }
+      }
+      .spinner-wrapper {
+        position: relative;
+        /* Адаптивный размер: от 220px на мобильных до 600px на десктопе */
+        width: clamp(220px, 60vw, 600px);
+        height: clamp(220px, 60vw, 600px);
+        display: flex;
+        justify-content: center;
+        align-items: center;
+      }
+      .loader-circle {
+        position: absolute;
+        width: 100%;
+        height: 100%;
+        border: clamp(8px, 2vw, 16px) solid rgba(221, 214, 254, 0.4);
+        border-radius: 50%;
+        border-top-color: #7c3aed;
+        animation: spin 1.5s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+        box-sizing: border-box;
+        filter: drop-shadow(0 0 15px rgba(124, 58, 237, 0.3));
+      }
+      .loader-logo {
+        width: 65%;
+        height: 65%;
+        object-fit: contain;
+        animation: logoPopIn 0.8s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+        filter: drop-shadow(0 20px 40px rgba(0,0,0,0.3));
+      }
+      @keyframes spin { 100% { transform: rotate(360deg); } }
+      @keyframes logoPopIn {
+        from { opacity: 0; transform: scale(0.5); }
+        to { opacity: 1; transform: scale(1); }
+      }
+
+      @media (prefers-color-scheme: dark) {
+        #loading-overlay { 
+            background: #1e1b4b;
+            animation: bgPulseDark 6s ease-in-out infinite alternate;
+        }
+        @keyframes bgPulseDark {
+            0% { background-color: #1e1b4b; }
+            50% { background-color: #312e81; }
+            100% { background-color: #2e1065; }
+        }
+        .loader-circle { 
+            border-color: rgba(55, 48, 163, 0.4); 
+            border-top-color: #a78bfa; 
+        }
       }
     </style>
   </head>
@@ -51,6 +114,15 @@
         console.error("Global Error (Inline):", msg, url, line, error);
       };
     </script>
+
+    <!-- Preloader with Logo -->
+    <div id="loading-overlay">
+      <div class="spinner-wrapper">
+        <div class="loader-circle"></div>
+        <img src="/app-logo.svg" class="loader-logo" alt="TOPIK" />
+      </div>
+    </div>
+
     <!-- Main App Wrapper -->
     <div id="app-container">
     
@@ -80,14 +152,6 @@
       </div>
     </div>
 
-    <!-- Loading Screen -->
-    <div id="loading-screen" class="level-up-overlay">
-        <div class="level-up-content">
-            <div class="loader-circle"></div>
-            <div style="margin-top: 20px; font-weight: 600; font-size: 18px;">Загрузка...</div>
-        </div>
-    </div>
-
     <!-- Main Header with XP Bar -->
     <div id="main-header">
       <div class="header-top-row">
@@ -107,6 +171,10 @@
         <div class="xp-track"><div class="xp-bar-fill" id="xp-fill"></div></div>
         <div class="xp-label" id="xp-text">0 / 100 XP</div>
       </div>
+      <div id="session-timer" style="display: none; text-align: center; margin-top: 5px; font-size: 12px; color: var(--primary); font-weight: bold; cursor: pointer; position: relative;" onclick="toggleSessionTimer()">
+        ⏱ <span id="timer-display">00:00</span>
+        <button class="btn-icon" data-action="edit-session-time" style="font-size: 10px; padding: 2px; margin-left: 4px; vertical-align: middle;" onclick="event.stopPropagation()">✏️</button>
+      </div>
     </div>
 
     <!-- Main Content Area -->
@@ -123,7 +191,6 @@
                 <button class="view-btn active" data-action="toggle-view" data-value="grid">▦</button>
                 <button class="view-btn" data-action="toggle-view" data-value="list">☰</button>
             </div>
-            <button class="tool-btn" data-action="toggle-session" title="Таймер сессии">⏱</button>
             <button class="tool-btn fire-btn" data-action="start-daily-challenge">🔥</button>
             <button class="tool-btn" data-action="toggle-filter-panel">
               <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="21" x2="4" y2="14"></line><line x1="4" y1="10" x2="4" y2="3"></line><line x1="12" y1="21" x2="12" y2="12"></line><line x1="12" y1="8" x2="12" y2="3"></line><line x1="20" y1="21" x2="20" y2="16"></line><line x1="20" y1="12" x2="20" y2="3"></line><line x1="1" y1="14" x2="7" y2="14"></line><line x1="9" y1="8" x2="15" y2="8"></line><line x1="17" y1="16" x2="23" y2="16"></line></svg>
@@ -614,17 +681,6 @@
                             <span style="font-size: 12px;">🐢</span>
                             <input type="range" id="speed-slider" min="0.5" max="1.5" step="0.1" value="0.9" style="flex: 1;" data-action="set-speed">
                             <span style="font-size: 12px;">🐇</span>
-                        </div>
-                    </div>
-                    <div class="setting-item" style="display: block;">
-                        <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
-                            <div class="setting-left"><span class="setting-icon">💬</span><span class="setting-label">Громкость озвучки</span></div>
-                            <span id="tts-volume-val" class="setting-value">100%</span>
-                        </div>
-                        <div style="display: flex; align-items: center; gap: 10px;">
-                            <span style="font-size: 12px;">🔇</span>
-                            <input type="range" id="tts-volume-slider" min="0" max="1" step="0.05" value="1.0" style="flex: 1;" data-action="set-tts-volume">
-                            <span style="font-size: 12px;">🔊</span>
                         </div>
                     </div>
                     <div class="setting-item">

@@ -276,9 +276,9 @@ async function performSignup(email: string, password: string) {
   }
 }
 
-async function finalizeAuth(user: { id: string; email?: string }) {
+async function finalizeAuth(user: any) {
   showToast("✅ Успешно!");
-  updateAuthUI(user.email ? { email: user.email } : null);
+  updateAuthUI(user);
   await loadFromSupabase(user);
   saveAndRender();
   closeModal("login-modal");

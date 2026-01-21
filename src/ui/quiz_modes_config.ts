@@ -228,10 +228,10 @@ class DailyQuizConfig extends BaseQuizConfig {
   }
 
   onEnd(_correctCount: number) {
-    const today = new Date().toDateString();
+    const today = new Date().toLocaleDateString("en-CA");
     const d = new Date();
     d.setDate(d.getDate() - 1);
-    const yesterday = d.toDateString();
+    const yesterday = d.toLocaleDateString("en-CA");
     let streak = state.dailyChallenge.streak || 0;
 
     if (state.dailyChallenge.lastDate === yesterday) streak++;

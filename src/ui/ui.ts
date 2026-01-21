@@ -7,6 +7,7 @@ export {
   ensureSessionStarted,
   toggleSessionTimer,
   endSession,
+  editSessionTime,
 } from "../core/session.ts";
 import { Word } from "../types/index.ts";
 

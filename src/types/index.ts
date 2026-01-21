@@ -63,6 +63,7 @@ export interface WordHistoryItem {
   correct: number;
   lastReview: number | null;
   sm2?: SM2State;
+  learnedDate?: number;
 }
 
 export interface DailyChallenge {

@@ -21,6 +21,7 @@ interface UserProgressRow {
   sm2_repetitions: number | null;
   sm2_ef: number | null;
   sm2_next_review: string | number | null;
+  learned_date?: string | number | null;
 }
 
 function validateSchema(data: Word[]) {
@@ -178,7 +179,12 @@ export async function fetchVocabulary() {
       state.dataStore = []; // Clear in-memory cache to force fetch
     }
 
-    const { data, error } = await client.from("vocabulary").select("*");
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 30000);
+
+    const { data, error } = await client.from("vocabulary").select("*").abortSignal(controller.signal);
+    clearTimeout(timeoutId);
+
     if (error) throw error;
 
     let serverData: Word[] = data || [];
@@ -339,6 +345,9 @@ export async function loadFromSupabase(user: { id: string }) {
           lastReview: row.last_review
             ? new Date(Number(row.last_review) || row.last_review).getTime()
             : null,
+          learnedDate: row.learned_date
+            ? new Date(Number(row.learned_date) || row.learned_date).getTime() 
+            : undefined,
           sm2: {
             interval: row.sm2_interval ?? 0,
             repetitions: row.sm2_repetitions ?? 0,
@@ -348,6 +357,12 @@ export async function loadFromSupabase(user: { id: string }) {
               : undefined,
           },
         };
+
+        // Migration: If word is learned but has no learnedDate, use lastReview or now
+        // if (state.learned.has(id) && !state.wordHistory[id].learnedDate) {
+        //     state.wordHistory[id].learnedDate = state.wordHistory[id].lastReview || Date.now();
+        //     state.dirtyWordIds.add(id); // Mark for sync
+        // }
       });
     }
 

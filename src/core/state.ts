@@ -189,6 +189,7 @@ try {
       state.dataStore = JSON.parse(decompressed);
     } catch (e) {
       console.warn("Failed to decompress vocabulary cache, resetting.", e);
+      localStorage.removeItem("vocabulary_cache_v1");
       state.dataStore = [];
     }
   }

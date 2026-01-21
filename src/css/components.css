@@ -347,6 +347,26 @@
 .card-image-toggle.hidden img { opacity: 0; pointer-events: none; }
 .card-image-toggle.hidden::after { content: "👁️ Показать фото"; color: var(--text-sub); font-size: 16px; font-weight: 600; }
 
+.card-image-regenerate-btn {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    z-index: 5;
+    background: rgba(0,0,0,0.5);
+    color: white;
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+}
+.card-image-regenerate-btn:hover {
+    background: rgba(0,0,0,0.7);
+    transform: scale(1.1);
+}
+.card-image-regenerate-btn.rotating {
+    animation: spin 1s linear infinite;
+    pointer-events: none;
+    opacity: 0.7;
+}
+
 .card-actions {
     padding: 15px;
     display: flex;

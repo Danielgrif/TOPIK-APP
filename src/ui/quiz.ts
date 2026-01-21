@@ -31,10 +31,10 @@ export function updateDailyChallengeUI() {
   const btn = document.querySelector(".fire-btn") as HTMLElement;
   if (!btn) return;
 
-  const today = new Date().toDateString();
+  const today = new Date().toLocaleDateString("en-CA");
   const d = new Date();
   d.setDate(d.getDate() - 1);
-  const yesterday = d.toDateString();
+  const yesterday = d.toLocaleDateString("en-CA");
   const challenge = state.dailyChallenge || { lastDate: null, completed: false, streak: 0 };
   
   const isCompleted = challenge.lastDate === today && challenge.completed;
@@ -74,7 +74,7 @@ export function updateDailyChallengeUI() {
 }
 
 export function checkSuperChallengeNotification() {
-  const today = new Date().toDateString();
+  const today = new Date().toLocaleDateString("en-CA");
   const isCompleted =
     state.dailyChallenge &&
     state.dailyChallenge.lastDate === today &&
@@ -450,7 +450,7 @@ export function startQuizMode(mode: string) {
 }
 
 export function startDailyChallenge() {
-  const today = new Date().toDateString();
+  const today = new Date().toLocaleDateString("en-CA");
   if (
     state.dailyChallenge &&
     state.dailyChallenge.lastDate === today &&
@@ -733,6 +733,11 @@ function recordQuizAnswer(isCorrect: boolean, autoAdvance: boolean = true) {
     state.learned.add(word.id);
     state.mistakes.delete(word.id);
     quizStreak++;
+
+    if (state.wordHistory[word.id] && !state.wordHistory[word.id].learnedDate) {
+      state.wordHistory[word.id].learnedDate = Date.now();
+    }
+
     addXP(10);
     quizXPGained += 10;
 
@@ -1106,7 +1111,7 @@ function showQuizSummaryModal(correct: number, total: number, xp: number) {
             Правильных ответов: <b>${correct}</b> из <b>${total}</b>
         </div>
         
-        <button class="btn btn-quiz" style="width: 100%; padding: 15px; font-size: 16px; border-radius: 16px;" onclick="closeModal('quiz-summary-modal')">Продолжить</button>
+        <button class="btn btn-quiz" style="width: 100%; padding: 15px; font-size: 16px; border-radius: 16px;" onclick="window.handleQuizSummaryContinue()">Продолжить</button>
     </div>
   `;
   
@@ -1127,3 +1132,11 @@ function updateComboUI(streak: number | undefined) {
     el.style.display = "none";
   }
 }
+
+(window as any).handleQuizSummaryContinue = () => {
+  closeModal("quiz-summary-modal");
+  // Если это был ежедневный вызов, показываем статус (серию и награду) после закрытия сводки
+  if (currentQuizMode === "daily" || currentQuizMode === "super-daily") {
+    setTimeout(() => openDailyStatusModal(), 300);
+  }
+};

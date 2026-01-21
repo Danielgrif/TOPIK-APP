@@ -6,6 +6,7 @@ import re
 import sys
 import time
 import hashlib
+import random
 import logging
 import asyncio
 import argparse
@@ -83,6 +84,7 @@ if not SUPABASE_URL or not SUPABASE_KEY:
 # Настройка аргументов командной строки
 parser = argparse.ArgumentParser(description="Генератор контента для TOPIK APP")
 parser.add_argument("--topic", type=str, help="Обработать только слова из конкретной темы (фильтр по колонке 'topic')")
+parser.add_argument("--word", type=str, help="Обработать только конкретное слово (фильтр по 'word_kr')")
 parser.add_argument("--force-images", action="store_true", help="Принудительно обновить изображения (перезаписать старые)")
 parser.add_argument("--force-audio", action="store_true", help="Принудительно обновить аудио (перезаписать старые)")
 parser.add_argument("--force-quotes", action="store_true", help="Принудительно обновить аудио только для цитат")
@@ -494,12 +496,15 @@ async def handle_image(session, row, translation, word_hash, force_images):
     if not q: return {} # Не тратим квоту на пустые запросы
     
     try:
-        params = {"key": PIXABAY_API_KEY, "q": q, "lang": "ru", "image_type": "photo", "per_page": 3, "safesearch": "true"}
+        # Запрашиваем больше картинок, чтобы был выбор
+        params = {"key": PIXABAY_API_KEY, "q": q, "lang": "ru", "image_type": "photo", "per_page": 20, "safesearch": "true"}
         async with session.get("https://pixabay.com/api/", params=params) as pix_res:
             if pix_res.status == 200:
                 hits = (await pix_res.json()).get('hits')
                 if hits:
-                    p_url = hits[0]['webformatURL']
+                    # Выбираем случайную картинку из полученных
+                    selected_hit = random.choice(hits)
+                    p_url = selected_hit['webformatURL']
                     async with session.get(p_url) as img_res:
                         if img_res.status == 200:
                             fname = f"{word_hash}_pix.jpg" # Уникальное имя файла
@@ -623,14 +628,25 @@ async def process_word_request(request):
             text_response = text_response.split("```")[1].split("```")[0]
             
         data = json.loads(text_response.strip())
+
+        if not data.get('word_kr'):
+            logging.error(f"❌ AI не вернул обязательное поле word_kr для запроса {req_id}")
+            return
         
         # 2. Проверка на дубликаты в vocabulary
         # Если слово уже есть, мы можем просто обновить его или проигнорировать
         # Для простоты, если слово есть, мы не добавляем дубликат, а просто помечаем заявку как processed
-        existing = supabase.table('vocabulary').select('id').eq('word_kr', data['word_kr']).execute()
+        existing = supabase.table('vocabulary').select('id').eq('word_kr', data.get('word_kr')).execute()
         
         word_id = None
         existing_data = getattr(existing, 'data', None)
+
+        # Фильтрация ключей, чтобы избежать ошибок SQL, если AI вернет лишние поля
+        allowed_keys = {
+            'word_kr', 'translation', 'word_hanja', 'topic', 'category', 
+            'level', 'type', 'example_kr', 'example_ru', 'synonyms', 'antonyms'
+        }
+        clean_data = {k: v for k, v in data.items() if k in allowed_keys}
         
         if existing_data and isinstance(existing_data, list) and len(existing_data) > 0:
             logging.info(f"ℹ️ Слово {data.get('word_kr')} уже есть в базе.")
@@ -639,7 +655,7 @@ async def process_word_request(request):
             # 3. Вставка в vocabulary
             # Если вы хотите, чтобы слово было видно ТОЛЬКО пользователю, нужно добавить поле user_id в vocabulary
             # Сейчас схема vocabulary общая. Добавим слово как общее.
-            insert_res = supabase.table('vocabulary').insert(data).execute()
+            insert_res = supabase.table('vocabulary').insert(clean_data).execute()
             insert_data = getattr(insert_res, 'data', None)
             
             if insert_data and isinstance(insert_data, list) and len(insert_data) > 0:
@@ -788,6 +804,9 @@ async def main_loop():
                     
                     if args.topic:
                         query = query.ilike("topic", f"%{args.topic}%")
+
+                    if args.word:
+                        query = query.eq("word_kr", args.word)
 
                     response = query.execute()
                     words = response.data or []

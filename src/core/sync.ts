@@ -79,6 +79,7 @@ export async function syncGlobalStats() {
           sm2_repetitions: h.sm2?.repetitions || 0,
           sm2_ef: h.sm2?.ef || 2.5,
           sm2_next_review: h.sm2?.nextReview || null,
+          learned_date: h.learnedDate || null,
           updated_at: new Date().toISOString(),
         });
       }

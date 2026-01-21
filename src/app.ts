@@ -1,5 +1,6 @@
 console.log("🚀 App starting...");
 
+import "./css/style.css";
 import { client } from "./core/supabaseClient.ts";
 import { state } from "./core/state.ts";
 import {
@@ -416,13 +417,19 @@ function setupLevelUpObserver() {
   observer.observe(overlay, { attributes: true });
 }
 
-function showWelcomeScreen(email?: string) {
+function showWelcomeScreen(user?: any) {
   const welcomeOverlay = document.getElementById("welcome-overlay");
   const welcomeName = document.getElementById("welcome-username");
   const welcomeQuote = document.getElementById("welcome-quote");
 
   if (welcomeOverlay && welcomeName) {
-    const name = email ? email.split("@")[0] : "Гость";
+    let name = "Гость";
+    if (user) {
+      // Если передан объект пользователя, берем имя из метаданных, иначе из email
+      // Если передана строка (старый код), считаем это email
+      const userData = typeof user === "string" ? { email: user } : user;
+      name = userData.user_metadata?.full_name || userData.email?.split("@")[0] || "Гость";
+    }
     welcomeName.textContent = name;
 
     const hour = new Date().getHours();
@@ -485,6 +492,8 @@ function showWelcomeScreen(email?: string) {
           welcomeQuote.innerHTML = `<div class="welcome-quote-card"><div class="welcome-kr">"시작이 반이다"</div><div class="welcome-ru">Начало — это уже половина дела.</div></div>`;
         }
         setTimeout(() => speak(textToSpeak, quote?.audio_url), 800);
+      }).catch((e) => {
+        console.warn("Failed to fetch quote:", e);
       });
     }
 
@@ -511,14 +520,16 @@ async function init() {
   }
 
   console.log("🏁 Init sequence started");
-  const loader = document.getElementById("loading-overlay");
-  if (loader) loader.remove();
 
   renderSkeletons();
 
   console.log("⏳ Fetching vocabulary...");
   await fetchVocabulary();
   console.log("✅ Vocabulary fetched");
+
+  if (!state.dataStore || state.dataStore.length === 0) {
+    throw new Error("Не удалось загрузить данные. Проверьте интернет.");
+  }
 
   if (searchWorker) searchWorker.postMessage({ type: "SET_DATA", data: state.dataStore });
 
@@ -530,27 +541,31 @@ async function init() {
   client.auth.onAuthStateChange(
     async (
       event: string,
-      session: { user: { id: string; email?: string } } | null,
+      session: { user: any } | null, 
     ) => {
-      if (session) {
-        updateAuthUI(session.user);
-        if (event === "SIGNED_IN" || event === "INITIAL_SESSION") {
-          cleanAuthUrl();
-          await loadFromSupabase(session.user);
-          saveAndRender();
-          closeModal("login-modal");
-          showWelcomeScreen(session.user.email);
+      try {
+        if (session) {
+          updateAuthUI(session.user);
+          if (event === "SIGNED_IN" || event === "INITIAL_SESSION") {
+            cleanAuthUrl();
+            await loadFromSupabase(session.user);
+            saveAndRender();
+            closeModal("login-modal");
+            showWelcomeScreen(session.user);
+          }
+          if (event === "PASSWORD_RECOVERY") {
+            openProfileModal();
+            showToast("ℹ️ Введите новый пароль");
+          }
+        } else {
+          updateAuthUI(null);
+          // Показываем приветствие для гостей при запуске приложения
+          if (event === "INITIAL_SESSION") {
+            showWelcomeScreen();
+          }
         }
-        if (event === "PASSWORD_RECOVERY") {
-          openProfileModal();
-          showToast("ℹ️ Введите новый пароль");
-        }
-      } else {
-        updateAuthUI(null);
-        // Показываем приветствие для гостей при запуске приложения
-        if (event === "INITIAL_SESSION") {
-          showWelcomeScreen();
-        }
+      } catch (e) {
+        console.error("Auth State Change Error:", e);
       }
     },
   );
@@ -665,6 +680,13 @@ async function init() {
 
     showInstallBanner();
   });
+
+  // Убираем прелоадер только после того, как всё загрузилось и отрендерилось
+  const loader = document.getElementById("loading-overlay");
+  if (loader) {
+    loader.style.opacity = "0";
+    setTimeout(() => loader.remove(), 500);
+  }
 }
 
 window.addEventListener("beforeunload", () => {
@@ -672,10 +694,18 @@ window.addEventListener("beforeunload", () => {
 });
 
 init().catch((e) => {
+  // Если произошла ошибка, тоже убираем спиннер, чтобы показать сообщение
+  const loader = document.getElementById("loading-overlay");
+  if (loader) loader.remove();
+
   console.error("Init Error", e);
   // Убираем alert, чтобы не блокировать интерфейс при некритичных ошибках
   // alert("Critical Init Error: " + e.message); 
-  if (e.name !== "AbortError") showError("Ошибка инициализации: " + e.message);
+  let msg = "Ошибка инициализации: " + e.message;
+  if (e.name === "AbortError" || e.message.includes("AbortError")) {
+    msg = "Время ожидания истекло. Проверьте интернет.";
+  }
+  showError(msg);
 });
 
 Object.assign(window, {

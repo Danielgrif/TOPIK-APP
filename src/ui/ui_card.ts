@@ -3,6 +3,7 @@ import { speak, showToast } from "../utils/utils.ts";
 import { scheduleSaveState, recordAttempt } from "../core/db.ts";
 import { addXP, checkAchievements } from "../core/stats.ts";
 import { ensureSessionStarted, saveAndRender } from "./ui.ts";
+import { regenerateImage } from "../core/contentGeneration.ts";
 import { Word } from "../types/index.ts";
 
 // --- Virtual Scroll Constants (for List View) ---
@@ -559,28 +560,49 @@ function createCardBack(item: Word): HTMLElement {
   backContent.className = "card-back-content";
 
   // --- 1. Image Section (Toggleable) ---
+  const imgSection = document.createElement("div");
+  imgSection.className = "card-section";
+  imgSection.style.padding = "0";
+
+  const imageContainer = document.createElement("div");
+  imageContainer.className = "card-image-toggle hidden"; // Start hidden
+  imageContainer.title = "Нажмите, чтобы показать/скрыть";
+  imageContainer.onclick = (e) => {
+    e.stopPropagation();
+    if ((e.target as HTMLElement).closest("button")) return;
+    imageContainer.classList.toggle("hidden");
+  };
+
+  const img = document.createElement("img");
+  img.className = "card-image";
+  img.draggable = false;
   if (item.image) {
-    const imgSection = document.createElement("div");
-    imgSection.className = "card-section";
-    imgSection.style.padding = "0";
-
-    const toggleDiv = document.createElement("div");
-    toggleDiv.className = "card-image-toggle hidden"; // По умолчанию скрыто
-    toggleDiv.title = "Нажмите, чтобы показать/скрыть";
-    toggleDiv.onclick = (e) => {
-      e.stopPropagation();
-      toggleDiv.classList.toggle("hidden");
-    };
-
-    const img = document.createElement("img");
-    img.className = "card-image";
-    img.draggable = false;
     img.dataset.src = item.image; // Lazy load
-    
-    toggleDiv.appendChild(img);
-    imgSection.appendChild(toggleDiv);
-    backContent.appendChild(imgSection);
   }
+
+  const regenBtn = document.createElement("button");
+  regenBtn.className = "card-image-regenerate-btn btn-icon";
+  regenBtn.title = "Обновить картинку";
+  regenBtn.innerHTML = "🔄";
+  regenBtn.onclick = async (e) => {
+    e.stopPropagation();
+    const btn = e.currentTarget as HTMLButtonElement;
+    btn.disabled = true;
+    btn.classList.add('rotating');
+    const newUrl = await regenerateImage(item.id as number, item.word_kr || '', item.translation || '');
+    if (newUrl) {
+      img.src = newUrl;
+      img.dataset.src = newUrl;
+      item.image = newUrl;
+      imageContainer.classList.remove('hidden');
+    }
+    btn.classList.remove('rotating');
+    btn.disabled = false;
+  };
+
+  imageContainer.append(regenBtn, img);
+  imgSection.appendChild(imageContainer);
+  backContent.appendChild(imgSection);
 
   // --- 2. Translation & Relations ---
   const transSection = document.createElement("div");
@@ -768,6 +790,11 @@ function markLearned(id: string | number) {
   state.learned.add(id);
   state.mistakes.delete(id);
   recordAttempt(id, true);
+  
+  if (state.wordHistory[id] && !state.wordHistory[id].learnedDate) {
+    state.wordHistory[id].learnedDate = Date.now();
+  }
+
   state.dirtyWordIds.add(id);
   addXP(10);
   checkAchievements();

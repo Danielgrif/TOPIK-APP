@@ -449,6 +449,8 @@ function getChartTheme() {
     tooltipBg: isDark ? "#1e1b4b" : "#ffffff",
     tooltipText: isDark ? "#ffffff" : "#1e293b",
     fontFamily: "'Pretendard Variable', sans-serif",
+    success: isDark ? "#34d399" : "#059669",
+    danger: isDark ? "#fb7185" : "#e11d48",
   };
 }
 
@@ -591,15 +593,28 @@ export function renderActivityChart() {
     d.setDate(now.getDate() - i);
     const localDateStr = d.toLocaleDateString("en-CA");
     labels.push(d.toLocaleDateString("ru-RU", { weekday: "short" }));
-    const daySessions = state.sessions.filter((s) => {
-      if (!s.date) return false;
-      return new Date(s.date).toLocaleDateString("en-CA") === localDateStr;
+    
+    // Hybrid approach:
+    // 1. Count newly learned words (precise)
+    let learnedCount = 0;
+    Object.values(state.wordHistory).forEach((h) => {
+      if (h.learnedDate) {
+        const ld = new Date(h.learnedDate).toLocaleDateString("en-CA");
+        if (ld === localDateStr) learnedCount++;
+      }
     });
-    const count = daySessions.reduce(
-      (acc, s) => acc + (s.wordsReviewed || 0),
-      0,
-    );
-    dataPoints.push(count);
+
+    // 2. If learned count is 0 (likely past days before migration), fallback to session activity
+    // This ensures the chart isn't empty for past active days
+    if (learnedCount === 0 && i > 0) {
+        const sessionActivity = state.sessions
+            .filter(s => new Date(s.date).toLocaleDateString("en-CA") === localDateStr)
+            .reduce((acc, s) => acc + (s.wordsReviewed || 0), 0);
+        // Use session activity but scale it down slightly to approximate "learned" vs "reviewed"
+        learnedCount = Math.ceil(sessionActivity * 0.5); 
+    }
+
+    dataPoints.push(learnedCount);
   }
 
   // Gradient
@@ -613,7 +628,7 @@ export function renderActivityChart() {
       labels,
       datasets: [
         {
-          label: "Изучено слов",
+          label: "Активность",
           data: dataPoints,
           backgroundColor: gradient,
           borderRadius: 6,
@@ -651,7 +666,7 @@ export function renderActivityChart() {
         cornerRadius: 8,
         displayColors: false,
         callbacks: {
-          label: (context: any) => `📝 ${context.raw} слов`,
+          label: (context: any) => `📝 ~${context.raw} слов`,
         }
       }
     },
@@ -823,18 +838,31 @@ export function renderForgettingCurve() {
   destroyChart("forgetting");
 
   const theme = getChartTheme();
+
+  // --- Calculate User's Average Stability ---
+  let totalInterval = 0;
+  let reviewedCount = 0;
+  Object.values(state.wordHistory).forEach(h => {
+      if (h && h.sm2 && h.sm2.interval > 1) { // Use interval > 1 to only count reviewed words
+          totalInterval += h.sm2.interval;
+          reviewedCount++;
+      }
+  });
+  const averageStability = reviewedCount > 0 ? totalInterval / reviewedCount : 2.5;
+
   const labels = [];
-  const data = [];
+  const theoreticalData = [];
+  const userData = [];
   for (let t = 0; t <= 7; t++) {
     labels.push(t === 0 ? "Сейчас" : t + "д");
     // Ebbinghaus curve approximation: R = e^(-t/S)
-    // Assuming S (stability) ~ 2.5 days for new words without review
-    data.push(Math.exp(-t / 2.5) * 100);
+    theoreticalData.push(Math.exp(-t / 2.5) * 100);
+    userData.push(Math.exp(-t / averageStability) * 100);
   }
 
-  const gradient = ctx.createLinearGradient(0, 0, 0, 200);
-  gradient.addColorStop(0, "rgba(225, 112, 85, 0.5)");
-  gradient.addColorStop(1, "rgba(225, 112, 85, 0.0)");
+  const gradientUser = ctx.createLinearGradient(0, 0, 0, 200);
+  gradientUser.addColorStop(0, "rgba(52, 211, 153, 0.5)");
+  gradientUser.addColorStop(1, "rgba(52, 211, 153, 0.0)");
 
   chartInstances["forgetting"] = new window.Chart(ctx, {
     type: "line",
@@ -842,15 +870,27 @@ export function renderForgettingCurve() {
       labels,
       datasets: [
         {
-          label: "Память %",
-          data,
-          borderColor: "#e17055",
-          backgroundColor: gradient,
+          label: "Ваша память",
+          data: userData,
+          borderColor: theme.success,
+          backgroundColor: gradientUser,
           borderWidth: 3,
-          pointRadius: 0,
+          pointRadius: 2,
+          pointBackgroundColor: theme.success,
           pointHoverRadius: 4,
           fill: true,
           tension: 0.4,
+        },
+        {
+          label: "Без повторений",
+          data: theoreticalData,
+          borderColor: "#e17055",
+          backgroundColor: "transparent",
+          borderWidth: 2,
+          borderDash: [5, 5],
+          pointRadius: 0,
+          fill: false,
+          tension: 0.1,
         },
       ],
     },
@@ -858,7 +898,11 @@ export function renderForgettingCurve() {
       responsive: true,
       maintainAspectRatio: false,
       plugins: {
-        legend: { display: false },
+        legend: {
+          display: true,
+          position: 'top',
+          labels: { color: theme.textColor, font: { family: theme.fontFamily } }
+        },
         tooltip: {
           backgroundColor: theme.tooltipBg,
           titleColor: theme.tooltipText,
@@ -866,7 +910,7 @@ export function renderForgettingCurve() {
           borderColor: theme.gridColor,
           borderWidth: 1,
           callbacks: {
-            label: (context: any) => `🧠 ${Math.round(context.raw)}%`
+            label: (context: any) => `🧠 ${context.dataset.label}: ${Math.round(context.raw)}%`
           }
         }
       },
@@ -903,31 +947,39 @@ export function renderSRSDistributionChart() {
     else counts[3]++;
   });
 
+  const totalWords = counts.reduce((a, b) => a + b, 0);
+
   chartInstances["srs"] = new window.Chart(ctx, {
     type: "doughnut",
     data: {
-      labels: ["Новые", "Учу", "Повторяю", "Мастер"],
+      labels: ["Новые", "Изучаю", "Закрепляю", "Выучено"],
       datasets: [
         {
           data: counts,
-          backgroundColor: ["#dfe6e9", "#fab1a0", "#74b9ff", "#00b894"],
-          hoverOffset: 4,
-          borderWidth: 0,
+          backgroundColor: [
+            theme.gridColor,
+            "rgba(96, 165, 250, 0.8)", // --info
+            "rgba(167, 139, 250, 0.9)", // --primary
+            "rgba(52, 211, 153, 0.9)", // --success
+          ],
+          borderColor: theme.tooltipBg, // Use background for separation
+          borderWidth: 3,
+          hoverOffset: 8,
         },
       ],
     },
     options: {
       responsive: true,
       maintainAspectRatio: false,
-      cutout: "65%",
+      cutout: "75%",
       plugins: {
         legend: {
-          position: "right",
+          position: "bottom",
           labels: {
             boxWidth: 12,
             color: theme.textColor,
-            font: { family: theme.fontFamily, size: 11 },
-            padding: 15
+            font: { family: theme.fontFamily, size: 12 },
+            padding: 20,
           }
         },
         tooltip: {
@@ -948,6 +1000,40 @@ export function renderSRSDistributionChart() {
           }
         }
       },
+      animation: {
+        animateRotate: true,
+        animateScale: true,
+        duration: 1200,
+      },
     },
+    plugins: [{
+        id: 'centerText',
+        afterDraw: (chart: any) => {
+            const ctx = chart.ctx;
+            const { width, height } = chart;
+
+            ctx.restore();
+            const fontSize = (height / 115).toFixed(2);
+            ctx.font = `bold ${fontSize}em ${theme.fontFamily}`;
+            ctx.textBaseline = 'middle';
+            ctx.textAlign = 'center';
+
+            const text = `${totalWords}`;
+            const textX = width / 2;
+            const textY = height / 2;
+
+            const label = 'слов';
+            const labelFontSize = (height / 250).toFixed(2);
+            
+            ctx.fillStyle = theme.textColor;
+            ctx.fillText(text, textX, textY - (height * 0.05));
+            
+            ctx.font = `600 ${labelFontSize}em ${theme.fontFamily}`;
+            ctx.fillStyle = theme.textColor.replace(')', ', 0.7)');
+            ctx.fillText(label, textX, textY + (height * 0.08));
+
+            ctx.save();
+        }
+    }]
   });
 }
