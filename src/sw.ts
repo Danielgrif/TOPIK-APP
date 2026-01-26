@@ -2,7 +2,7 @@
 import { precacheAndRoute, cleanupOutdatedCaches } from "workbox-precaching";
 import { clientsClaim } from "workbox-core";
 import { registerRoute } from "workbox-routing";
-import { NetworkOnly, CacheFirst } from "workbox-strategies";
+import { NetworkOnly, CacheFirst, StaleWhileRevalidate } from "workbox-strategies";
 import { BackgroundSyncPlugin } from "workbox-background-sync";
 import { ExpirationPlugin } from "workbox-expiration";
 import { CacheableResponsePlugin } from "workbox-cacheable-response";
@@ -55,6 +55,24 @@ registerRoute(
   })
 );
 
+// Кэширование данных словаря (API Supabase)
+// Используем StaleWhileRevalidate: отдаем кэш сразу, а в фоне обновляем его
+registerRoute(
+  ({ url }) => url.hostname.includes("supabase.co") && url.pathname.includes("/vocabulary"),
+  new StaleWhileRevalidate({
+    cacheName: "api-vocabulary-cache",
+    plugins: [
+      new CacheableResponsePlugin({
+        statuses: [0, 200],
+      }),
+      new ExpirationPlugin({
+        maxEntries: 1, // Нам нужен только последний актуальный слепок базы
+        maxAgeSeconds: 60 * 60 * 24 * 14, // Хранить 2 недели
+      }),
+    ],
+  })
+);
+
 // Настройка Background Sync
 const bgSyncPlugin = new BackgroundSyncPlugin('supabase-queue', {
   maxRetentionTime: 24 * 60 // Повторять попытки в течение 24 часов (в минутах)
@@ -68,9 +86,78 @@ registerRoute(
   })
 );
 
+// --- Очередь отложенных загрузок (IndexedDB) ---
+const QUEUE_DB_NAME = "offline-queue-db";
+const QUEUE_STORE = "downloads";
+
+function openQueueDB() {
+  return new Promise<IDBDatabase>((resolve, reject) => {
+    const req = indexedDB.open(QUEUE_DB_NAME, 1);
+    req.onupgradeneeded = () => {
+      if (!req.result.objectStoreNames.contains(QUEUE_STORE)) {
+        req.result.createObjectStore(QUEUE_STORE, { keyPath: "url" });
+      }
+    };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+async function addToQueue(url: string) {
+  try {
+    const db = await openQueueDB();
+    const tx = db.transaction(QUEUE_STORE, "readwrite");
+    tx.objectStore(QUEUE_STORE).put({ url, added: Date.now() });
+  } catch (e) {
+    console.error("[SW] Queue add failed", e);
+  }
+}
+
+async function processDownloadQueue() {
+  try {
+    const db = await openQueueDB();
+    const tx = db.transaction(QUEUE_STORE, "readwrite");
+    const store = tx.objectStore(QUEUE_STORE);
+    const req = store.getAll();
+    
+    req.onsuccess = async () => {
+      const items = req.result as { url: string }[];
+      if (items.length === 0) return;
+      
+      // Очищаем очередь перед началом, чтобы избежать зацикливания
+      const clearTx = db.transaction(QUEUE_STORE, "readwrite");
+      clearTx.objectStore(QUEUE_STORE).clear();
+
+      const cache = await caches.open(AUDIO_CACHE_NAME);
+      
+      // Скачиваем файлы последовательно
+      for (const item of items) {
+        try {
+          // fetch внутри SW не проходит через fetch-слушатель SW, поэтому не будет заблокирован проверкой скорости
+          const resp = await fetch(item.url);
+          if (resp.ok) {
+            await cache.put(item.url, resp);
+          }
+        } catch (e) {
+          console.error(`[SW] Retry failed for ${item.url}`, e);
+        }
+      }
+      
+      // Сообщаем клиентам, что загрузка завершена (опционально)
+      const clients = await self.clients.matchAll();
+      clients.forEach(client => client.postMessage({ type: 'DOWNLOAD_QUEUE_COMPLETED', count: items.length }));
+    };
+  } catch (e) {
+    console.error("[SW] Queue process failed", e);
+  }
+}
+
 self.addEventListener("message", (event) => {
   if (event.data && event.data.type === "SKIP_WAITING") {
     self.skipWaiting();
+  }
+  if (event.data && event.data.type === "PROCESS_DOWNLOAD_QUEUE") {
+    processDownloadQueue();
   }
 });
 
@@ -99,6 +186,15 @@ self.addEventListener("fetch", (e: FetchEvent) => {
         .then((cache) => {
           return cache.match(e.request).then((response) => {
             if (response) return response;
+
+            // 🐌 Проверка скорости сети: пропускаем загрузку тяжелых файлов на медленном интернете
+            // @ts-ignore
+            const conn = navigator.connection;
+            if (conn && (conn.saveData || ['slow-2g', '2g'].includes(conn.effectiveType))) {
+                addToQueue(e.request.url); // Добавляем в очередь на будущее
+                return new Response(null, { status: 503, statusText: "Skipped due to slow connection" });
+            }
+
             return fetch(e.request).then((networkResponse) => {
               if (
                 networkResponse &&

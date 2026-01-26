@@ -8,8 +8,6 @@
     <link rel="icon" href="/app-logo.svg" type="image/svg+xml">
     <meta name="theme-color" content="#6c5ce7">
     <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
-    <link rel="preload" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/woff2/Pretendard-Regular.woff2" as="font" type="font/woff2" crossorigin>
-    <link rel="preload" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/woff2/Pretendard-Bold.woff2" as="font" type="font/woff2" crossorigin>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -106,6 +104,185 @@
             border-top-color: #a78bfa; 
         }
       }
+
+      /* Offline Indicator */
+      #offline-indicator {
+        position: fixed;
+        bottom: 80px;
+        left: 50%;
+        transform: translateX(-50%);
+        background: rgba(33, 33, 33, 0.9);
+        color: white;
+        padding: 8px 16px;
+        border-radius: 20px;
+        font-size: 13px;
+        font-weight: 600;
+        z-index: 19000;
+        display: none;
+        align-items: center;
+        gap: 8px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+        backdrop-filter: blur(4px);
+        pointer-events: none;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+      }
+      #offline-indicator.visible {
+        display: flex;
+        animation: slideUpFade 0.3s ease-out, offlinePulse 2s infinite;
+      }
+      @keyframes slideUpFade {
+        from { opacity: 0; transform: translate(-50%, 10px); }
+        to { opacity: 1; transform: translate(-50%, 0); }
+      }
+      @keyframes offlinePulse {
+        0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4); border-color: rgba(239, 68, 68, 0.4); }
+        70% { box-shadow: 0 0 0 10px rgba(239, 68, 68, 0); border-color: rgba(239, 68, 68, 1); }
+        100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); border-color: rgba(239, 68, 68, 0.4); }
+      }
+
+      /* Onboarding Styles */
+      #onboarding-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        /* Фон теперь управляется SVG-слоем .onboarding-backdrop */
+        z-index: 21000; /* Выше чем тосты и индикаторы */
+        display: none;
+        justify-content: center;
+        align-items: center;
+        pointer-events: none; /* По умолчанию пропускаем клики (если скрыт) */
+        transition: all 0.3s ease;
+        opacity: 0; /* Скрыт по умолчанию для анимации */
+      }
+      #onboarding-overlay.active {
+        display: flex;
+        opacity: 1;
+        pointer-events: none; /* Контейнер пропускает клики, блокировка идет через SVG */
+      }
+      .onboarding-svg {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        pointer-events: none;
+      }
+      .onboarding-backdrop {
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.6); /* Полупрозрачный фон */
+        backdrop-filter: blur(5px);      /* Размытие фона */
+        -webkit-backdrop-filter: blur(5px);
+        transition: background 0.3s;
+      }
+      .onboarding-click-blocker-path {
+        fill: transparent;
+        pointer-events: auto;
+        transition: d 0.4s cubic-bezier(0.2, 0.8, 0.2, 1);
+      }
+      #spotlight-hole {
+        transition: x 0.4s cubic-bezier(0.2, 0.8, 0.2, 1), 
+                    y 0.4s cubic-bezier(0.2, 0.8, 0.2, 1), 
+                    width 0.4s cubic-bezier(0.2, 0.8, 0.2, 1), 
+                    height 0.4s cubic-bezier(0.2, 0.8, 0.2, 1),
+                    rx 0.4s;
+      }
+      #spotlight-border {
+        fill: none;
+        stroke: var(--primary, #6c5ce7); /* Цвет обводки (берется из темы) */
+        stroke-width: 3;
+        pointer-events: none; /* Пропускаем клики */
+        transition: x 0.4s cubic-bezier(0.2, 0.8, 0.2, 1), 
+                    y 0.4s cubic-bezier(0.2, 0.8, 0.2, 1), 
+                    width 0.4s cubic-bezier(0.2, 0.8, 0.2, 1), 
+                    height 0.4s cubic-bezier(0.2, 0.8, 0.2, 1),
+                    rx 0.4s;
+        animation: borderPulse 2s infinite;
+      }
+      @keyframes borderPulse {
+        0% { stroke-opacity: 0.5; stroke-width: 3; }
+        50% { stroke-opacity: 1; stroke-width: 5; }
+        100% { stroke-opacity: 0.5; stroke-width: 3; }
+      }
+      .onboarding-close-btn {
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        background: rgba(0,0,0,0.3);
+        color: white;
+        border: none;
+        font-size: 20px;
+        cursor: pointer;
+        z-index: 20; /* Выше карточки */
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: background 0.2s, transform 0.2s;
+        pointer-events: auto; /* Кнопка всегда кликабельна */
+      }
+      .onboarding-close-btn:hover {
+        background: rgba(0,0,0,0.5);
+        transform: scale(1.1);
+      }
+      .onboarding-card {
+        background: var(--surface-1, #fff);
+        padding: 24px;
+        border-radius: 20px;
+        width: 90%;
+        max-width: 360px;
+        box-shadow: 0 10px 40px rgba(0,0,0,0.5);
+        text-align: center;
+        position: fixed; /* Фиксируем, чтобы не зависеть от размеров оверлея в режиме spotlight */
+        /* Центрирование по умолчанию */
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        pointer-events: auto; /* Карточка всегда кликабельна */
+        z-index: 10;
+        animation: popIn 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        color: var(--text-main, #000);
+      }
+      .onboarding-image { font-size: 48px; display: block; margin-bottom: 16px; }
+      .onboarding-title { font-size: 20px; font-weight: 800; margin-bottom: 8px; }
+      .onboarding-text { font-size: 14px; color: var(--text-sub, #666); margin-bottom: 24px; line-height: 1.5; margin-top: 20px; }
+      .onboarding-progress {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 8px;
+        background-color: var(--surface-3, #eee);
+        border-top-left-radius: 20px;
+        border-top-right-radius: 20px;
+        overflow: hidden;
+      }
+      .onboarding-progress-bar { height: 100%; width: 0%; background-color: var(--primary, #6c5ce7); transition: width 0.4s ease; }
+      .onboarding-actions { display: flex; gap: 12px; }
+
+      .onboarding-hand {
+        position: fixed;
+        font-size: 48px;
+        z-index: 21010; /* Выше карточки и фона */
+        pointer-events: none;
+        opacity: 0;
+        transform: translate(-50%, -50%) scale(0.5);
+        transition: opacity 0.3s, transform 0.3s;
+        filter: drop-shadow(0 4px 8px rgba(0,0,0,0.4));
+        transform-origin: bottom right;
+      }
+      .onboarding-hand.visible {
+        opacity: 1;
+        animation: hand-poke 1.5s infinite ease-in-out;
+      }
+      @keyframes hand-poke {
+        0%, 100% { transform: translate(-50%, -50%) scale(1) rotate(-10deg); }
+        50% { transform: translate(-45%, -45%) scale(1.1) rotate(10deg); }
+      }
     </style>
   </head>
   <body>
@@ -142,6 +319,11 @@
         z-index: 20000;
       "
     ></div>
+
+    <!-- Offline Indicator -->
+    <div id="offline-indicator">
+      <span>📡</span> <span>Вы офлайн</span>
+    </div>
 
     <!-- Critical Error Overlay -->
     <div id="error-overlay">
@@ -720,6 +902,9 @@
                     <div class="setting-item" data-modal-target="achievements-modal" style="cursor: pointer;">
                         <div class="setting-left"><span class="setting-icon">🏆</span><span class="setting-label">Достижения</span></div>
                         <div class="setting-right"><span class="setting-arrow">›</span></div>
+                    </div>
+                    <div class="setting-item" data-action="reset-onboarding" style="cursor: pointer;">
+                        <div class="setting-left"><span class="setting-icon">🎓</span><span class="setting-label">Повторить обучение</span></div>
                     </div>
                     <div class="setting-item" data-action="export-data" style="cursor: pointer;">
                         <div class="setting-left"><span class="setting-icon">💾</span><span class="setting-label">Экспорт данных</span></div>

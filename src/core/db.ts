@@ -1,5 +1,5 @@
 import { client } from "./supabaseClient.ts";
-import { state, Session } from "./state.ts";
+import { state, Session, CURRENT_DB_VERSION } from "./state.ts";
 import { showToast, parseBilingualString, compress } from "../utils/utils.ts";
 import { syncGlobalStats } from "./sync.ts";
 import { Scheduler } from "./scheduler.ts";
@@ -39,6 +39,18 @@ function validateSchema(data: Word[]) {
   }
 }
 
+// Простая валидация схемы для критически важных данных
+function validateUserStats(stats: any): boolean {
+  if (!stats || typeof stats !== 'object') return false;
+  
+  // Проверяем, что числовые поля действительно числа и не NaN
+  const numericFields = ['xp', 'level', 'coins', 'sprintRecord', 'survivalRecord'];
+  const isValid = numericFields.every(field => typeof stats[field] === 'number' && !isNaN(stats[field]));
+
+  if (!isValid) console.error("❌ Validation failed for UserStats:", stats);
+  return isValid;
+}
+
 export function scheduleSaveState(delay: number = 300) {
   if (_saveTimer) clearTimeout(_saveTimer);
   _saveTimer = window.setTimeout(() => {
@@ -50,6 +62,13 @@ export function scheduleSaveState(delay: number = 300) {
 
 export function immediateSaveState() {
   try {
+    // Валидация перед сохранением, чтобы не записать мусор
+    if (!validateUserStats(state.userStats)) {
+      console.warn("⚠️ State validation failed. Aborting save to protect localStorage.");
+      return;
+    }
+
+    localStorage.setItem("db_version", String(CURRENT_DB_VERSION));
     localStorage.setItem("user_stats_v5", JSON.stringify(state.userStats));
     localStorage.setItem("learned_v5", JSON.stringify([...state.learned]));
     localStorage.setItem("mistakes_v5", JSON.stringify([...state.mistakes]));
@@ -173,6 +192,16 @@ export async function fetchVocabulary() {
   try {
     const cachedVersion = localStorage.getItem("vocabulary_version");
     const isCacheValid = cachedVersion === VOCABULARY_CACHE_VERSION;
+
+    // 🐌 Проверка скорости: если есть кэш и интернет медленный, пропускаем обновление
+    // @ts-ignore
+    const conn = navigator.connection;
+    if (conn && (conn.saveData || ['slow-2g', '2g'].includes(conn.effectiveType))) {
+      if (state.dataStore.length > 0) {
+        showToast("🐌 Медленный интернет: обновление словаря отложено");
+        return;
+      }
+    }
 
     if (!isCacheValid && navigator.onLine) {
       console.log("🔄 Cache outdated or missing. Forcing refresh...");
@@ -398,5 +427,64 @@ export async function fetchRandomQuote() {
   } catch (e) {
     console.warn("Quote fetch error:", e);
     return null;
+  }
+}
+
+export function createLocalBackup() {
+  try {
+    const keys = [
+      "user_stats_v5",
+      "learned_v5",
+      "mistakes_v5",
+      "favorites_v5",
+      "word_history_v5",
+      "streak_v5",
+      "sessions_v5",
+      "achievements_v5",
+      "daily_challenge_v1",
+      "custom_words_v1",
+      "favorite_quotes_v1",
+      "dirty_ids_v1"
+    ];
+    
+    const backup: Record<string, string> = {};
+    let size = 0;
+
+    keys.forEach(key => {
+      const val = localStorage.getItem(key);
+      if (val) {
+        backup[key] = val;
+        size += val.length;
+      }
+    });
+
+    // Предотвращаем ошибку квоты, если данных слишком много (> 3MB)
+    if (size > 3 * 1024 * 1024) {
+        console.warn("⚠️ Backup skipped: Data too large for localStorage duplication.");
+        return;
+    }
+
+    localStorage.setItem("safety_backup_v1", JSON.stringify(backup));
+    console.log("🛡️ Safety backup created");
+  } catch (e) {
+    console.warn("⚠️ Backup failed:", e);
+  }
+}
+
+export function restoreLocalBackup(): boolean {
+  try {
+    const raw = localStorage.getItem("safety_backup_v1");
+    if (!raw) return false;
+    
+    const backup = JSON.parse(raw);
+    Object.entries(backup).forEach(([key, val]) => {
+      if (typeof val === 'string') localStorage.setItem(key, val);
+    });
+    
+    location.reload();
+    return true;
+  } catch (e) {
+    console.error("Restore failed:", e);
+    return false;
   }
 }

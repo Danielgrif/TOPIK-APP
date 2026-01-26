@@ -2,88 +2,95 @@
 
 ## 1. Project Overview
 **TOPIK II Master Pro** — PWA-приложение для подготовки к экзамену TOPIK II (уровни 3-6).
-Архитектура: Vanilla JS SPA (Single Page Application) без фреймворков с улучшенной модульной структурой (`core/`, `ui/`).
-Данные: Supabase (PostgreSQL, Auth, Storage).
+Архитектура: Vanilla JS SPA (Single Page Application) без фреймворков с улучшенной модульной структурой (`src/core/`, `src/ui/`).
+Данные: Supabase (PostgreSQL, Auth, Storage, Edge Functions).
 Автоматизация: Python (`content_worker.py`) с `asyncio` для массовой генерации контента.
-**Особенности:** PWA (Progressive Web App), Dark Mode, 3D-карточки, SRS (SuperMemo-2), Skeleton Loading.
+**Особенности:** PWA (Progressive Web App), Dark Mode, 3D-карточки, SRS (SuperMemo-2), Skeleton Loading, Virtual Scrolling, Offline Support.
 
 ## 2. Critical Development Rules (User Constraints)
 * **NO CODE TRUNCATION**: Строгий запрет на сокращение кода ("// ..."). Всегда возвращай полный текст файла.
 * **PRESERVE STYLISTICS**: Не удаляй существующие CSS-классы и не меняй структуру DOM без необходимости. Сохраняй иконки и эмодзи.
 * **ERROR HANDLING**: Используй `try/catch` для всех асинхронных операций. Логируй ошибки через `console.error` и показывай `showToast`.
-* **STATE MANAGEMENT**: Все изменения данных должны проходить через `state.js`. Не храни состояние в глобальных переменных `window` (кроме экспорта функций для HTML).
-* **DOM MANIPULATION**: Весь код, работающий с UI, должен находиться в `ui.js` или специализированных модулях (`quiz.js`, `auth.js` для своих модалок).
-* **MODULARITY**: Соблюдай разделение ответственности. `app.js` — точка входа, `db.js` — данные, `ui.js` — рендеринг.
+* **STATE MANAGEMENT**: Все изменения данных должны проходить через `state.ts`. Не храни состояние в глобальных переменных `window` (кроме экспорта функций для HTML).
+* **DOM MANIPULATION**: Весь код, работающий с UI, должен находиться в `ui/` или специализированных модулях.
+* **MODULARITY**: Соблюдай разделение ответственности. `app.ts` — точка входа, `db.ts` — данные, `ui.ts` — рендеринг.
 * **THEMING**: Используй CSS-переменные (`var(--surface-1)`, `var(--text-main)`) для поддержки светлой и темной тем.
 
 ## 3. Module Responsibilities & API
 
 ### Core Data & Logic
-- **`js/core/state.js`**:
+- **`src/core/state.ts`**:
   - Центральное хранилище данных (Singleton `state`).
   - Хранит: `dataStore` (словарь), `userStats`, `learned`, `mistakes`, `favorites`, `wordHistory`.
   - Настройки: `currentTopic` (array), `audioSpeed`, `darkMode`, `hanjaMode`.
   - Инициализирует состояние из `localStorage`.
 
-- **`js/core/supabaseClient.js`**:
+- **`src/core/supabaseClient.ts`**:
   - Инициализация клиента `createClient`.
   - Использует ключи: `SUPABASE_URL`, `SUPABASE_KEY` (Anon).
 
-- **`js/core/db.js`**:
+- **`src/core/db.ts`**:
   - Взаимодействие с БД и LocalStorage.
   - Функции: `fetchVocabulary()`, `loadFromSupabase()`, `syncWithSupabase()`, `immediateSaveState()`, `recordAttempt()`.
   - Управляет синхронизацией прогресса, избранного и "грязными" записями (`dirtyWordIds`).
 
-  - **`searchWorker.js`**:
+- **`src/workers/searchWorker.ts`**:
   - Web Worker для фонового поиска по словарю.
   - Разгружает UI-поток при вводе текста.
 
-- **`js/core/scheduler.js`**:
+- **`src/core/scheduler.ts`**:
   - Алгоритм интервальных повторений (SuperMemo-2 / Anki-like).
   - Методы: `calculate(grade, item)`, `getQueue()`, `submitReview()`.
 
-- **`js/core/stats.js`**:
+- **`src/core/stats.ts`**:
   - Логика статистики и достижений.
   - Функции: `addXP()`, `checkAchievements()`, `renderActivityChart()`, `renderLearnedChart()`, `renderDetailedStats()`.
 
 ### UI & Presentation
-- **`js/app.js`**:
+- **`src/app.ts`**:
   - Точка входа (`init`).
   - **Global Event Delegation**: Обработка `data-action` и `data-modal-target` для всего приложения.
   - Настройка глобальных слушателей (Auth, Search).
   - Регистрация Service Worker (PWA).
 
-- **`js/ui/ui.js`**:
+- **`src/ui/ui.ts`**:
   - Управление глобальными элементами UI: фильтры, таймер сессии, жесты, навигация.
   - Функции-координаторы: `saveAndRender()`, `populateFilters()`.
 
-- **`js/ui/ui_card.js`**: Рендеринг списка слов, создание 3D-карточек, логика Skeleton-заглушек.
-- **`js/ui/ui_modal.js`**: Управление всеми модальными окнами.
-- **`js/ui/ui_settings.js`**: Логика для окна настроек (тема, голос, скорость).
+- **`src/ui/ui_card.ts`**:
+  - Рендеринг списка слов (Grid/List view).
+  - **Virtual Scrolling**: Оптимизированный рендеринг длинных списков.
+  - **Image Management**: Загрузка пользовательских фото, удаление, регенерация через AI (Edge Function).
+  - Логика Skeleton-заглушек и 3D-карточек.
 
-- **`js/ui/quiz.js`**:
+- **`src/ui/ui_modal.ts`**: Управление всеми модальными окнами.
+- **`src/ui/ui_settings.ts`**: Логика для окна настроек (тема, голос, скорость).
+
+- **`src/ui/quiz.ts`**:
   - Логика режимов тренировки (Sprint, Survival, Flashcard, etc.).
   - Управление состоянием квиза (`currentQuizMode`, `quizWords`).
   - Рендеринг вопросов квиза и обработка ответов (включая Levenshtein check).
 
-- **`js/core/auth.js`**:
+- **`src/core/auth.ts`**:
   - Логика аутентификации (Login, Signup, Reset Password).
   - Управление модальными окнами входа и профиля.
 
-- **`js/utils/utils.js`**:
+- **`src/utils/utils.ts`**:
   - Утилиты: `debounce`, `showToast`, `speak` (TTS), `playTone` (Web Audio API), `levenshtein`, `generateDiffHtml`.
-
-- **`style.css`**:
-  - **(Legacy)**. Стили разделены на модули в папке `/css`.
-  - `base.css`, `layout.css`, `components.css`, `themes.css`, `animations.css`.
 
 ### PWA
 - **`manifest.json`**: Метаданные приложения для установки.
-- **`sw.js`**: Service Worker для кэширования ресурсов.
+- **`src/sw.ts`**: Service Worker для кэширования ресурсов.
   - Стратегия Stale-While-Revalidate для статики (мгновенная загрузка).
-  - Стратегия Cache First для аудиофайлов.
+  - Стратегия Cache First для аудиофайлов и изображений.
+  - **Background Sync**: Очередь `supabase-queue` для синхронизации данных при появлении сети.
+  - **Download Queue**: Отложенная загрузка тяжелых файлов при плохом соединении.
 
 ### Backend & Automation
+- **`supabase/functions/regenerate-image`**:
+  - Deno Edge Function.
+  - Проксирует запросы к Pixabay API для поиска картинок.
+  - Загружает изображения в Supabase Storage и обновляет БД.
 - **`content_worker.py`**:
   - Python-скрипт для наполнения контента (Asyncio).
   - Генерирует аудио (Edge TTS) и загружает картинки (Pixabay) в Supabase Storage.
@@ -93,10 +100,11 @@
   - Проверяет таблицы `vocabulary` и `user_progress`.
 
 ## 4. Data Flow (Типичный сценарий)
-1. **Start**: `app.js` -> `db.js` (fetchVocabulary) -> `state.js` (загрузка LocalStorage) -> `ui.js` (render).
-2. **Auth**: `auth.js` -> `supabaseClient` -> `db.js` (loadFromSupabase) -> `state.js` (merge data) -> `ui.js` (saveAndRender).
-3. **Quiz**: `ui.js` (openModal) -> `quiz.js` (buildQuizModes) -> `state.js` (фильтрация слов) -> `quiz.js` (startQuizMode).
-4. **Answer**: `quiz.js` (checkAnswer) -> `db.js` (recordAttempt) -> `scheduler.js` (если режим повторения) -> `state.js` (обновление статистики) -> `db.js` (scheduleSaveState).
+1. **Start**: `app.ts` -> `db.ts` (fetchVocabulary) -> `state.ts` (загрузка LocalStorage) -> `ui.ts` (render).
+2. **Auth**: `auth.ts` -> `supabaseClient` -> `db.ts` (loadFromSupabase) -> `state.ts` (merge data) -> `ui.ts` (saveAndRender).
+3. **Quiz**: `ui.ts` (openModal) -> `quiz.ts` (buildQuizModes) -> `state.ts` (фильтрация слов) -> `quiz.ts` (startQuizMode).
+4. **Answer**: `quiz.ts` (checkAnswer) -> `db.ts` (recordAttempt) -> `scheduler.ts` (если режим повторения) -> `state.ts` (обновление статистики) -> `db.ts` (scheduleSaveState).
+5. **Image Regen**: `ui_card.ts` -> `supabaseClient.functions.invoke` -> `regenerate-image` (Edge) -> `Pixabay` -> `Storage` -> `DB`.
 
 ## 5. Database Schema (Supabase)
 - **`vocabulary`**:
@@ -117,26 +125,23 @@
 
 ## 7. Strict Evaluation & Roadmap
 
-### 📊 Evaluation (Score: 9.2/10)
+### 📊 Evaluation (Score: 9.5/10)
 **Strengths:**
-  - **Architecture:** Clean Vanilla JS with Event Delegation (`app.js`).
-  - **Performance:** Workers, PWA, Skeleton loading, Optimized DOM updates.
-  - **Automation:** Robust Python pipeline (`content_worker.py`) with async/await.
+  - **Architecture**: Clean Vanilla JS with Event Delegation (`app.ts`).
+  - **Performance**: Workers, PWA, Skeleton loading, Virtual Scrolling, Optimized DOM updates.
+  - **Automation**: Robust Python pipeline (`content_worker.py`) and Edge Functions.
   - **Reliability:** Schema validation script (`validate_schema.py`) ensures DB integrity.
 **Weaknesses:**
-  - **CSS:** ✅ **(Fixed)** `style.css` has been modularized.
-  - **Type Safety:** ✅ **(Fixed)** Full TypeScript migration completed.
-  - **Testing:** Unit tests cover Scheduler and Worker. UI logic needs more coverage.
+  - **Testing**: Unit tests cover Scheduler and Worker. UI logic needs more coverage (Vitest setup exists).
 
 ### 🛣️ Improvement Program
 
 #### Phase 1: Stability & Quality (Completed/In Progress)
 1.  **Schema Validation:** ✅ Implemented `validate_schema.py` to check DB columns and buckets.
-2.  **Event Delegation:** ✅ Refactored `index.html` and `app.js` to remove inline `onclick` handlers.
+2.  **Event Delegation:** ✅ Refactored `app.ts`.
 3.  **Type Safety:** ✅ **(Done)** Project fully migrated to TypeScript (`.ts`).
 4.  **CSS Modularization:** ✅ Split `style.css` into modules. Fixed nesting syntax errors.
-5.  **Missing Logic:** ✅ Restored `quiz_strategies.ts` and implemented `renderLearnedChart`.
-4.  **Unit Tests:** 🔄 Added `test_content_worker.py`. Need more JS unit tests.
+5.  **Virtual Scrolling:** ✅ **(Done)** Implemented for Grid and List views in `ui_card.ts`.
 
 #### Phase 2: UX & Content (Completed)
 1. **Leaderboard:** Global XP leaderboard with Realtime updates. (Done)
@@ -161,12 +166,13 @@
 3. **Social:** Share Statistics as image. (Done)
 4. **New Quiz Modes:** Word Association, Pronunciation Check, Confusing Words. (Done)
 
-#### Phase 4: Content & Community (Next Steps)
-1. **User Custom Words:** Allow users to add, edit, and delete their own words (stored locally or in Supabase).
-2. **Mistake Analysis:** ✅ **(Done)** Implemented breakdown by Topic/Part of Speech in `ui_mistakes.ts`.
-3. **Advanced Search:** Filter by "Has Audio", "Has Image", "Has Example".
+#### Phase 4: Content & Community (Current Focus)
+1. **User Custom Words:** ✅ **(Done)** Logic for adding/deleting custom words implemented.
+2. **Image Management:** ✅ **(Done)** Upload custom images, regenerate via AI (Edge Function), delete images.
+3. **Mistake Analysis:** ✅ **(Done)** Implemented breakdown by Topic/Part of Speech.
+4. **Advanced Search:** Filter by "Has Audio", "Has Image", "Has Example".
 
 #### Phase 5: Technical Debt & Performance (Long-term)
-1.  **CSS Modularization:** ✅ **(Done)**
-2.  **Virtual Scrolling:** ✅ **(Done)** Implemented virtual scroller for Grid and List views in `ui_card.ts`.
-3.  **Full TypeScript Migration:** ✅ **(Done)** All source files converted to TypeScript.
+1.  **Full TypeScript Migration:** ✅ **(Done)**.
+2.  **Edge Functions**: ✅ **(Done)** Implemented for image regeneration.
+3.  **Offline Sync**: ✅ **(Done)** Background Sync implemented in Service Worker.

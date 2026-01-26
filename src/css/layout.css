@@ -19,7 +19,6 @@
     -webkit-backdrop-filter: blur(12px);
     margin: 0;
     padding: 12px 16px;
-    transition: transform 0.3s ease;
     transition: transform 0.3s ease, background-color 0.4s ease, border-color 0.4s ease;
     border-bottom: 1px solid var(--border-color);
     width: 100%;
@@ -45,7 +44,6 @@
     background: var(--surface-1);
     border: 1px solid var(--border-color);
     box-shadow: var(--shadow-sm);
-    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
     transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.2s cubic-bezier(0.4, 0, 0.2, 1), background-color 0.4s ease, border-color 0.4s ease;
 }
 #profile-button:hover {
@@ -105,7 +103,6 @@
     align-items: center;
     gap: 6px;
     cursor: pointer;
-    transition: transform 0.2s;
     transition: transform 0.2s, background-color 0.4s ease, border-color 0.4s ease, color 0.4s ease;
     color: var(--text-main);
 }
@@ -118,7 +115,6 @@
     cursor: pointer;
     padding: 6px;
     border-radius: 50%;
-    transition: background 0.2s;
     transition: background-color 0.2s;
     display: flex;
     align-items: center;
@@ -211,7 +207,6 @@
     color: var(--text-main);
     font-size: 15px;
     box-shadow: var(--shadow-sm);
-    transition: all 0.2s ease;
     transition: box-shadow 0.2s ease, background-color 0.4s ease, color 0.4s ease, border-color 0.4s ease;
 }
 .search-input:focus {
@@ -357,11 +352,11 @@
 
 #vocabulary-grid.grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
     gap: 16px;
     position: relative;
     scroll-snap-type: y mandatory;
-    padding-bottom: 80px; /* Extra space for bottom nav */
+    padding: 24px 24px 100px 24px; /* Default padding (Skeletons/List) */
     max-width: 1200px;
     margin: 0 auto;
 }
@@ -369,11 +364,26 @@
 #vocabulary-grid.list-view {
     display: block;
     position: relative;
+    scroll-snap-type: none;
+}
+
+/* Remove padding for Grid Virtual Scroll to let scrollbar hit the edge */
+#vocabulary-grid.grid.virtual-scroll-container {
+    padding: 0;
 }
 
 .virtual-scroll-container {
     position: relative;
-    contain: layout paint;
+    contain: layout; /* Removed 'paint' to prevent shadow clipping */
+    height: 100%;
+    overflow-y: auto;
+}
+
+.vocabulary-inner-grid {
+    display: grid;
+    gap: 16px;
+    width: 100%;
+    box-sizing: border-box;
 }
 
 #bottom-nav {
@@ -401,6 +411,13 @@
 body.dark-mode #bottom-nav {
     border: 1px solid rgba(255, 255, 255, 0.15);
     box-shadow: 0 20px 40px -5px rgba(0,0,0,0.6);
+}
+
+/* Hide bottom nav in focus mode for immersion */
+body.focus-mode #bottom-nav {
+    transform: translateX(-50%) translateY(200%);
+    opacity: 0;
+    pointer-events: none;
 }
 
 .nav-btn {

@@ -122,7 +122,32 @@ export function generateDiffHtml(user: string, correct: string): string {
   return html;
 }
 
+// Helper: Выполнить функцию при первом взаимодействии пользователя
+let interactionListeners: { type: string, handler: EventListener }[] = [];
+
+function cleanupInteractionListeners() {
+  interactionListeners.forEach(({ type, handler }) => {
+    document.removeEventListener(type, handler, { capture: true });
+  });
+  interactionListeners = [];
+}
+
+function onUserInteraction(fn: () => void) {
+  cleanupInteractionListeners();
+  const handler = (_e: Event) => {
+    cleanupInteractionListeners();
+    fn();
+  };
+  ['click', 'touchstart', 'keydown'].forEach(evt => {
+    document.addEventListener(evt, handler, { capture: true, once: true });
+    interactionListeners.push({ type: evt, handler });
+  });
+}
+
 let _audioCtx: AudioContext | null = null;
+let _currentAudio: HTMLAudioElement | null = null; // Глобальная переменная для отслеживания активного аудио
+const audioCache = new Map<string, HTMLAudioElement>();
+const MAX_AUDIO_CACHE = 50;
 let _osc: OscillatorNode | null = null;
 function _ensureAudio(): AudioContext | null {
   try {
@@ -132,6 +157,17 @@ function _ensureAudio(): AudioContext | null {
     return _audioCtx;
   } catch {
     return null;
+  }
+}
+
+export function cancelSpeech() {
+  cleanupInteractionListeners();
+  if (_currentAudio) {
+    _currentAudio.pause();
+    _currentAudio = null;
+  }
+  if ("speechSynthesis" in window) {
+    window.speechSynthesis.cancel();
   }
 }
 
@@ -318,12 +354,42 @@ export function speak(
   // Приглушаем музыку в начале
   duckBackgroundMusic(true);
 
+  // FIX: Останавливаем любое предыдущее аудио перед запуском нового
+  if (_currentAudio) {
+    _currentAudio.pause();
+    _currentAudio.currentTime = 0;
+    _currentAudio = null;
+  }
+
   const promise = new Promise<void>((resolve) => {
     if (url) {
-      const audio = new Audio(url);
+      // Также отменяем TTS, если он говорил
+      if ("speechSynthesis" in window) window.speechSynthesis.cancel();
+
+      let audio = audioCache.get(url);
+      if (audio) {
+        audio.currentTime = 0;
+        // Обновляем LRU (удаляем и добавляем в конец)
+        audioCache.delete(url);
+        audioCache.set(url, audio);
+      } else {
+        audio = new Audio(url);
+        if (audioCache.size >= MAX_AUDIO_CACHE) {
+          const firstKey = audioCache.keys().next().value;
+          if (firstKey) audioCache.delete(firstKey);
+        }
+        audioCache.set(url, audio);
+      }
+
+      _currentAudio = audio; // Запоминаем текущее аудио
       audio.volume = state.ttsVolume;
-      audio.onended = () => resolve();
+      audio.onended = () => {
+        if (_currentAudio === audio) _currentAudio = null;
+        resolve();
+      };
       audio.onerror = () => {
+        audioCache.delete(url); // Удаляем из кэша при ошибке
+        if (_currentAudio === audio) _currentAudio = null;
         // При ошибке файла пробуем озвучить через TTS
         if (t) {
           speak(t, null).then(resolve);
@@ -333,11 +399,24 @@ export function speak(
         }
       };
       audio.play().catch((e) => {
-        console.warn("Audio play error", e);
+        if (_currentAudio === audio) _currentAudio = null;
+
+        const isAutoplayBlock = e.name === "NotAllowedError";
+        if (isAutoplayBlock) {
+          console.warn("🔊 Autoplay blocked (Audio). Attempting TTS fallback...");
+          // Если нет текста для фоллбэка, ставим аудио в очередь на клик
+          if (!t) {
+             // FIX: Не резолвим промис сразу, а ждем взаимодействия
+             onUserInteraction(() => speak(null, url).then(resolve));
+             return;
+          }
+        } else {
+          console.warn("Audio play error", e);
+        }
         if (t) {
           speak(t, null).then(resolve);
         } else {
-          showToast("Ошибка аудио файла");
+          if (!isAutoplayBlock) showToast("Ошибка аудио файла");
           resolve();
         }
       });
@@ -355,6 +434,10 @@ export function speak(
     }
 
     try {
+      // FIX: Chrome/Android bug workaround - resume synthesis if paused
+      if (window.speechSynthesis.paused) {
+        window.speechSynthesis.resume();
+      }
       window.speechSynthesis.cancel();
       const u = new SpeechSynthesisUtterance(t);
       u.lang = "ko-KR";
@@ -362,6 +445,13 @@ export function speak(
       u.volume = state.ttsVolume;
       u.onend = () => resolve();
       u.onerror = (e) => {
+        // FIX: Игнорируем ошибку автовоспроизведения для TTS
+        if (e.error === 'not-allowed') {
+           console.warn("🔊 TTS Autoplay blocked. Queuing retry on interaction.");
+           // FIX: Ждем взаимодействия
+           onUserInteraction(() => speak(t, null).then(resolve));
+           return;
+        }
         console.warn("SpeechSynthesis error", e);
         resolve(); // Всегда разрешаем промис, чтобы восстановить громкость
       };

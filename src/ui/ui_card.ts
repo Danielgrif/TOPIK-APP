@@ -1,17 +1,18 @@
 import { state } from "../core/state.ts";
-import { speak, showToast } from "../utils/utils.ts";
+import { speak, showToast, playTone } from "../utils/utils.ts";
 import { scheduleSaveState, recordAttempt } from "../core/db.ts";
 import { addXP, checkAchievements } from "../core/stats.ts";
 import { ensureSessionStarted, saveAndRender } from "./ui.ts";
-import { regenerateImage } from "../core/contentGeneration.ts";
+import { client } from "../core/supabaseClient.ts";
 import { Word } from "../types/index.ts";
 
 // --- Virtual Scroll Constants (for List View) ---
 const ITEM_HEIGHT_LIST = 72;
-let ITEM_HEIGHT_GRID = 500;
-const MIN_COL_WIDTH = 280;
+let ITEM_HEIGHT_GRID = 400;
+const MIN_COL_WIDTH = 340; // Увеличено для еще более крупных карточек
 const BUFFER_ITEMS = 10;
 const GRID_GAP = 16;
+const GRID_PADDING_X = 48; // 24px left + 24px right
 
 let virtualScrollInitialized = false;
 let scrollRafId: number | null = null;
@@ -21,18 +22,20 @@ let resizeHandler: (() => void) | null = null;
 let counterTimeout: number | null = null;
 
 export function updateGridCardHeight() {
-  // Header (~70) + Toolbar (~60) + BottomNav (~80) + Margins (~30) = ~240px
-  // Оставляем место для интерфейса, остальное отдаем карточке
-  const uiOffset = 240;
-  const minHeight = 400;
-  const availableHeight = window.innerHeight - uiOffset;
-  ITEM_HEIGHT_GRID = Math.max(minHeight, availableHeight);
+  // FIX: Устанавливаем фиксированную высоту для карточек в сетке.
+  // Динамический расчет (window.innerHeight) делал их слишком огромными.
+  ITEM_HEIGHT_GRID = 400; // Базовая высота, но карточки могут растягиваться
   document.documentElement.style.setProperty("--card-height", `${ITEM_HEIGHT_GRID}px`);
 }
 
 export function renderSkeletons() {
   const grid = document.getElementById("vocabulary-grid");
   if (!grid) return;
+  
+  // FIX: Возвращаем класс grid для правильного отображения скелетонов
+  grid.classList.remove("virtual-scroll-container", "list-view");
+  grid.classList.add("grid");
+
   updateGridCardHeight(); // FIX: Рассчитываем высоту ДО рендера скелетонов, чтобы избежать CLS
   grid.innerHTML = "";
   const fragment = document.createDocumentFragment();
@@ -80,7 +83,7 @@ export function render() {
   }
 
   updateGridCardHeight();
-  grid.classList.add("grid", "virtual-scroll-container");
+  grid.classList.add("virtual-scroll-container");
   initGridVirtualScroll(grid);
 }
 
@@ -181,9 +184,18 @@ function initGridVirtualScroll(grid: HTMLElement) {
     return;
   }
 
+  // Контейнер прокрутки должен быть контекстом для позиционирования
+  grid.style.position = "relative";
+
   const content = document.createElement("div");
   content.id = "virtual-grid-content";
-  content.style.display = "contents";
+  content.className = "vocabulary-inner-grid"; // Настоящий grid-контейнер
+  content.style.position = "absolute";
+  content.style.top = "0";
+  content.style.left = "0";
+  content.style.width = "100%";
+  content.style.padding = "24px 24px 100px 24px"; // Move padding here
+  content.style.boxSizing = "border-box";
   grid.appendChild(content);
 
   const sizer = document.createElement("div");
@@ -201,9 +213,7 @@ function initGridVirtualScroll(grid: HTMLElement) {
 
   renderVisibleGridItems({
     target: grid,
-    sourceData,
-    contentContainer: content,
-    sizer,
+    sourceData
   });
 }
 
@@ -217,45 +227,43 @@ function renderVisibleGridItems(params: {
   if (!grid) return;
 
   const sourceData = params.sourceData || getFilteredData();
-  const content =
-    params.contentContainer || document.getElementById("virtual-grid-content");
-  const sizer = params.sizer || grid.querySelector(".virtual-sizer");
-
+  const content = document.getElementById("virtual-grid-content");
+  const sizer = grid.querySelector(".virtual-sizer");
   if (!content || !sizer) return;
 
-  const gridWidth = grid.clientWidth;
+  // Вычитаем padding, чтобы колонки рассчитывались для внутренней области
+  const gridWidth = grid.clientWidth - GRID_PADDING_X;
   const gap = GRID_GAP;
   const colCount = Math.max(
     1,
     Math.floor((gridWidth + gap) / (MIN_COL_WIDTH + gap)),
   );
 
-  const totalRows = Math.ceil(sourceData.length / colCount);
-  const totalHeight = totalRows * (ITEM_HEIGHT_GRID + gap) - gap;
+  // FIX: Синхронизируем колонки CSS Grid с расчетами JS
+  content.style.gridTemplateColumns = `repeat(${colCount}, 1fr)`;
 
-  (sizer as HTMLElement).style.height = `${totalHeight}px`;
+  const totalRows = Math.ceil(sourceData.length / colCount);
+  const totalHeight = totalRows > 0 ? totalRows * (ITEM_HEIGHT_GRID + gap) - gap : 0;
+
+  // Добавляем высоту паддингов (24px сверху + 100px снизу = 124px)
+  (sizer as HTMLElement).style.height = `${totalHeight + 124}px`;
 
   const scrollTop = grid.scrollTop;
   const viewportHeight = grid.clientHeight;
 
-  const startRow = Math.max(0, Math.floor(scrollTop / (ITEM_HEIGHT_GRID + gap)) - 2);
-  const visibleRows = Math.ceil(viewportHeight / (ITEM_HEIGHT_GRID + gap)) + 4;
+  const startRow = Math.max(0, Math.floor(scrollTop / (ITEM_HEIGHT_GRID + gap)));
+  const visibleRows = Math.ceil(viewportHeight / (ITEM_HEIGHT_GRID + gap)) + 1;
 
   const startIndex = startRow * colCount;
   const endIndex = Math.min(
     sourceData.length,
-    startIndex + visibleRows * colCount,
+    (startRow + visibleRows) * colCount,
   );
 
+  const topOffset = startRow * (ITEM_HEIGHT_GRID + gap);
+  (content as HTMLElement).style.transform = `translateY(${topOffset}px)`;
+  
   content.innerHTML = "";
-
-  const topSpacerHeight = startRow * (ITEM_HEIGHT_GRID + gap);
-  if (topSpacerHeight > 0) {
-    const spacer = document.createElement("div");
-    spacer.style.gridColumn = "1 / -1";
-    spacer.style.height = `${topSpacerHeight}px`;
-    content.appendChild(spacer);
-  }
 
   const visibleData = sourceData.slice(startIndex, endIndex);
   const fragment = document.createDocumentFragment();
@@ -275,6 +283,16 @@ function initVirtualScroll(grid: HTMLElement) {
     renderEmptyState(grid);
     return;
   }
+
+  grid.style.position = "relative";
+
+  const content = document.createElement("div");
+  content.id = "virtual-list-content";
+  content.style.position = "absolute";
+  content.style.top = "0";
+  content.style.left = "0";
+  content.style.width = "100%";
+  grid.appendChild(content);
 
   const sizer = document.createElement("div");
   sizer.className = "virtual-sizer";
@@ -297,19 +315,19 @@ function renderVisibleListItems(params: {
   if (!grid) return;
 
   const sourceData = params.sourceData || getFilteredData();
+  const content = document.getElementById("virtual-list-content");
+  if (!content) return;
 
   const scrollTop = grid.scrollTop;
   const viewportHeight = grid.clientHeight;
 
-  const startIndex = Math.max(
-    0,
-    Math.floor(scrollTop / ITEM_HEIGHT_LIST) - BUFFER_ITEMS,
-  );
+  const startIndex = Math.max(0, Math.floor(scrollTop / ITEM_HEIGHT_LIST) - BUFFER_ITEMS);
   const visibleItemsCount = Math.ceil(viewportHeight / ITEM_HEIGHT_LIST);
-  const endIndex = Math.min(
-    sourceData.length,
-    startIndex + visibleItemsCount + BUFFER_ITEMS * 2,
-  );
+  const endIndex = Math.min(sourceData.length, startIndex + visibleItemsCount + BUFFER_ITEMS * 2);
+
+  const topOffset = startIndex * ITEM_HEIGHT_LIST;
+  (content as HTMLElement).style.transform = `translateY(${topOffset}px)`;
+  content.innerHTML = "";
 
   const visibleData = sourceData.slice(startIndex, endIndex);
   const fragment = document.createDocumentFragment();
@@ -317,17 +335,10 @@ function renderVisibleListItems(params: {
   visibleData.forEach((item: Word, index: number) => {
     const absoluteIndex = startIndex + index;
     const el = createListItem(item, absoluteIndex);
-    el.style.position = "absolute";
-    el.style.top = `${absoluteIndex * ITEM_HEIGHT_LIST}px`;
-    el.style.width = "100%";
-    el.classList.add("visible");
     fragment.appendChild(el);
   });
 
-  while (grid.children.length > 1) {
-    if (grid.lastChild) grid.removeChild(grid.lastChild);
-  }
-  grid.appendChild(fragment);
+  content.appendChild(fragment);
 }
 
 function prefetchNextImages(currentIndex: number, count: number = 3) {
@@ -390,6 +401,7 @@ function createCardElement(item: Word, index: number): HTMLElement {
 
     el.classList.toggle("revealed");
     if (navigator.vibrate) navigator.vibrate(10);
+    playTone("flip");
 
     // Ленивая загрузка изображения при первом переворачивании
     if (el.classList.contains("revealed") && !imageLoaded) {
@@ -416,41 +428,35 @@ function createCardFront(item: Word, index: number): HTMLElement {
   const speakBtn = document.createElement("button");
   speakBtn.className = "icon-btn";
   speakBtn.textContent = "🔊";
-  speakBtn.style.fontSize = "24px"; // Larger icon
-  speakBtn.style.padding = "10px";
   speakBtn.onclick = (e) => {
     e.stopPropagation();
-    speakBtn.textContent = "📶";
-    speakBtn.style.color = "var(--primary)";
-    speakBtn.style.borderColor = "var(--primary)";
+    speakBtn.classList.add("playing");
     let url = item.audio_url;
     if (state.currentVoice === "male" && item.audio_male) url = item.audio_male;
     speak(item.word_kr || "", url || null).then(() => {
-      speakBtn.textContent = "🔊";
-      speakBtn.style.color = "";
-      speakBtn.style.borderColor = "";
+      speakBtn.classList.remove("playing");
     });
     prefetchNextAudio(index);
   };
+  topRow.appendChild(speakBtn); // Left corner
+
   const favBtn = document.createElement("button");
   favBtn.className = `icon-btn fav-btn ${isFav ? "active" : ""}`;
   favBtn.textContent = isFav ? "❤️" : "🤍";
-  favBtn.style.fontSize = "24px"; // Larger icon
-  favBtn.style.padding = "10px";
   favBtn.title = isFav ? "Убрать из избранного" : "В избранное";
   favBtn.onclick = (e) => {
     e.stopPropagation();
     toggleFavorite(item.id, favBtn);
   };
-  topRow.appendChild(speakBtn);
-  topRow.appendChild(favBtn);
+  topRow.appendChild(favBtn); // Right corner
+
   front.appendChild(topRow);
 
   const mainContent = document.createElement("div");
   mainContent.className = "card-main";
 
   const levelBadge = document.createElement("div");
-  levelBadge.className = "card-level-badge";
+  levelBadge.className = "card-level-pill";
   levelBadge.textContent = item.level || "★☆☆";
   mainContent.appendChild(levelBadge);
 
@@ -487,6 +493,38 @@ function createCardFront(item: Word, index: number): HTMLElement {
     mainContent.appendChild(grammarBadge);
   }
 
+  front.appendChild(mainContent);
+
+  const footer = document.createElement("div");
+  footer.className = "card-footer";
+
+  const stats = state.wordHistory[item.id] || { attempts: 0, correct: 0 };
+  if (stats.attempts > 0) {
+    const acc = getAccuracy(item.id);
+    let statusText = "В процессе";
+    let statusClass = "neutral";
+
+    if (stats.attempts < 3) {
+      statusText = "Новое";
+    } else if (acc >= 90) {
+      statusText = "Мастер";
+      statusClass = "success";
+    } else if (acc >= 70) {
+      statusText = "Хорошо";
+      statusClass = "success";
+    } else if (acc >= 40) {
+      statusText = "Средне";
+    } else {
+      statusText = "Слабо";
+      statusClass = "failure";
+    }
+
+    const statEl = document.createElement("div");
+    statEl.className = `card-stat-pill ${statusClass}`;
+    statEl.innerHTML = `<span>🎯 ${acc}%</span><span class="sep">|</span><span>${statusText}</span>`;
+    footer.appendChild(statEl);
+  }
+
   const topicObj = item._parsedTopic || { kr: "기타", ru: "Общее" };
   const catObj = item._parsedCategory || { kr: "기타", ru: "Общее" };
   const formatBi = (obj: { kr: string; ru: string }) =>
@@ -494,61 +532,18 @@ function createCardFront(item: Word, index: number): HTMLElement {
       ? `${obj.kr} (${obj.ru})`
       : obj.kr || obj.ru;
 
-  const bottomRow = document.createElement("div");
-  bottomRow.className = "card-bottom-row";
-  bottomRow.innerHTML = `
-        <div class="meta-topic-badge">🏷 ${formatBi(topicObj)}</div>
-        <div class="meta-cat-badge">${formatBi(catObj)}</div>
-    `;
-
+  const tagsDiv = document.createElement("div");
+  tagsDiv.className = "card-tags";
+  tagsDiv.innerHTML = `
+      <span class="tag-pill topic">🏷 ${formatBi(topicObj)}</span>
+      <span class="tag-pill category">${formatBi(catObj)}</span>
+  `;
   if (item.isLocal) {
-    const localBadge = document.createElement("div");
-    localBadge.className = "meta-topic-badge";
-    localBadge.style.backgroundColor = "var(--warning)";
-    localBadge.style.color = "#000";
-    localBadge.textContent = "⏳ AI";
-    bottomRow.appendChild(localBadge);
+      tagsDiv.innerHTML += `<span class="tag-pill ai">⏳ AI</span>`;
   }
+  footer.appendChild(tagsDiv);
 
-  const stats = state.wordHistory[item.id] || { attempts: 0, correct: 0 };
-  if (stats.attempts > 0) {
-    const accEl = document.createElement("div");
-    let statusText = "В процессе",
-      barColor = "var(--primary)",
-      bgClass = "neutral";
-    const acc = getAccuracy(item.id);
-    if (stats.attempts < 3) {
-      statusText = "Новое";
-      bgClass = "neutral";
-      barColor = "var(--info)";
-    } else if (acc >= 90) {
-      statusText = "Мастер";
-      bgClass = "success";
-      barColor = "var(--success)";
-    } else if (acc >= 70) {
-      statusText = "Хорошо";
-      bgClass = "success";
-      barColor = "#55efc4";
-    } else if (acc >= 40) {
-      statusText = "Средне";
-      bgClass = "neutral";
-      barColor = "var(--warning)";
-    } else {
-      statusText = "Слабо";
-      bgClass = "failure";
-      barColor = "var(--danger)";
-    }
-
-    accEl.className = "attempt-indicator-central " + bgClass;
-    accEl.title = "Мастер: 90%+, Хорошо: 70%+, Средне: 40%+";
-    accEl.innerHTML = `
-            <div class="acc-text">🎯 ${acc}% <span style="opacity:0.5; margin:0 4px;">|</span> ${statusText}</div>
-            <div class="acc-bar-bg"><div class="acc-bar-fill" style="width:${acc}%; background:${barColor};"></div></div> 
-        `;
-    mainContent.appendChild(accEl);
-  }
-  front.appendChild(mainContent);
-  front.appendChild(bottomRow);
+  front.appendChild(footer);
 
   return front;
 }
@@ -556,135 +551,300 @@ function createCardFront(item: Word, index: number): HTMLElement {
 function createCardBack(item: Word): HTMLElement {
   const back = document.createElement("div");
   back.className = "card-back";
-  const backContent = document.createElement("div");
-  backContent.className = "card-back-content";
+  
+  // 1. Header (Translation) - Fixed at top
+  const header = document.createElement("div");
+  header.className = "card-back-header";
+  header.innerHTML = `<div class="back-translation">${item.translation}</div>`;
+  back.appendChild(header);
 
-  // --- 1. Image Section (Toggleable) ---
-  const imgSection = document.createElement("div");
-  imgSection.className = "card-section";
-  imgSection.style.padding = "0";
+  // 2. Scrollable Content
+  const content = document.createElement("div");
+  content.className = "card-back-scroll";
 
-  const imageContainer = document.createElement("div");
-  imageContainer.className = "card-image-toggle hidden"; // Start hidden
-  imageContainer.title = "Нажмите, чтобы показать/скрыть";
-  imageContainer.onclick = (e) => {
-    e.stopPropagation();
-    if ((e.target as HTMLElement).closest("button")) return;
-    imageContainer.classList.toggle("hidden");
-  };
-
-  const img = document.createElement("img");
-  img.className = "card-image";
-  img.draggable = false;
+  // --- Image (Blur Reveal) ---
   if (item.image) {
-    img.dataset.src = item.image; // Lazy load
+    const imgContainer = document.createElement("div");
+    imgContainer.className = "back-image-container blurred"; // Start blurred
+    
+    const img = document.createElement("img");
+    img.dataset.src = item.image;
+    img.className = "card-image"; // Keep class for lazy loader
+    img.style.objectFit = "cover";
+    img.alt = item.word_kr;
+    img.draggable = false;
+    
+    const revealOverlay = document.createElement("div");
+    revealOverlay.className = "back-image-overlay";
+    revealOverlay.innerHTML = "<span>👁️ Показать</span>";
+    
+    imgContainer.onclick = (e) => {
+      e.stopPropagation();
+      // Если клик по кнопкам или инпуту — игнорируем
+      if ((e.target as HTMLElement).closest("button") || (e.target as HTMLElement).closest("input")) return;
+      
+      imgContainer.classList.toggle("blurred");
+    };
+
+    // --- Кнопка лупы (Full Screen) ---
+    const zoomBtn = document.createElement("button");
+    zoomBtn.className = "card-image-zoom-btn btn-icon";
+    zoomBtn.title = "На весь экран";
+    zoomBtn.innerHTML = "🔍";
+    zoomBtn.style.left = "10px"; // Слева
+    zoomBtn.style.position = "absolute";
+    zoomBtn.style.top = "10px";
+    zoomBtn.style.zIndex = "20";
+
+    zoomBtn.onclick = (e) => {
+      e.stopPropagation();
+      showFullScreenImage(img.src, item.word_kr);
+    };
+
+    // --- Кнопка загрузки по URL ---
+    const urlBtn = document.createElement("button");
+    urlBtn.className = "card-image-url-btn btn-icon";
+    urlBtn.title = "Загрузить по URL";
+    urlBtn.innerHTML = "🔗";
+    urlBtn.style.right = "130px"; // Сдвигаем еще левее
+
+    urlBtn.onclick = async (e) => {
+      e.stopPropagation();
+      const imageUrl = prompt("Вставьте URL изображения (прямую ссылку):");
+      if (!imageUrl) return;
+
+      urlBtn.disabled = true;
+      urlBtn.classList.add("rotating");
+
+      try {
+        // 1. Загружаем картинку по URL. Может не сработать из-за CORS-политики сайта-источника.
+        const response = await fetch(imageUrl);
+        if (!response.ok) {
+          throw new Error(`Не удалось загрузить: ${response.statusText} (возможно, CORS)`);
+        }
+        const imageBlob = await response.blob();
+        await uploadAndSaveImage(imageBlob, item, img, imgContainer, revealOverlay, deleteBtn);
+        showToast("✅ Картинка загружена по URL!");
+      } catch (err: any) {
+        showToast("❌ Ошибка: " + (err.message || "Не удалось загрузить по URL"));
+      } finally {
+        urlBtn.disabled = false;
+        urlBtn.classList.remove("rotating");
+      }
+    };
+
+    // --- Кнопка удаления картинки ---
+    const deleteBtn = document.createElement("button");
+    deleteBtn.className = "card-image-delete-btn btn-icon";
+    deleteBtn.title = "Удалить картинку";
+    deleteBtn.innerHTML = "🗑️";
+    deleteBtn.style.right = "90px"; // Сдвигаем левее загрузки
+
+    deleteBtn.onclick = async (e) => {
+      e.stopPropagation();
+      if (!confirm("Удалить текущее изображение?")) return;
+
+      deleteBtn.disabled = true;
+      try {
+        // Если картинка своя — удаляем файл из хранилища
+        if (item.image_source === 'custom' && item.image) {
+           const fileName = item.image.split('/').pop()?.split('?')[0];
+           if (fileName) await client.storage.from('image-files').remove([fileName]);
+        }
+
+        // Очищаем поле в БД
+        const { error } = await client.from('vocabulary').update({ image: null, image_source: null }).eq('id', item.id);
+        if (error) throw error;
+
+        // Обновляем UI: скрываем картинку, показываем заглушку
+        item.image = undefined;
+        item.image_source = undefined;
+        img.style.display = "none";
+        imgContainer.classList.remove("blurred");
+        imgContainer.style.backgroundColor = "var(--surface-3)"; // Цвет заглушки
+        revealOverlay.style.display = "none";
+        deleteBtn.style.display = "none"; // Скрываем кнопку удаления
+        showToast("🗑️ Картинка удалена");
+      } catch (err: any) {
+        console.error("Delete error:", err);
+        showToast("❌ Ошибка удаления");
+        deleteBtn.disabled = false;
+      }
+    };
+
+    const regenBtn = document.createElement("button");
+    regenBtn.className = "card-image-regenerate-btn btn-icon";
+    regenBtn.title = "Сгенерировать AI";
+    regenBtn.innerHTML = "🔄";
+    regenBtn.onclick = async (e) => {
+      e.stopPropagation();
+      const btn = e.currentTarget as HTMLButtonElement;
+      btn.disabled = true;
+      btn.classList.add('rotating');
+      
+      try {
+        const { data, error } = await client.functions.invoke('regenerate-image', {
+          body: { 
+            id: item.id, 
+            word: item.word_kr, 
+            translation: item.translation 
+          }
+        });
+
+        if (!error && data && data.imageUrl) {
+          img.src = data.imageUrl; // URL уже содержит timestamp из Edge Function
+          img.dataset.src = data.imageUrl;
+          item.image = data.imageUrl;
+          item.image_source = 'pixabay';
+          imgContainer.classList.remove('blurred');
+          
+          // Восстанавливаем UI после возможного удаления
+          img.style.display = "";
+          imgContainer.style.backgroundColor = "";
+          revealOverlay.style.display = "";
+          deleteBtn.style.display = "flex";
+          deleteBtn.disabled = false;
+          
+          showToast("✅ Картинка обновлена!");
+        } else {
+        console.error("Regenerate Error:", error); // Log the full error object
+        let errorMsg = error.message || "Неизвестная ошибка";
+        // The `error.context` is the raw Response. We need to await its JSON body.
+        if (error.context && typeof error.context.json === 'function') {
+          try {
+            const errorBody = await error.context.json();
+            errorMsg = errorBody.error || errorMsg; // Use the message from our function
+          } catch {
+            // Ignore JSON parsing errors, use the default message
+          }
+        }
+        showToast(`❌ Ошибка: ${errorMsg}`);
+        }
+      } catch (err: any) {
+        console.error("Client Error:", err);
+        showToast(`❌ Сбой клиента: ${err.message || err}`);
+      } finally {
+        btn.classList.remove('rotating');
+        btn.disabled = false;
+      }
+    };
+
+    // --- Кнопка загрузки своей картинки ---
+    const uploadBtn = document.createElement("button");
+    uploadBtn.className = "card-image-upload-btn btn-icon";
+    uploadBtn.title = "Загрузить свою";
+    uploadBtn.innerHTML = "📁";
+    uploadBtn.style.right = "50px"; // Сдвигаем левее кнопки регенерации
+
+    const fileInput = document.createElement("input");
+    fileInput.type = "file";
+    fileInput.accept = "image/*";
+    fileInput.style.display = "none";
+
+    uploadBtn.onclick = (e) => {
+      e.stopPropagation();
+      fileInput.click();
+    };
+
+    fileInput.onchange = async (e) => {
+      const target = e.target as HTMLInputElement;
+      const file = target.files?.[0];
+      if (!file) return;
+
+      // Увеличиваем лимит, так как будем сжимать
+      if (file.size > 15 * 1024 * 1024) { // Увеличим до 15MB
+        showToast("❌ Файл слишком большой (макс 15MB)");
+        return;
+      }
+
+      uploadBtn.disabled = true;
+      uploadBtn.classList.add("rotating");
+      try {
+        await uploadAndSaveImage(file, item, img, imgContainer, revealOverlay, deleteBtn);
+        showToast("✅ Картинка загружена!");
+      } catch (err: any) {
+        showToast("❌ Ошибка: " + (err.message || "Не удалось загрузить"));
+      } finally {
+        uploadBtn.disabled = false;
+        uploadBtn.classList.remove("rotating");
+        target.value = ""; // Сброс инпута
+      }
+    };
+
+    imgContainer.appendChild(img);
+    imgContainer.appendChild(revealOverlay);
+    imgContainer.appendChild(zoomBtn);
+    imgContainer.appendChild(regenBtn);
+    imgContainer.appendChild(urlBtn);
+    imgContainer.appendChild(deleteBtn);
+    imgContainer.appendChild(uploadBtn);
+    imgContainer.appendChild(fileInput);
+    content.appendChild(imgContainer);
   }
 
-  const regenBtn = document.createElement("button");
-  regenBtn.className = "card-image-regenerate-btn btn-icon";
-  regenBtn.title = "Обновить картинку";
-  regenBtn.innerHTML = "🔄";
-  regenBtn.onclick = async (e) => {
-    e.stopPropagation();
-    const btn = e.currentTarget as HTMLButtonElement;
-    btn.disabled = true;
-    btn.classList.add('rotating');
-    const newUrl = await regenerateImage(item.id as number, item.word_kr || '', item.translation || '');
-    if (newUrl) {
-      img.src = newUrl;
-      img.dataset.src = newUrl;
-      item.image = newUrl;
-      imageContainer.classList.remove('hidden');
-    }
-    btn.classList.remove('rotating');
-    btn.disabled = false;
-  };
+  // --- Examples ---
+  if (item.example_kr) {
+    const exBox = document.createElement("div");
+    exBox.className = "back-section";
+    // Highlight the word in the example
+    const highlightedKr = item.example_kr.replace(
+        new RegExp(item.word_kr, 'gi'), 
+        `<span class="highlight">${item.word_kr}</span>`
+    );
+    exBox.innerHTML = `
+        <div class="section-label">Пример</div>
+        <div class="back-example-kr">${highlightedKr}</div>
+        <div class="back-example-ru">${item.example_ru || ""}</div>
+    `;
+    content.appendChild(exBox);
+  }
 
-  imageContainer.append(regenBtn, img);
-  imgSection.appendChild(imageContainer);
-  backContent.appendChild(imgSection);
-
-  // --- 2. Translation & Relations ---
-  const transSection = document.createElement("div");
-  transSection.className = "card-section";
-  
-  const trans = document.createElement("div");
-  trans.className = "translation";
-  trans.textContent = item.translation || "";
-  transSection.appendChild(trans);
-
+  // --- Relations (Synonyms/Antonyms) ---
   if (item.synonyms || item.antonyms) {
-    const relContainer = document.createElement("div");
-    relContainer.className = "relations-container";
-
+    const relBox = document.createElement("div");
+    relBox.className = "back-section";
+    
     if (item.synonyms) {
-      item.synonyms.split(/[,;]/).forEach((s) => {
-        if (s.trim()) {
-          const chip = document.createElement("span");
-          chip.className = "relation-chip";
-          chip.textContent = `≈ ${s.trim()}`;
-          relContainer.appendChild(chip);
-        }
-      });
+        const row = document.createElement("div");
+        row.className = "relation-row";
+        row.innerHTML = `<span class="rel-icon">≈</span> <div class="rel-chips">${
+            item.synonyms.split(/[,;]/).map(s => `<span class="rel-chip syn">${s.trim()}</span>`).join("")
+        }</div>`;
+        relBox.appendChild(row);
     }
     if (item.antonyms) {
-      item.antonyms.split(/[,;]/).forEach((a) => {
-        if (a.trim()) {
-          const chip = document.createElement("span");
-          chip.className = "relation-chip antonym";
-          chip.textContent = `≠ ${a.trim()}`;
-          relContainer.appendChild(chip);
-        }
-      });
+        const row = document.createElement("div");
+        row.className = "relation-row";
+        row.innerHTML = `<span class="rel-icon">≠</span> <div class="rel-chips">${
+            item.antonyms.split(/[,;]/).map(s => `<span class="rel-chip ant">${s.trim()}</span>`).join("")
+        }</div>`;
+        relBox.appendChild(row);
     }
-    transSection.appendChild(relContainer);
-  }
-  backContent.appendChild(transSection);
-
-  // --- 3. Info (Collocations, Notes, Grammar) ---
-  if (item.collocations || item.my_notes || item.grammar_info) {
-    const infoSection = document.createElement("div");
-    infoSection.className = "card-section";
-
-    if (item.collocations) {
-      const block = document.createElement("div");
-      block.className = "info-block";
-      block.innerHTML = `<div class="info-label">Коллокации</div><div class="info-text">${item.collocations}</div>`;
-      infoSection.appendChild(block);
-    }
-
-    if (item.grammar_info) {
-      const block = document.createElement("div");
-      block.className = "info-block";
-      block.innerHTML = `<div class="info-label">Грамматика</div><div class="info-text">${item.grammar_info}</div>`;
-      infoSection.appendChild(block);
-    }
-
-    if (item.my_notes) {
-      const block = document.createElement("div");
-      block.className = "info-block";
-      block.innerHTML = `<div class="info-label">Нюансы / Заметки</div><div class="info-text">${item.my_notes}</div>`;
-      infoSection.appendChild(block);
-    }
-    backContent.appendChild(infoSection);
+    content.appendChild(relBox);
   }
 
-  // --- 4. Examples ---
-  if (item.example_kr) {
-    const exSection = document.createElement("div");
-    exSection.className = "card-section";
-    const exBox = document.createElement("div");
-    exBox.className = "example-box";
-    exBox.innerHTML = `<div class="example-kr">${item.example_kr}</div><div class="example-ru">${item.example_ru || ""}</div>`;
-    exSection.appendChild(exBox);
-    backContent.appendChild(exSection);
+  // --- Info (Collocations, Grammar, Notes) ---
+  if (item.collocations || item.grammar_info || item.my_notes) {
+      const infoBox = document.createElement("div");
+      infoBox.className = "back-section";
+      
+      if (item.collocations) {
+          infoBox.innerHTML += `<div class="info-item"><span class="info-label">Коллокации:</span> ${item.collocations}</div>`;
+      }
+      if (item.grammar_info) {
+          infoBox.innerHTML += `<div class="info-item"><span class="info-label">Грамматика:</span> ${item.grammar_info}</div>`;
+      }
+      if (item.my_notes) {
+          infoBox.innerHTML += `<div class="info-item"><span class="info-label">Заметки:</span> ${item.my_notes}</div>`;
+      }
+      content.appendChild(infoBox);
   }
 
-  back.appendChild(backContent);
+  back.appendChild(content);
 
-  // --- 5. Actions ---
+  // 3. Footer (Actions) - Fixed at bottom
   const actions = document.createElement("div");
-  actions.className = "card-actions";
+  actions.className = "card-back-actions";
 
   if (item.isLocal) {
     const delBtn = document.createElement("button");
@@ -850,36 +1010,117 @@ export function resetSearchHandler() {
 }
 
 export function setupGridEffects() {
-  const grid = document.getElementById("vocabulary-grid");
-  if (!grid) return;
-  grid.addEventListener("mousemove", (e: MouseEvent) => {
-    const target = e.target as HTMLElement;
-    const card = target.closest(".card") as HTMLElement;
-    if (!card) return;
-    const rect = card.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
-    const centerX = rect.width / 2;
-    const centerY = rect.height / 2;
-    const rotateX = ((y - centerY) / centerY) * -8;
-    const rotateY = ((x - centerX) / centerX) * 8;
+  // 3D tilt effect removed to improve scroll performance and prevent jitter
+}
 
-    const shadowX = ((x - centerX) / centerX) * -25;
-    const shadowY = ((y - centerY) / centerY) * -25 + 15;
+/**
+ * General helper to compress, upload, and save an image from a Blob/File.
+ */
+async function uploadAndSaveImage(
+  imageBlob: Blob,
+  item: Word,
+  img: HTMLImageElement,
+  imgContainer: HTMLElement,
+  revealOverlay: HTMLElement,
+  deleteBtn: HTMLButtonElement
+) {
+    const compressedBlob = await compressImage(imageBlob as File);
+    const fileName = `${item.id}_custom_${Date.now()}.jpg`;
+    
+    const { error: uploadError } = await client.storage.from('image-files').upload(fileName, compressedBlob, { contentType: 'image/jpeg', upsert: true });
+    if (uploadError) throw uploadError;
 
-    card.style.setProperty("--rx", `${rotateX}deg`);
-    card.style.setProperty("--ry", `${rotateY}deg`);
-    card.style.setProperty("--sx", `${shadowX}px`);
-    card.style.setProperty("--sy", `${shadowY}px`);
+    const { data: { publicUrl } } = client.storage.from('image-files').getPublicUrl(fileName);
+    
+    const { error: dbError } = await client.from('vocabulary').update({ image: publicUrl, image_source: 'custom' }).eq('id', item.id);
+    if (dbError) throw dbError;
+
+    item.image = publicUrl;
+    item.image_source = 'custom';
+    img.src = publicUrl;
+    img.dataset.src = publicUrl;
+    imgContainer.classList.remove("blurred");
+    
+    img.style.display = "";
+    imgContainer.style.backgroundColor = "";
+    revealOverlay.style.display = "";
+    deleteBtn.style.display = "flex";
+    deleteBtn.disabled = false;
+}
+
+function showFullScreenImage(src: string, alt: string) {
+  const overlay = document.createElement('div');
+  overlay.className = 'fullscreen-image-overlay';
+  overlay.style.cssText = `
+      position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+      background: rgba(0,0,0,0.9); z-index: 30000;
+      display: flex; justify-content: center; align-items: center;
+      cursor: zoom-out; opacity: 0; transition: opacity 0.3s;
+  `;
+  
+  const img = document.createElement('img');
+  img.src = src;
+  img.alt = alt;
+  img.style.cssText = `
+      max-width: 95%; max-height: 95%; 
+      object-fit: contain; border-radius: 8px;
+      box-shadow: 0 0 20px rgba(0,0,0,0.5);
+      transform: scale(0.9); transition: transform 0.3s;
+  `;
+  
+  overlay.appendChild(img);
+  document.body.appendChild(overlay);
+  
+  requestAnimationFrame(() => {
+      overlay.style.opacity = '1';
+      img.style.transform = 'scale(1)';
   });
-  grid.addEventListener("mouseout", (e: MouseEvent) => {
-    const target = e.target as HTMLElement;
-    const card = target.closest(".card") as HTMLElement;
-    if (card && !card.contains(e.relatedTarget as Node)) {
-      card.style.setProperty("--rx", "0deg");
-      card.style.setProperty("--ry", "0deg");
-      card.style.removeProperty("--sx");
-      card.style.removeProperty("--sy");
-    }
+  
+  overlay.onclick = () => {
+      overlay.style.opacity = '0';
+      img.style.transform = 'scale(0.9)';
+      setTimeout(() => overlay.remove(), 300);
+  };
+}
+
+/**
+ * Compresses an image file before upload by drawing it to a canvas.
+ * @param file The image file.
+ * @param maxWidth The maximum width/height of the output image.
+ * @param quality The JPEG quality (0 to 1).
+ * @returns A promise that resolves with the compressed Blob.
+ */
+function compressImage(file: File, maxWidth: number = 1280, quality: number = 0.8): Promise<Blob> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onload = (event) => {
+      const img = new Image();
+      img.src = event.target?.result as string;
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        let { width, height } = img;
+
+        if (width > maxWidth || height > maxWidth) {
+          if (width > height) {
+            height = Math.round(height * (maxWidth / width));
+            width = maxWidth;
+          } else {
+            width = Math.round(width * (maxWidth / height));
+            height = maxWidth;
+          }
+        }
+
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return reject(new Error('Could not get canvas context'));
+        
+        ctx.drawImage(img, 0, 0, width, height);
+        canvas.toBlob((blob) => blob ? resolve(blob) : reject(new Error('Canvas to Blob failed')), 'image/jpeg', quality);
+      };
+      img.onerror = (error) => reject(error);
+    };
+    reader.onerror = (error) => reject(error);
   });
 }

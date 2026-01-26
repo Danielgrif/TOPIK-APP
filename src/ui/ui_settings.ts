@@ -235,10 +235,24 @@ export function previewAccentColor(colorKey: string) {
  */
 export function toggleFocusMode() {
   state.focusMode = !state.focusMode;
-  localStorage.setItem("focus_mode_v1", String(state.focusMode));
   applyFocusMode();
   showToast(`Режим фокусировки: ${state.focusMode ? "ВКЛ" : "ВЫКЛ"}`);
   applyBackgroundMusic();
+
+  // Перерисовываем сетку, чтобы применить новую высоту карточек
+  if (state.viewMode !== "list") {
+    const grid = document.getElementById("vocabulary-grid");
+    const oldScroll = grid ? grid.scrollTop : 0;
+    const oldHeight = state.focusMode ? 400 : Math.floor(window.innerHeight * 0.75);
+    
+    render();
+    
+    if (grid && oldScroll > 0) {
+        const newHeight = state.focusMode ? Math.floor(window.innerHeight * 0.75) : 400;
+        // Корректируем скролл пропорционально изменению высоты
+        grid.scrollTop = oldScroll * (newHeight / oldHeight);
+    }
+  }
 }
 
 /**
@@ -517,4 +531,10 @@ export function resetAllSettings() {
     showToast("⚙️ Настройки сброшены. Перезагрузка...");
     setTimeout(() => location.reload(), 800);
   });
+}
+
+export function resetOnboarding() {
+  localStorage.removeItem("onboarding_completed_v1");
+  showToast("🎓 Обучение сброшено. Перезагрузка...");
+  setTimeout(() => location.reload(), 800);
 }

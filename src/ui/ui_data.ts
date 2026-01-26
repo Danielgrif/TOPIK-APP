@@ -1,7 +1,7 @@
 import { state } from "../core/state.ts";
 import { client } from "../core/supabaseClient.ts";
 import { showToast } from "../utils/utils.ts";
-import { immediateSaveState } from "../core/db.ts";
+import { immediateSaveState, createLocalBackup } from "../core/db.ts";
 import {
   updateStats,
   updateSRSBadge,
@@ -14,6 +14,7 @@ import { saveAndRender } from "./ui.ts";
 
 export async function resetAllProgress() {
   try {
+    createLocalBackup(); // Создаем резервную копию перед удалением
     const progressKeys = [
       "user_stats_v5",
       "learned_v5",
@@ -174,6 +175,7 @@ export function importProgress(event: Event) {
   const reader = new FileReader();
   reader.onload = (e) => {
     try {
+      createLocalBackup(); // Создаем резервную копию перед перезаписью
       const target = e.target as FileReader;
       const data = JSON.parse(target.result as string);
       if (!data || typeof data !== "object")

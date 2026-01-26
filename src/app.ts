@@ -58,7 +58,6 @@ import {
   toggleAutoUpdate,
   applyTheme,
   toggleFocusMode,
-  applyFocusMode,
   toggleBackgroundMusic,
   setBackgroundMusicVolume,
   applyBackgroundMusic,
@@ -82,7 +81,7 @@ import {
   openLoginModal,
   cleanAuthUrl,
 } from "./core/auth.ts";
-import { debounce, showToast, speak, typeText } from "./utils/utils.ts";
+import { debounce, showToast, speak, typeText, cancelSpeech } from "./utils/utils.ts";
 import {
   updateXPUI,
   updateStats,
@@ -100,6 +99,28 @@ import {
 import { checkPronunciation } from "./core/speech.ts";
 
 let currentQuote: any = null;
+let welcomeAudioPromise: Promise<void> | null = null;
+let welcomeAudioTimeout: number | null = null;
+
+function performWelcomeClose() {
+  cancelSpeech(); // FIX: Отменяем любые отложенные или текущие звуки
+  if (welcomeAudioTimeout) {
+    clearTimeout(welcomeAudioTimeout);
+    welcomeAudioTimeout = null;
+  }
+  const wOverlay = document.getElementById("welcome-overlay");
+  if (wOverlay) {
+    wOverlay.style.animation = "flyOutUp 0.5s cubic-bezier(0.4, 0, 0.2, 1) forwards";
+    wOverlay.style.pointerEvents = "none";
+    setTimeout(() => {
+      wOverlay.classList.remove("active");
+      wOverlay.style.animation = "";
+      wOverlay.style.pointerEvents = "";
+      wOverlay.style.display = "none";
+      checkAndShowOnboarding();
+    }, 500);
+  }
+}
 
 // Используем Vite-совместимый импорт воркера
 let searchWorker: Worker;
@@ -129,6 +150,7 @@ window.onunhandledrejection = function (event) {
 };
 
 function setupGlobalListeners() {
+  console.log("🛠️ Global listeners setup started");
   document.body.addEventListener("click", (e) => {
     const target = e.target as HTMLElement;
 
@@ -156,6 +178,7 @@ function setupGlobalListeners() {
     if (actionTrigger) {
       const action = actionTrigger.getAttribute("data-action");
       const value = actionTrigger.getAttribute("data-value");
+      console.log(`⚡ Action detected: ${action}`);
 
       switch (action) {
         case "toggle-focus":
@@ -228,13 +251,18 @@ function setupGlobalListeners() {
           break;
         case "close-welcome":
           {
-            const wOverlay = document.getElementById("welcome-overlay");
-            if (wOverlay) {
-              wOverlay.style.animation = "flyOutUp 0.5s cubic-bezier(0.4, 0, 0.2, 1) forwards";
-              setTimeout(() => {
-                wOverlay.classList.remove("active");
-                wOverlay.style.animation = "";
-              }, 500);
+            if (welcomeAudioPromise) {
+              const btn = actionTrigger as HTMLElement;
+              if (btn) {
+                btn.innerHTML = '🎧 Слушаем...';
+                btn.style.opacity = "0.8";
+                btn.style.pointerEvents = "none";
+              }
+              welcomeAudioPromise.then(() => {
+                performWelcomeClose();
+              });
+            } else {
+              performWelcomeClose();
             }
           }
           break;
@@ -300,6 +328,9 @@ function setupGlobalListeners() {
           break;
         case "reset-settings":
           resetAllSettings();
+          break;
+        case "reset-onboarding":
+          import("./ui/ui_settings.ts").then((m) => m.resetOnboarding());
           break;
       }
     }
@@ -452,6 +483,10 @@ function showWelcomeScreen(user?: any) {
     welcomeOverlay.style.background = bgStyle;
 
     welcomeOverlay.classList.add("active");
+    welcomeOverlay.style.display = "flex"; // <--- Показываем при открытии
+    // FIX: Мгновенное появление (без transition), чтобы гарантированно скрыть интерфейс под низом
+    welcomeOverlay.style.transition = "none";
+    welcomeOverlay.style.opacity = "1";
     
     if (welcomeQuote) {
       welcomeQuote.innerHTML = '<div class="skeleton-pulse" style="height: 20px; width: 60%; margin: 0 auto; border-radius: 4px;"></div>';
@@ -487,11 +522,32 @@ function showWelcomeScreen(user?: any) {
             typeText(krEl, `"${quote.quote_kr}"`, 50).then(() => {
               if (ruEl) typeText(ruEl, quote.quote_ru, 30);
             });
+            // FIX: Запускаем озвучку параллельно с анимацией (через 600мс), 
+            // чтобы попасть в "окно автовоспроизведения" браузера
+            console.log("🔊 Playing welcome audio:", textToSpeak);
+            
+            if (welcomeAudioTimeout) clearTimeout(welcomeAudioTimeout);
+            welcomeAudioTimeout = window.setTimeout(() => {
+              const card = document.querySelector(".welcome-quote-card");
+              if (card) card.classList.add("audio-playing");
+              welcomeAudioPromise = speak(textToSpeak, quote?.audio_url).then(() => {
+                welcomeAudioPromise = null;
+                if (card) card.classList.remove("audio-playing");
+              });
+              welcomeAudioTimeout = null;
+            }, 600);
           }
         } else {
           welcomeQuote.innerHTML = `<div class="welcome-quote-card"><div class="welcome-kr">"시작이 반이다"</div><div class="welcome-ru">Начало — это уже половина дела.</div></div>`;
+          // Для дефолтной цитаты оставляем таймер
+          if (welcomeAudioTimeout) clearTimeout(welcomeAudioTimeout);
+          welcomeAudioTimeout = window.setTimeout(() => {
+            welcomeAudioPromise = speak(textToSpeak, null).then(() => {
+              welcomeAudioPromise = null;
+            });
+            welcomeAudioTimeout = null;
+          }, 800);
         }
-        setTimeout(() => speak(textToSpeak, quote?.audio_url), 800);
       }).catch((e) => {
         console.warn("Failed to fetch quote:", e);
       });
@@ -508,6 +564,47 @@ function showWelcomeScreen(user?: any) {
   }
 }
 
+function setupNetworkListeners() {
+  const indicator = document.getElementById("offline-indicator");
+  
+  const updateStatus = () => {
+    if (navigator.onLine) {
+      indicator?.classList.remove("visible");
+    } else {
+      indicator?.classList.add("visible");
+    }
+  };
+
+  window.addEventListener("online", () => {
+    updateStatus();
+    showToast("🌐 Соединение восстановлено");
+  });
+  window.addEventListener("offline", () => {
+    updateStatus();
+    showToast("📡 Вы перешли в офлайн режим");
+  });
+
+  // Слушаем изменения качества соединения (Network Information API)
+  // @ts-ignore
+  if (navigator.connection) {
+    // @ts-ignore
+    const conn = navigator.connection;
+    conn.addEventListener('change', () => {
+      // Если интернет стал хорошим (3g или 4g) и не включена экономия данных
+      if (!conn.saveData && ['3g', '4g'].includes(conn.effectiveType)) {
+        if (navigator.serviceWorker.controller) {
+          console.log("📶 Connection improved. Processing download queue...");
+          navigator.serviceWorker.controller.postMessage({ type: 'PROCESS_DOWNLOAD_QUEUE' });
+          showToast("📶 Интернет улучшился. Докачиваем файлы...");
+        }
+      }
+    });
+  }
+
+  // Initial check
+  updateStatus();
+}
+
 async function init() {
   // 🧹 Принудительная очистка Service Worker в режиме разработки, чтобы избежать проблем с кэшем.
   // Это удалит старые воркеры для этого порта (origin) при каждой перезагрузке.
@@ -520,6 +617,9 @@ async function init() {
   }
 
   console.log("🏁 Init sequence started");
+
+  setupGlobalListeners();
+  setupNetworkListeners();
 
   renderSkeletons();
 
@@ -538,15 +638,19 @@ async function init() {
     render();
   };
 
+  // FIX: Настраиваем слушатель только для БУДУЩИХ событий (вход/выход).
+  // INITIAL_SESSION игнорируем, так как обработаем его явно ниже, чтобы не было "скачка" интерфейса.
   client.auth.onAuthStateChange(
     async (
       event: string,
       session: { user: any } | null, 
     ) => {
+      if (event === "INITIAL_SESSION") return;
+
       try {
         if (session) {
           updateAuthUI(session.user);
-          if (event === "SIGNED_IN" || event === "INITIAL_SESSION") {
+          if (event === "SIGNED_IN") {
             cleanAuthUrl();
             await loadFromSupabase(session.user);
             saveAndRender();
@@ -559,16 +663,24 @@ async function init() {
           }
         } else {
           updateAuthUI(null);
-          // Показываем приветствие для гостей при запуске приложения
-          if (event === "INITIAL_SESSION") {
-            showWelcomeScreen();
-          }
         }
       } catch (e) {
         console.error("Auth State Change Error:", e);
       }
     },
   );
+
+  // FIX: Явно ждем проверки сессии ПЕРЕД тем, как убрать экран загрузки
+  const { data: { session } } = await client.auth.getSession();
+  if (session) {
+    updateAuthUI(session.user);
+    cleanAuthUrl();
+    await loadFromSupabase(session.user);
+    showWelcomeScreen(session.user);
+  } else {
+    updateAuthUI(null);
+    showWelcomeScreen(); // Приветствие для гостя
+  }
 
   updateXPUI();
   updateStats();
@@ -582,7 +694,6 @@ async function init() {
   checkAutoTheme();
   updateDailyChallengeUI();
   checkSuperChallengeNotification();
-  applyFocusMode();
 
   render();
 
@@ -591,11 +702,9 @@ async function init() {
   };
   window.addEventListener("click", startMusicOnInteraction, { once: true });
 
-  checkAndShowOnboarding();
   setupGestures();
   setupScrollBehavior();
   setupGridEffects();
-  setupGlobalListeners();
   setupLevelUpObserver();
 
   const verEl = document.getElementById("app-version");
@@ -670,6 +779,13 @@ async function init() {
       window.location.reload();
       refreshing = true;
     });
+
+    // Слушаем сообщения от SW (например, о завершении докачки)
+    navigator.serviceWorker.addEventListener("message", (event) => {
+      if (event.data && event.data.type === 'DOWNLOAD_QUEUE_COMPLETED') {
+        if (event.data.count > 0) showToast(`✅ Докачано файлов: ${event.data.count}`);
+      }
+    });
   }
 
   window.addEventListener("beforeinstallprompt", (e: Event) => {
@@ -699,6 +815,15 @@ init().catch((e) => {
   if (loader) loader.remove();
 
   console.error("Init Error", e);
+
+  // Автоматическое восстановление при повреждении JSON в localStorage
+  if (e instanceof SyntaxError && e.message.includes("JSON")) {
+    console.warn("⚠️ Обнаружен поврежденный кэш. Очистка localStorage и перезагрузка...");
+    localStorage.clear();
+    setTimeout(() => location.reload(), 500);
+    return;
+  }
+
   // Убираем alert, чтобы не блокировать интерфейс при некритичных ошибках
   // alert("Critical Init Error: " + e.message); 
   let msg = "Ошибка инициализации: " + e.message;

@@ -1,6 +1,9 @@
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_KEY;
 
+console.log("🔍 Env Check - URL:", SUPABASE_URL);
+console.log("🔍 Env Check - Key Length:", SUPABASE_KEY ? SUPABASE_KEY.length : "MISSING");
+
 if (!SUPABASE_URL || !SUPABASE_KEY) {
   if (!SUPABASE_URL) console.warn("⚠️ VITE_SUPABASE_URL не найден в .env");
   if (!SUPABASE_KEY) console.warn("⚠️ VITE_SUPABASE_KEY не найден в .env");
@@ -32,6 +35,9 @@ export const client = (SUPABASE_URL && SUPABASE_KEY && window.supabase && window
         updateUser: () => Promise.resolve({ error: { message: "Offline mode" } })
       },
       rpc: () => Promise.resolve({ data: null, error: null }),
+      functions: {
+        invoke: () => Promise.resolve({ data: null, error: { message: "Offline mode: Functions not available" } })
+      },
       storage: {
         from: () => ({
             upload: () => Promise.resolve({ data: null, error: null }),

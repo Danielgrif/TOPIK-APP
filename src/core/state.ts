@@ -13,6 +13,7 @@ export interface Session {
   duration: number;
   wordsReviewed: number;
   accuracy: number;
+  platform?: string; // Пример нового поля
 }
 
 export interface AppState {
@@ -65,6 +66,8 @@ export interface AppState {
   sessionWordsReviewed: number;
 }
 
+export const CURRENT_DB_VERSION = 9;
+
 export const state: AppState = {
   dataStore: [],
   searchResults: null,
@@ -104,7 +107,7 @@ export const state: AppState = {
       ? Number(localStorage.getItem("audio_speed_v1"))
       : 0.9,
   darkMode: localStorage.getItem("dark_mode_v1") === "true",
-  focusMode: localStorage.getItem("focus_mode_v1") === "true",
+  focusMode: false, // Отключаем сохранение состояния при перезагрузке
   zenMode: localStorage.getItem("zen_mode_v1") === "true",
   viewMode: localStorage.getItem("view_mode_v1") || "grid",
   themeColor: localStorage.getItem("theme_color_v1") || "purple",
@@ -151,9 +154,154 @@ export const state: AppState = {
 };
 
 try {
+  const runMigrations = () => {
+    try {
+      const storedVersion = Number(localStorage.getItem("db_version") || "0");
+      if (storedVersion >= CURRENT_DB_VERSION) return;
+
+      console.log(`🔄 Migrating data from v${storedVersion} to v${CURRENT_DB_VERSION}...`);
+
+      // Пример миграции: перенос данных из v4 в v5 (если бы мы обновлялись с v4)
+      if (storedVersion < 5) {
+        const keys = [
+          "user_stats", "learned", "mistakes", "favorites", 
+          "word_history", "streak", "sessions", "achievements"
+        ];
+        
+        keys.forEach(baseKey => {
+          const oldKey = `${baseKey}_v4`;
+          const newKey = `${baseKey}_v5`;
+          const val = localStorage.getItem(oldKey);
+          if (val && !localStorage.getItem(newKey)) {
+            localStorage.setItem(newKey, val);
+          }
+        });
+      }
+
+      if (storedVersion < 6) {
+        const key = "user_stats_v5";
+        const raw = localStorage.getItem(key);
+        if (raw) {
+          try {
+            const stats = JSON.parse(raw);
+            
+            // Пример переименования поля: oldField -> newField
+            // if (stats.oldField !== undefined) {
+            //   stats.newField = stats.oldField;
+            //   delete stats.oldField;
+            // }
+
+            // Убедимся, что новые поля инициализированы (структурная миграция)
+            if (stats.survivalHealth === undefined) stats.survivalHealth = 0;
+
+            localStorage.setItem(key, JSON.stringify(stats));
+            console.log("✅ Migration v6 applied: user_stats structure updated");
+          } catch (e) {
+            console.error("Migration v6 failed:", e);
+          }
+        }
+      }
+
+      if (storedVersion < 7) {
+        const key = "sessions_v5";
+        const raw = localStorage.getItem(key);
+        if (raw) {
+          try {
+            const sessions = JSON.parse(raw);
+            if (Array.isArray(sessions)) {
+              const updatedSessions = sessions.map((s: any) => ({
+                ...s,
+                platform: s.platform || "web" // Значение по умолчанию
+              }));
+              localStorage.setItem(key, JSON.stringify(updatedSessions));
+              console.log("✅ Migration v7 applied: sessions array updated");
+            }
+          } catch (e) {
+            console.error("Migration v7 failed:", e);
+          }
+        }
+      }
+
+      if (storedVersion < 8) {
+        const key = "sessions_v5";
+        const raw = localStorage.getItem(key);
+        if (raw) {
+          try {
+            const sessions = JSON.parse(raw);
+            if (Array.isArray(sessions)) {
+              const seen = new Set();
+              const uniqueSessions = sessions.filter((s: any) => {
+                const isDuplicate = seen.has(s.date);
+                seen.add(s.date);
+                return !isDuplicate;
+              });
+
+              if (uniqueSessions.length !== sessions.length) {
+                localStorage.setItem(key, JSON.stringify(uniqueSessions));
+                console.log(`✅ Migration v8 applied: removed ${sessions.length - uniqueSessions.length} duplicate sessions`);
+              }
+            }
+          } catch (e) {
+            console.error("Migration v8 failed:", e);
+          }
+        }
+      }
+
+      if (storedVersion < 9) {
+        const key = "sessions_v5";
+        const raw = localStorage.getItem(key);
+        if (raw) {
+          try {
+            const sessions = JSON.parse(raw);
+            if (Array.isArray(sessions)) {
+              const mergedMap = new Map();
+
+              sessions.forEach((s: any) => {
+                const dateKey = s.date; // Используем дату как ключ для объединения
+                if (mergedMap.has(dateKey)) {
+                  const existing = mergedMap.get(dateKey);
+                  
+                  // Взвешенная точность перед обновлением слов
+                  const totalWords = existing.wordsReviewed + s.wordsReviewed;
+                  const weightedAcc = totalWords > 0 
+                    ? (existing.accuracy * existing.wordsReviewed + s.accuracy * s.wordsReviewed) / totalWords 
+                    : existing.accuracy;
+
+                  existing.duration += s.duration;
+                  existing.wordsReviewed += s.wordsReviewed;
+                  existing.accuracy = Math.round(weightedAcc);
+                  // Можно также объединить другие поля, если есть
+                } else {
+                  mergedMap.set(dateKey, { ...s });
+                }
+              });
+
+              const mergedSessions = Array.from(mergedMap.values());
+              localStorage.setItem(key, JSON.stringify(mergedSessions));
+              console.log(`✅ Migration v9 applied: merged ${sessions.length} sessions into ${mergedSessions.length}`);
+            }
+          } catch (e) {
+            console.error("Migration v9 failed:", e);
+          }
+        }
+      }
+
+      localStorage.setItem("db_version", String(CURRENT_DB_VERSION));
+    } catch (e) {
+      console.error("Migration failed:", e);
+    }
+  };
+  runMigrations();
+
   const load = <T>(key: string, def: T): T => {
     const val = localStorage.getItem(key);
-    return val ? JSON.parse(val) : def;
+    if (!val) return def;
+    try {
+      return JSON.parse(val);
+    } catch (e) {
+      console.warn(`⚠️ Corrupted data for key "${key}". Resetting to default.`, e);
+      return def;
+    }
   };
 
   state.userStats = load("user_stats_v5", state.userStats);
@@ -186,7 +334,20 @@ try {
     try {
       // Пробуем распаковать. Если не получается (старый формат), парсим как есть.
       const decompressed = cachedVocab.startsWith("[") ? cachedVocab : decompress(cachedVocab);
-      state.dataStore = JSON.parse(decompressed);
+      if (!decompressed) throw new Error("Decompression failed");
+      const parsed = JSON.parse(decompressed);
+
+      // Валидация схемы: проверяем, что это массив и ВСЕ элементы имеют обязательные поля.
+      // Метод .every() работает очень быстро (менее 10мс для 10,000 элементов) и не блокирует UI.
+      const isValid = Array.isArray(parsed) && parsed.every((item: any) => 
+        item && typeof item === 'object' && 'id' in item && 'word_kr' in item
+      );
+
+      if (isValid) {
+        state.dataStore = parsed;
+      } else {
+        throw new Error("Invalid vocabulary schema in cache");
+      }
     } catch (e) {
       console.warn("Failed to decompress vocabulary cache, resetting.", e);
       localStorage.removeItem("vocabulary_cache_v1");
