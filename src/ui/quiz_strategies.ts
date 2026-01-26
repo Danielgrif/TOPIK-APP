@@ -145,7 +145,9 @@ export const QuizStrategies: Record<string, Strategy> = {
     render(word, container, onAnswer, qEl) {
       let html = `<div class="quiz-question-text">${word.translation}</div><div class="quiz-question-sub">Выберите корейское слово</div>`;
       if (word.my_notes) {
-        html += `<div style="font-size:14px; color:var(--text-sub); margin-top:5px;">(${word.my_notes})</div>`;
+        const maskHtml = `<span class="skeleton-pulse" style="display: inline-block; width: 2.5em; height: 0.8em; background: var(--surface-3); border-radius: 4px; vertical-align: middle; margin: 0 2px;"></span>`;
+        const maskedNotes = word.word_kr ? word.my_notes.replace(new RegExp(word.word_kr, 'gi'), maskHtml) : word.my_notes;
+        html += `<div style="font-size:14px; color:var(--text-sub); margin-top:5px;">(${maskedNotes})</div>`;
       }
       qEl.innerHTML = html;
       container.innerHTML = "";
@@ -198,7 +200,12 @@ export const QuizStrategies: Record<string, Strategy> = {
       html += `<div class="quiz-question-text">${word.translation}</div><div class="quiz-question-sub">Напишите на корейском</div>`;
       
       if (word.my_notes) {
-        html += `<div style="font-size:14px; color:var(--text-sub); margin-top:5px;">(${word.my_notes.replace(/</g, "&lt;")})</div>`;
+        const maskHtml = `<span class="skeleton-pulse" style="display: inline-block; width: 2.5em; height: 0.8em; background: var(--surface-3); border-radius: 4px; vertical-align: middle; margin: 0 2px;"></span>`;
+        let notes = word.my_notes.replace(/</g, "&lt;");
+        if (word.word_kr) {
+            notes = notes.replace(new RegExp(word.word_kr, 'gi'), maskHtml);
+        }
+        html += `<div style="font-size:14px; color:var(--text-sub); margin-top:5px;">(${notes})</div>`;
       }
       qEl.innerHTML = html;
       if (typeof this._renderInput === "function")

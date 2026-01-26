@@ -392,7 +392,10 @@
     <!-- Filter Panel (hidden by default) -->
     <div id="filter-panel">
       <div class="filter-panel-header">
-        <h3>🔍 Фильтры</h3>
+        <div style="display: flex; align-items: center; gap: 12px;">
+            <h3>🔍 Фильтры</h3>
+            <button class="btn-text" data-action="reset-filters" style="font-size: 13px; background: var(--surface-2); padding: 6px 12px; border-radius: 8px;">↺ Сброс</button>
+        </div>
         <button class="btn btn-icon close-modal-btn" data-action="toggle-filter-panel">✕</button>
       </div>
       <div class="filter-panel-content">
@@ -420,12 +423,7 @@
         </div>
         <div class="filter-section">
           <div class="filter-label">Категория</div>
-          <div class="custom-select-wrapper">
-            <select id="categorySelect" class="custom-select" onchange="handleCategoryChange(this.value)">
-                <option value="all">Все категории</option>
-            </select>
-            <div class="select-arrow">▼</div>
-          </div>
+          <div id="categorySelect" class="custom-select-container"></div>
         </div>
         <div class="filter-section">
           <div class="filter-label">Сортировка</div>

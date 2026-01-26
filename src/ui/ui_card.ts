@@ -7,8 +7,8 @@ import { client } from "../core/supabaseClient.ts";
 import { Word } from "../types/index.ts";
 
 // --- Virtual Scroll Constants (for List View) ---
-const ITEM_HEIGHT_LIST = 72;
-let ITEM_HEIGHT_GRID = 400;
+const ITEM_HEIGHT_LIST = 82;
+let ITEM_HEIGHT_GRID = 480;
 const MIN_COL_WIDTH = 340; // Увеличено для еще более крупных карточек
 const BUFFER_ITEMS = 10;
 const GRID_GAP = 16;
@@ -21,10 +21,14 @@ let resizeHandler: (() => void) | null = null;
 
 let counterTimeout: number | null = null;
 
+function escapeRegExp(string: string) {
+  return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 export function updateGridCardHeight() {
   // FIX: Устанавливаем фиксированную высоту для карточек в сетке.
   // Динамический расчет (window.innerHeight) делал их слишком огромными.
-  ITEM_HEIGHT_GRID = 400; // Базовая высота, но карточки могут растягиваться
+  ITEM_HEIGHT_GRID = 480; // Увеличена высота
   document.documentElement.style.setProperty("--card-height", `${ITEM_HEIGHT_GRID}px`);
 }
 
@@ -118,9 +122,11 @@ function updateFilteredData() {
     const topics = Array.isArray(state.currentTopic)
       ? state.currentTopic
       : [state.currentTopic];
-    if (!topics.includes("all") && !topics.includes(wTopic)) return false;
-    const wCat = w.category || w.category_ru || w.category_kr;
-    if (state.currentCategory !== "all" && wCat !== state.currentCategory)
+    if (!topics.includes("all") && !topics.includes(wTopic)) 
+      return false;
+    const wCat = w.category || w.category_ru || w.category_kr || "";
+    const categories = Array.isArray(state.currentCategory) ? state.currentCategory : [state.currentCategory];
+    if (!categories.includes("all") && !categories.includes(wCat))
       return false;
     return true;
   });
@@ -455,17 +461,53 @@ function createCardFront(item: Word, index: number): HTMLElement {
   const mainContent = document.createElement("div");
   mainContent.className = "card-main";
 
+  // --- Level Section ---
+  const levelSection = document.createElement("div");
+  levelSection.className = "front-section";
+  
   const levelBadge = document.createElement("div");
-  levelBadge.className = "card-level-pill";
+  levelBadge.className = "card-level-stars";
   levelBadge.textContent = item.level || "★☆☆";
-  mainContent.appendChild(levelBadge);
+  levelSection.appendChild(levelBadge);
+  mainContent.appendChild(levelSection);
+
+  // --- Word Section ---
+  const wordSection = document.createElement("div");
+  wordSection.className = "front-section";
+  
+  let statusIcon = "";
+
+  if (state.learned.has(item.id)) {
+    statusIcon = "✅";
+  } else if (state.mistakes.has(item.id)) {
+    statusIcon = "❌";
+  }
+  
+  const wordWrapper = document.createElement("div");
+  wordWrapper.style.display = "flex";
+  wordWrapper.style.alignItems = "center";
+  wordWrapper.style.justifyContent = "center";
+  wordWrapper.style.gap = "10px";
 
   const wordDiv = document.createElement("div");
   wordDiv.className = "word";
   wordDiv.textContent = item.word_kr || "";
-  mainContent.appendChild(wordDiv);
+  wordWrapper.appendChild(wordDiv);
+
+  if (statusIcon) {
+    const iconDiv = document.createElement("div");
+    iconDiv.textContent = statusIcon;
+    iconDiv.style.fontSize = "24px";
+    wordWrapper.appendChild(iconDiv);
+  }
+
+  wordSection.appendChild(wordWrapper);
+  mainContent.appendChild(wordSection);
 
   if (item.word_hanja) {
+    const hanjaSection = document.createElement("div");
+    hanjaSection.className = "front-section";
+
     const hanjaContainer = document.createElement("div");
     hanjaContainer.className = "hanja-container";
     [...item.word_hanja].forEach((char) => {
@@ -493,11 +535,6 @@ function createCardFront(item: Word, index: number): HTMLElement {
     mainContent.appendChild(grammarBadge);
   }
 
-  front.appendChild(mainContent);
-
-  const footer = document.createElement("div");
-  footer.className = "card-footer";
-
   const stats = state.wordHistory[item.id] || { attempts: 0, correct: 0 };
   if (stats.attempts > 0) {
     const acc = getAccuracy(item.id);
@@ -522,7 +559,7 @@ function createCardFront(item: Word, index: number): HTMLElement {
     const statEl = document.createElement("div");
     statEl.className = `card-stat-pill ${statusClass}`;
     statEl.innerHTML = `<span>🎯 ${acc}%</span><span class="sep">|</span><span>${statusText}</span>`;
-    footer.appendChild(statEl);
+    mainContent.appendChild(statEl);
   }
 
   const topicObj = item._parsedTopic || { kr: "기타", ru: "Общее" };
@@ -541,9 +578,9 @@ function createCardFront(item: Word, index: number): HTMLElement {
   if (item.isLocal) {
       tagsDiv.innerHTML += `<span class="tag-pill ai">⏳ AI</span>`;
   }
-  footer.appendChild(tagsDiv);
+  mainContent.appendChild(tagsDiv);
 
-  front.appendChild(footer);
+  front.appendChild(mainContent);
 
   return front;
 }
@@ -564,8 +601,20 @@ function createCardBack(item: Word): HTMLElement {
 
   // --- Image (Blur Reveal) ---
   if (item.image) {
+    const imgWrapper = document.createElement("div");
+    imgWrapper.style.marginBottom = "16px";
+
+    const showImgBtn = document.createElement("button");
+    showImgBtn.className = "btn-text";
+    showImgBtn.style.width = "100%";
+    showImgBtn.style.background = "var(--surface-3)";
+    showImgBtn.style.borderRadius = "12px";
+    showImgBtn.style.padding = "12px";
+    showImgBtn.innerHTML = "📷 Показать изображение";
+
     const imgContainer = document.createElement("div");
-    imgContainer.className = "back-image-container blurred"; // Start blurred
+    imgContainer.className = "back-image-container";
+    imgContainer.style.display = "none";
     
     const img = document.createElement("img");
     img.dataset.src = item.image;
@@ -576,14 +625,21 @@ function createCardBack(item: Word): HTMLElement {
     
     const revealOverlay = document.createElement("div");
     revealOverlay.className = "back-image-overlay";
-    revealOverlay.innerHTML = "<span>👁️ Показать</span>";
+    revealOverlay.innerHTML = "<span>👁️ Скрыть</span>";
     
+    showImgBtn.onclick = (e) => {
+        e.stopPropagation();
+        showImgBtn.style.display = "none";
+        imgContainer.style.display = "block";
+    };
+
     imgContainer.onclick = (e) => {
       e.stopPropagation();
       // Если клик по кнопкам или инпуту — игнорируем
       if ((e.target as HTMLElement).closest("button") || (e.target as HTMLElement).closest("input")) return;
       
-      imgContainer.classList.toggle("blurred");
+      imgContainer.style.display = "none";
+      showImgBtn.style.display = "block";
     };
 
     // --- Кнопка лупы (Full Screen) ---
@@ -659,11 +715,7 @@ function createCardBack(item: Word): HTMLElement {
         // Обновляем UI: скрываем картинку, показываем заглушку
         item.image = undefined;
         item.image_source = undefined;
-        img.style.display = "none";
-        imgContainer.classList.remove("blurred");
-        imgContainer.style.backgroundColor = "var(--surface-3)"; // Цвет заглушки
-        revealOverlay.style.display = "none";
-        deleteBtn.style.display = "none"; // Скрываем кнопку удаления
+        imgWrapper.remove();
         showToast("🗑️ Картинка удалена");
       } catch (err: any) {
         console.error("Delete error:", err);
@@ -696,7 +748,9 @@ function createCardBack(item: Word): HTMLElement {
           img.dataset.src = data.imageUrl;
           item.image = data.imageUrl;
           item.image_source = 'pixabay';
-          imgContainer.classList.remove('blurred');
+          
+          showImgBtn.style.display = "none";
+          imgContainer.style.display = "block";
           
           // Восстанавливаем UI после возможного удаления
           img.style.display = "";
@@ -779,65 +833,126 @@ function createCardBack(item: Word): HTMLElement {
     imgContainer.appendChild(deleteBtn);
     imgContainer.appendChild(uploadBtn);
     imgContainer.appendChild(fileInput);
-    content.appendChild(imgContainer);
+    
+    imgWrapper.appendChild(showImgBtn);
+    imgWrapper.appendChild(imgContainer);
+    content.appendChild(imgWrapper);
   }
 
   // --- Examples ---
-  if (item.example_kr) {
+  if (item.example_kr && item.example_kr.trim()) {
     const exBox = document.createElement("div");
     exBox.className = "back-section";
+    exBox.style.borderLeft = "3px solid var(--section-info-border)";
+    exBox.style.backgroundColor = "var(--section-info-bg)";
+    exBox.style.padding = "12px 12px 12px 16px";
+    exBox.style.marginBottom = "16px";
+    exBox.style.borderRadius = "8px";
     // Highlight the word in the example
     const highlightedKr = item.example_kr.replace(
-        new RegExp(item.word_kr, 'gi'), 
-        `<span class="highlight">${item.word_kr}</span>`
+        new RegExp(escapeRegExp(item.word_kr), 'gi'), 
+        `<span class="highlight">$&</span>`
     );
     exBox.innerHTML = `
-        <div class="section-label">Пример</div>
+        <div class="section-label" style="color: var(--section-info-border); font-weight: bold; margin-bottom: 4px;">💬 Пример</div>
         <div class="back-example-kr">${highlightedKr}</div>
         <div class="back-example-ru">${item.example_ru || ""}</div>
     `;
     content.appendChild(exBox);
   }
 
-  // --- Relations (Synonyms/Antonyms) ---
-  if (item.synonyms || item.antonyms) {
-    const relBox = document.createElement("div");
-    relBox.className = "back-section";
-    
-    if (item.synonyms) {
-        const row = document.createElement("div");
-        row.className = "relation-row";
-        row.innerHTML = `<span class="rel-icon">≈</span> <div class="rel-chips">${
-            item.synonyms.split(/[,;]/).map(s => `<span class="rel-chip syn">${s.trim()}</span>`).join("")
-        }</div>`;
-        relBox.appendChild(row);
-    }
-    if (item.antonyms) {
-        const row = document.createElement("div");
-        row.className = "relation-row";
-        row.innerHTML = `<span class="rel-icon">≠</span> <div class="rel-chips">${
-            item.antonyms.split(/[,;]/).map(s => `<span class="rel-chip ant">${s.trim()}</span>`).join("")
-        }</div>`;
-        relBox.appendChild(row);
-    }
-    content.appendChild(relBox);
+  // --- Synonyms ---
+  if (item.synonyms && item.synonyms.trim()) {
+    const synBox = document.createElement("div");
+    synBox.className = "back-section";
+    synBox.style.borderLeft = "3px solid var(--section-relation-border)";
+    synBox.style.backgroundColor = "var(--section-relation-bg)";
+    synBox.style.padding = "12px 12px 12px 16px";
+    synBox.style.marginBottom = "16px";
+    synBox.style.borderRadius = "8px";
+    synBox.innerHTML = `
+        <div class="section-label" style="color: var(--section-relation-border); font-weight: bold; margin-bottom: 8px;">🔗 Синонимы</div>
+        <div class="relation-row">
+            <div class="rel-chips">${
+                item.synonyms.split(/[,;]/).filter(s => s.trim()).map(s => `<span class="rel-chip syn">${s.trim()}</span>`).join("")
+            }</div>
+        </div>
+    `;
+    content.appendChild(synBox);
   }
 
-  // --- Info (Collocations, Grammar, Notes) ---
-  if (item.collocations || item.grammar_info || item.my_notes) {
-      const infoBox = document.createElement("div");
-      infoBox.className = "back-section";
-      
-      if (item.collocations) {
-          infoBox.innerHTML += `<div class="info-item"><span class="info-label">Коллокации:</span> ${item.collocations}</div>`;
-      }
-      if (item.grammar_info) {
-          infoBox.innerHTML += `<div class="info-item"><span class="info-label">Грамматика:</span> ${item.grammar_info}</div>`;
-      }
-      if (item.my_notes) {
-          infoBox.innerHTML += `<div class="info-item"><span class="info-label">Заметки:</span> ${item.my_notes}</div>`;
-      }
-      content.appendChild(infoBox);
+  // --- Antonyms ---
+  if (item.antonyms && item.antonyms.trim()) {
+    const antBox = document.createElement("div");
+    antBox.className = "back-section";
+    antBox.style.borderLeft = "3px solid var(--section-relation-border)";
+    antBox.style.backgroundColor = "var(--section-relation-bg)";
+    antBox.style.padding = "12px 12px 12px 16px";
+    antBox.style.marginBottom = "16px";
+    antBox.style.borderRadius = "8px";
+    antBox.innerHTML = `
+        <div class="section-label" style="color: var(--section-relation-border); font-weight: bold; margin-bottom: 8px;">≠ Антонимы</div>
+        <div class="relation-row">
+            <div class="rel-chips">${
+                item.antonyms.split(/[,;]/).filter(s => s.trim()).map(s => `<span class="rel-chip ant">${s.trim()}</span>`).join("")
+            }</div>
+        </div>
+    `;
+    content.appendChild(antBox);
+  }
+
+  // --- Collocations ---
+  if (item.collocations && item.collocations.trim()) {
+      const colBox = document.createElement("div");
+      colBox.className = "back-section";
+      colBox.style.borderLeft = "3px solid var(--section-extra-border)";
+      colBox.style.backgroundColor = "var(--section-extra-bg)";
+      colBox.style.padding = "12px 12px 12px 16px";
+      colBox.style.marginBottom = "16px";
+      colBox.style.borderRadius = "8px";
+      const displayCollocations = item.word_kr 
+        ? item.collocations.replace(new RegExp(escapeRegExp(item.word_kr), 'gi'), `<span class="highlight">$&</span>`) 
+        : item.collocations;
+      colBox.innerHTML = `
+          <div class="section-label" style="color: var(--section-extra-border); font-weight: bold; margin-bottom: 8px;">🔗 Коллокации</div>
+          <div class="info-item">${displayCollocations}</div>
+      `;
+      content.appendChild(colBox);
+  }
+
+  // --- Grammar ---
+  if (item.grammar_info && item.grammar_info.trim()) {
+      const gramBox = document.createElement("div");
+      gramBox.className = "back-section";
+      gramBox.style.borderLeft = "3px solid var(--section-extra-border)";
+      gramBox.style.backgroundColor = "var(--section-extra-bg)";
+      gramBox.style.padding = "12px 12px 12px 16px";
+      gramBox.style.marginBottom = "16px";
+      gramBox.style.borderRadius = "8px";
+      gramBox.innerHTML = `
+          <div class="section-label" style="color: var(--section-extra-border); font-weight: bold; margin-bottom: 8px;">📘 Грамматика</div>
+          <div class="info-item">${item.grammar_info}</div>
+      `;
+      content.appendChild(gramBox);
+  }
+
+  // --- Notes ---
+  if (item.my_notes && item.my_notes.trim()) {
+      const noteBox = document.createElement("div");
+      noteBox.className = "back-section";
+      noteBox.style.borderLeft = "3px solid var(--section-extra-border)";
+      noteBox.style.backgroundColor = "var(--section-extra-bg)";
+      noteBox.style.padding = "12px 12px 12px 16px";
+      noteBox.style.marginBottom = "16px";
+      noteBox.style.borderRadius = "8px";
+      const displayNotes = item.word_kr 
+        ? item.my_notes.replace(new RegExp(escapeRegExp(item.word_kr), 'gi'), `<span class="highlight">$&</span>`) 
+        : item.my_notes;
+      noteBox.innerHTML = `
+          <div class="section-label" style="color: var(--section-extra-border); font-weight: bold; margin-bottom: 8px;">📝 Заметки</div>
+          <div class="info-item">${displayNotes}</div>
+      `;
+      content.appendChild(noteBox);
   }
 
   back.appendChild(content);
@@ -896,15 +1011,42 @@ function createCardBack(item: Word): HTMLElement {
 }
 
 function createListItem(item: Word, index: number): HTMLElement {
+  const container = document.createElement("div");
+  container.className = "list-item-wrapper";
+  // Убираем классы learned/mistake для контейнера, так как убираем полоску
+
   const el = document.createElement("div");
   el.className = "list-item";
-  if (state.learned.has(item.id)) el.classList.add("learned");
-  if (state.mistakes.has(item.id)) el.classList.add("mistake");
   const isFav = state.favorites.has(item.id);
+
+  let statusIcon = "";
+  if (state.learned.has(item.id)) statusIcon = "✅";
+  else if (state.mistakes.has(item.id)) statusIcon = "❌";
+
+  const hanjaHtml = item.word_hanja 
+    ? `<span class="list-hanja">${[...item.word_hanja].map(char => `<span class="list-hanja-char">${char}</span>`).join("")}</span>` 
+    : "";
 
   const mainDiv = document.createElement("div");
   mainDiv.className = "list-col-main";
-  mainDiv.innerHTML = `<div class="list-word">${item.word_kr} ${item.word_hanja ? `<span class="list-hanja">${item.word_hanja}</span>` : ""}</div><div class="list-trans">${item.translation}</div>`;
+  mainDiv.innerHTML = `
+    <div class="list-word-row">
+        <div class="list-word">${item.word_kr}</div>
+        ${statusIcon ? `<div class="list-status-icon">${statusIcon}</div>` : ""}
+        ${hanjaHtml}
+    </div>
+    <div class="list-trans">${item.translation}</div>
+  `;
+
+  if (item.word_hanja) {
+      mainDiv.querySelectorAll(".list-hanja-char").forEach(span => {
+          (span as HTMLElement).onclick = (e) => {
+              e.stopPropagation();
+              const char = span.textContent;
+              if (char) import("./ui_hanja.ts").then((m) => m.openHanjaModal(char));
+          };
+      });
+  }
 
   const metaDiv = document.createElement("div");
   metaDiv.className = "list-col-meta";
@@ -936,7 +1078,72 @@ function createListItem(item: Word, index: number): HTMLElement {
   el.appendChild(mainDiv);
   el.appendChild(metaDiv);
   el.appendChild(actionsDiv);
-  return el;
+
+  // --- Details Section (Accordion) ---
+  const details = document.createElement("div");
+  details.className = "list-item-details";
+  
+  let detailsContent = "";
+  
+  // Example
+  if (item.example_kr && item.example_kr.trim()) {
+      const highlighted = item.example_kr.replace(new RegExp(escapeRegExp(item.word_kr), 'gi'), `<span class="highlight">$&</span>`);
+      detailsContent += `
+        <div class="list-detail-section" style="background: var(--section-info-bg); border-left-color: var(--section-info-border);">
+            <div class="list-detail-label">💬 Пример</div>
+            <div class="list-detail-text kr">${highlighted}</div>
+            <div class="list-detail-text ru">${item.example_ru || ""}</div>
+        </div>
+      `;
+  }
+
+  // Synonyms/Antonyms
+  if ((item.synonyms && item.synonyms.trim()) || (item.antonyms && item.antonyms.trim())) {
+      detailsContent += `<div class="list-detail-row">`;
+      if (item.synonyms && item.synonyms.trim()) {
+          detailsContent += `
+            <div class="list-detail-section" style="flex:1; background: var(--section-relation-bg); border-left-color: var(--section-relation-border);">
+                <div class="list-detail-label">🔗 Синонимы</div>
+                <div class="list-detail-text">${item.synonyms}</div>
+            </div>`;
+      }
+      if (item.antonyms && item.antonyms.trim()) {
+          detailsContent += `
+            <div class="list-detail-section" style="flex:1; background: var(--section-relation-bg); border-left-color: var(--section-relation-border);">
+                <div class="list-detail-label">≠ Антонимы</div>
+                <div class="list-detail-text">${item.antonyms}</div>
+            </div>`;
+      }
+      detailsContent += `</div>`;
+  }
+  
+  // Notes
+  if ((item.my_notes && item.my_notes.trim()) || (item.collocations && item.collocations.trim())) {
+     const info = [item.collocations, item.my_notes].filter(s => s && s.trim()).join("<br>");
+     detailsContent += `
+        <div class="list-detail-section" style="background: var(--section-extra-bg); border-left-color: var(--section-extra-border);">
+            <div class="list-detail-label">📝 Инфо</div>
+            <div class="list-detail-text">${info}</div>
+        </div>`; 
+  }
+
+  details.innerHTML = `<div class="list-details-inner">${detailsContent || '<div class="list-detail-empty">Нет дополнительной информации</div>'}</div>`;
+
+  el.onclick = (e) => {
+      if ((e.target as HTMLElement).closest("button")) return;
+      
+      if (container.classList.contains("expanded")) {
+          container.classList.remove("expanded");
+          details.style.maxHeight = "0";
+      } else {
+          container.classList.add("expanded");
+          details.style.maxHeight = details.scrollHeight + "px";
+      }
+  };
+
+  container.appendChild(el);
+  container.appendChild(details);
+  return container;
 }
 
 function getAccuracy(id: string | number): number {

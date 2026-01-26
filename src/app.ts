@@ -199,11 +199,25 @@ function setupGlobalListeners() {
         case "toggle-filter-panel":
           toggleFilterPanel();
           break;
+        case "reset-filters":
+          import("./ui/ui_filters.ts").then((m) => m.resetFilters());
+          break;
         case "set-type-filter":
           if (value) setTypeFilter(value, actionTrigger as HTMLElement);
           break;
         case "set-star-filter":
-          if (value) setStarFilter(value, actionTrigger as HTMLElement);
+          if (value) {
+            state.currentStar = value;
+            // Обновляем UI: делаем выбор взаимоисключающим
+            const container = document.getElementById("level-filters");
+            if (container) {
+              container.querySelectorAll(".filter-chip").forEach((btn) => {
+                if (btn.getAttribute("data-value") === value) btn.classList.add("active");
+                else btn.classList.remove("active");
+              });
+            }
+            saveAndRender();
+          }
           break;
         case "sort-weak":
           sortByWeakWords();

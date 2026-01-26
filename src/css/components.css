@@ -117,7 +117,7 @@ body.dark-mode .btn-icon {
 .card {
     background: transparent;
     perspective: 1000px;
-    height: var(--card-height, 400px); /* FIX: Fixed height for virtual scroll stability */
+    height: var(--card-height, 480px);
     cursor: pointer;
     position: relative;
     border-radius: var(--radius-md);
@@ -171,7 +171,7 @@ body.dark-mode .btn-icon {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 12px 16px;
+    padding: 8px 16px;
     position: relative;
     width: 100%;
     z-index: 10;
@@ -183,18 +183,21 @@ body.dark-mode .btn-icon {
     50% { text-shadow: 0 0 10px rgba(255, 215, 0, 0.8), 0 0 20px rgba(255, 215, 0, 0.4); filter: brightness(1.1); transform: scale(1.02); }
 }
 
-/* Level Pill */
-.card-level-pill {
-    font-size: 14px;
-    font-weight: 800;
+.front-section {
+    background: transparent;
+    box-shadow: none;
+    text-align: center;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+.card-level-stars {
+    font-size: 36px;
+    font-weight: 900;
     color: var(--gold);
-    background: rgba(245, 158, 11, 0.1);
-    padding: 6px 14px;
-    border-radius: 16px;
-    letter-spacing: 2px;
-    border: 1px solid rgba(245, 158, 11, 0.2);
-    margin-bottom: 10px;
-    box-shadow: 0 2px 8px rgba(245, 158, 11, 0.1);
+    text-shadow: 0 2px 4px rgba(0,0,0,0.2);
+    letter-spacing: 6px;
+    line-height: 1;
 }
 body.dark-mode .card-level-pill {
     background: rgba(255, 215, 0, 0.05);
@@ -215,10 +218,11 @@ body.dark-mode .card-level-pill {
     flex: 1;
     display: flex;
     flex-direction: column;
-    justify-content: center;
+    justify-content: space-evenly; /* Равномерное распределение по высоте */
     align-items: center;
-    padding: 10px 15px;
+    padding: 0 20px 20px;
     position: relative;
+    gap: 0; /* Убираем gap, полагаемся на space-evenly */
 }
 
 /* Redesigned Word */
@@ -226,7 +230,7 @@ body.dark-mode .card-level-pill {
     font-size: clamp(36px, 12vw, 64px); /* Significantly larger */
     font-weight: 800;
     line-height: 1.1;
-    margin-bottom: 15px;
+    margin-bottom: 0;
     text-align: center;
     
     /* Gradient Text */
@@ -234,14 +238,14 @@ body.dark-mode .card-level-pill {
     -webkit-background-clip: text;
     background-clip: text;
     -webkit-text-fill-color: transparent;
-    color: var(--text-main); /* Fallback */
-    filter: drop-shadow(0 2px 4px rgba(0,0,0,0.05));
+    color: var(--text-main); /* Fallback */    
+    filter: drop-shadow(0 2px 4px rgba(0,0,0,0.1)); /* More visible shadow for readability */
 }
 
 /* Redesigned Hanja */
 .hanja-container {
     margin-top: 0;
-    margin-bottom: 15px;
+    margin-bottom: 0;
     display: inline-flex;
     gap: 4px;
     flex-wrap: wrap;
@@ -259,15 +263,6 @@ body.dark-mode .card-level-pill {
 .hanja-char:hover {
     color: var(--primary);
     transform: scale(1.1);
-}
-
-.card-footer {
-    padding: 12px 16px;
-    width: 100%;
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-    align-items: center;
 }
 
 .card-tags {
@@ -586,29 +581,146 @@ body.dark-mode .tag-pill.category {
 .pronunciation-error { color: var(--danger); }
 
 /* --- List View Items --- */
+.list-item-wrapper {
+    margin: 6px 12px;
+    border-radius: 16px;
+    background: var(--surface-2);
+    box-shadow: var(--shadow-sm);
+    transition: all 0.2s ease;
+    overflow: hidden;
+    border: 1px solid transparent;
+    position: relative;
+}
+.list-item-wrapper:hover { 
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-md);
+    border-color: var(--primary-light);
+}
+.list-item-wrapper.expanded {
+    box-shadow: var(--shadow-md);
+    border-color: var(--primary);
+    transform: translateY(-2px);
+}
+
 .list-item {
     display: flex;
     align-items: center;
-    background: var(--surface-1);
-    border: 1px solid var(--border-color);
-    border-radius: var(--radius-sm);
-    padding: 0 15px;
-    height: 72px; /* Высота карточки в списке (должна совпадать с ITEM_HEIGHT_LIST в JS) */
-    box-shadow: var(--shadow-sm);
-    box-sizing: border-box;
+    padding: 0 20px;
+    height: 70px;
+    cursor: pointer;
 }
-.list-item:hover { background: var(--surface-2); }
-.list-col-main { flex: 1; display: flex; flex-direction: column; justify-content: center; }
-.list-word { font-weight: 700; font-size: 16px; color: var(--text-main); transition: color 0.4s ease; }
-.list-trans { color: var(--text-sub); font-size: 13px; transition: color 0.4s ease; }
-.list-col-meta { margin: 0 15px; }
-.list-badge { background: var(--surface-3); padding: 4px 8px; border-radius: 6px; font-size: 12px; color: var(--text-sub); transition: background-color 0.4s ease, color 0.4s ease; }
-.list-col-actions { display: flex; gap: 5px; }
-.list-action-btn { font-size: 16px; padding: 8px; color: var(--text-sub); }
-.list-action-btn:hover { background: var(--surface-3); color: var(--primary); }
-.list-action-btn.active { color: var(--danger); }
-.list-item.learned { border-left: 4px solid var(--success); }
-.list-item.mistake { border-left: 4px solid var(--danger); }
+
+/* Удаляем полоску статуса для соответствия карточкам */
+.list-item-wrapper::before { display: none; }
+
+.list-col-main { flex: 1; display: flex; flex-direction: column; justify-content: center; padding-left: 10px; gap: 2px; }
+
+.list-word-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.list-status-icon {
+    font-size: 16px;
+    animation: popIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+.list-word { 
+    font-weight: 800; 
+    font-size: 18px; 
+    background: linear-gradient(180deg, var(--text-main) 0%, var(--text-sub) 150%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    color: var(--text-main);
+    filter: drop-shadow(0 1px 2px rgba(0,0,0,0.1));
+    transition: color 0.4s ease; 
+}
+.list-hanja { font-family: 'Noto Serif KR', serif; font-size: 15px; color: var(--text-tertiary); font-weight: 400; }
+.list-hanja-char {
+    cursor: pointer;
+    transition: all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    display: inline-block;
+    padding: 0 1px;
+}
+.list-hanja-char:hover {
+    color: var(--primary);
+    transform: scale(1.3) translateY(-2px);
+    text-shadow: 0 2px 5px rgba(0,0,0,0.1);
+}
+.list-trans { color: var(--text-sub); font-size: 14px; font-weight: 500; transition: color 0.4s ease; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 95%; }
+.list-col-meta { margin: 0 15px; display: flex; align-items: center; }
+
+/* Стиль звезд как на карточках (без рамки) */
+.list-badge { 
+    background: transparent; 
+    padding: 0; 
+    border: none; 
+    font-size: 14px; 
+    font-weight: 900; 
+    color: var(--gold); 
+    letter-spacing: 2px; 
+    white-space: nowrap;
+    text-shadow: 0 1px 2px rgba(0,0,0,0.1);
+}
+
+.list-col-actions { display: flex; gap: 8px; }
+.list-action-btn { 
+    font-size: 16px; 
+    width: 40px; 
+    height: 40px; 
+    padding: 0; 
+    border-radius: 50%; 
+    background: rgba(255, 255, 255, 0.7);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    border: 1px solid rgba(0,0,0,0.05);
+    color: var(--text-sub); 
+    display: flex; 
+    align-items: center; 
+    justify-content: center; 
+    transition: all 0.2s; 
+}
+body.dark-mode .list-action-btn {
+    background: rgba(30, 30, 40, 0.6);
+    border-color: rgba(255,255,255,0.1);
+    color: rgba(255,255,255,0.8);
+}
+.list-action-btn:hover { background: var(--primary); color: white; transform: scale(1.1); }
+.list-action-btn.active { color: #ff4757; background: rgba(255, 71, 87, 0.1); border-color: transparent; }
+
+/* List Details (Accordion) */
+.list-item-details {
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    background: var(--surface-1);
+    border-top: 1px solid var(--border-color);
+}
+
+.list-details-inner { padding: 16px 20px; display: flex; flex-direction: column; gap: 12px; }
+.list-detail-section {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 12px 12px 12px 16px;
+    border-radius: 8px;
+    border-left: 3px solid;
+}
+.list-detail-label { font-size: 10px; text-transform: uppercase; color: var(--text-tertiary); font-weight: 800; letter-spacing: 0.5px; }
+.list-detail-text { font-size: 14px; color: var(--text-main); line-height: 1.5; }
+.list-detail-text.kr { font-weight: 600; color: var(--primary); }
+.list-detail-text.ru { color: var(--text-sub); }
+.list-detail-text .highlight { 
+    color: var(--primary); 
+    background: rgba(99, 102, 241, 0.1); 
+    padding: 0 2px; 
+    border-radius: 4px; 
+    font-weight: 600;
+}
+.list-detail-row { display: flex; gap: 16px; }
+.list-detail-empty { font-size: 13px; color: var(--text-tertiary); font-style: italic; text-align: center; }
 
 /* --- Level Up Overlay --- */
 .level-up-overlay {

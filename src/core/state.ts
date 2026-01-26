@@ -36,7 +36,7 @@ export interface AppState {
 
   currentStar: string;
   currentTopic: string[];
-  currentCategory: string;
+  currentCategory: string[];
   currentType: string;
   hanjaMode: boolean;
   currentVoice: string;
@@ -98,7 +98,7 @@ export const state: AppState = {
 
   currentStar: "all",
   currentTopic: ["all"],
-  currentCategory: "all",
+  currentCategory: ["all"],
   currentType: "word",
   hanjaMode: localStorage.getItem("hanja_mode_v1") === "true",
   currentVoice: localStorage.getItem("voice_pref") || "female",

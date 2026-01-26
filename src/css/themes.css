@@ -50,8 +50,8 @@ body.focus-mode #main-header {
     transform: translateY(-100%);
 }
 body.focus-mode .card {
-    height: auto !important;
-    min-height: 400px;
+    height: 80vh !important;
+    min-height: 500px;
     scroll-margin-top: 10px;
     scroll-snap-align: start;
     /* Отключаем 3D-эффект наклона при наведении в режиме фокуса */

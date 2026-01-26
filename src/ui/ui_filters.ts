@@ -3,6 +3,28 @@ import { parseBilingualString, showToast } from "../utils/utils.ts";
 import { render } from "./ui_card.ts";
 import { Word } from "../types/index.ts";
 
+const VIRTUAL_ITEM_HEIGHT = 36;
+const VIRTUAL_BUFFER = 10;
+
+// --- Optimization Cache ---
+let cachedDataStoreRef: Word[] | null = null;
+let cachedWordsByType: Record<string, Word[]> = {};
+
+function getWordsByType(type: string): Word[] {
+  // Перестраиваем кэш только если массив данных изменился (по ссылке)
+  if (cachedDataStoreRef !== state.dataStore) {
+    cachedWordsByType = {};
+    for (let i = 0; i < state.dataStore.length; i++) {
+      const w = state.dataStore[i];
+      const t = w.type || "word";
+      if (!cachedWordsByType[t]) cachedWordsByType[t] = [];
+      cachedWordsByType[t].push(w);
+    }
+    cachedDataStoreRef = state.dataStore;
+  }
+  return cachedWordsByType[type] || [];
+}
+
 export function setupFilterBehavior() {
   window.addEventListener("click", (e) => {
     document.querySelectorAll(".multiselect-content.show").forEach((el) => {
@@ -21,10 +43,11 @@ export function toggleFilterPanel() {
   const overlay = document.getElementById("filter-panel-overlay");
   if (panel) panel.classList.toggle("show");
   if (overlay) overlay.classList.toggle("show");
-  if (panel)
-    document.body.style.overflow = panel.classList.contains("show")
-      ? "hidden"
-      : "";
+  if (panel) {
+    const isShown = panel.classList.contains("show");
+    document.body.style.overflow = isShown ? "hidden" : "";
+    if (isShown) updateFilterCounts();
+  }
 }
 
 function getTopicsForCurrentType(): string[] {
@@ -102,74 +125,276 @@ export function populateFilters() {
     content.classList.add("show");
   }
 
-  content.appendChild(createMultiselectItem("all", "Все темы"));
-  const sortedTopics = getTopicsForCurrentType();
-  sortedTopics.forEach((t) => {
-    const topicLabel = parseBilingualString(t).ru;
-    content.appendChild(createMultiselectItem(t, topicLabel));
-  });
-  topicSelect.appendChild(content);
-
-  const actionsContainer = document.createElement('div');
-  actionsContainer.id = 'topic-actions-container';
-  actionsContainer.style.marginTop = '8px';
-  actionsContainer.style.display = 'flex';
-  actionsContainer.style.flexDirection = 'column';
-  actionsContainer.style.gap = '8px';
-  topicSelect.appendChild(actionsContainer);
-
-  if (!state.currentTopic.includes("all") && state.currentTopic.length > 0) {
-    const dlBtn = document.createElement("div");
-    dlBtn.className = "btn-text";
-    dlBtn.style.cssText = "text-align: center; cursor: pointer; font-size: 13px; display: flex; align-items: center; justify-content: center; gap: 6px; color: var(--primary);";
-    dlBtn.innerHTML = "<span>📥</span> Скачать аудио";
-    dlBtn.title = "Сохранить озвучку для офлайн-режима";
-    dlBtn.onclick = (e) => {
+  const actionsDiv = document.createElement('div');
+  actionsDiv.style.cssText = 'display: flex; gap: 8px; padding: 5px 10px 10px; border-bottom: 1px solid var(--border-color);';
+  
+  const selectAllBtn = document.createElement('button');
+  selectAllBtn.className = 'btn-text';
+  selectAllBtn.style.fontSize = '12px';
+  selectAllBtn.textContent = 'Выбрать все';
+  selectAllBtn.onclick = (e) => {
       e.stopPropagation();
-      downloadTopicAudio();
-    };
-    actionsContainer.appendChild(dlBtn);
-  }
+      state.currentTopic = getTopicsForCurrentType();
+      if (state.currentTopic.length === 0) state.currentTopic = ['all'];
+      populateFilters();
+      render();
+  };
 
-  // Asynchronously check for cache and add delete button
-  addDeleteAudioButton(actionsContainer);
+  const deselectAllBtn = document.createElement('button');
+  deselectAllBtn.className = 'btn-text';
+  deselectAllBtn.style.fontSize = '12px';
+  deselectAllBtn.textContent = 'Сбросить';
+  deselectAllBtn.onclick = (e) => {
+      e.stopPropagation();
+      state.currentTopic = ['all'];
+      populateFilters();
+      render();
+  };
+
+  // --- Search Input for Topics ---
+  const searchInput = document.createElement("input");
+  searchInput.type = "text";
+  searchInput.placeholder = "🔍 Поиск тем...";
+  searchInput.className = "filter-search-input";
+  searchInput.onclick = (e) => e.stopPropagation();
+  searchInput.oninput = (e) => {
+    const val = (e.target as HTMLInputElement).value.toLowerCase();
+    content.querySelectorAll(".multiselect-item").forEach((el) => {
+      const text = el.textContent?.toLowerCase() || "";
+      (el as HTMLElement).style.display = text.includes(val) ? "flex" : "none";
+    });
+  };
+
+  // --- Virtual Scroll Setup ---
+  const listContainer = document.createElement("div");
+  listContainer.className = "multiselect-scroll-container";
+
+  const sizer = document.createElement("div");
+  const virtualContent = document.createElement("div");
+  virtualContent.className = "virtual-content";
+  sizer.appendChild(virtualContent);
+  listContainer.appendChild(sizer);
+
+  actionsDiv.appendChild(selectAllBtn);
+  actionsDiv.appendChild(deselectAllBtn);
+  content.appendChild(actionsDiv);
+  content.appendChild(searchInput);
+  content.appendChild(listContainer);
+
+  const sortedTopics = getTopicsForCurrentType();
+  const allItems = [{ value: "all", label: "Все темы" }, ...sortedTopics.map(t => ({ value: t, label: parseBilingualString(t).ru }))];
+  let searchFilteredItems = allItems;
+
+  const renderVisibleItems = () => {
+    const scrollTop = listContainer.scrollTop;
+    const viewportHeight = listContainer.clientHeight;
+
+    const startIndex = Math.max(0, Math.floor(scrollTop / VIRTUAL_ITEM_HEIGHT) - VIRTUAL_BUFFER);
+    const visibleItemsCount = Math.ceil(viewportHeight / VIRTUAL_ITEM_HEIGHT);
+    const endIndex = Math.min(searchFilteredItems.length, startIndex + visibleItemsCount + VIRTUAL_BUFFER * 2);
+
+    const topOffset = startIndex * VIRTUAL_ITEM_HEIGHT;
+    virtualContent.style.transform = `translateY(${topOffset}px)`;
+    virtualContent.innerHTML = "";
+
+    const fragment = document.createDocumentFragment();
+    for (let i = startIndex; i < endIndex; i++) {
+        const item = searchFilteredItems[i];
+        fragment.appendChild(createMultiselectItem(item.value, item.label));
+    }
+    virtualContent.appendChild(fragment);
+  };
+
+  searchInput.oninput = () => {
+    const val = searchInput.value.toLowerCase();
+    searchFilteredItems = allItems.filter(item => item.label.toLowerCase().includes(val));
+    sizer.style.height = `${searchFilteredItems.length * VIRTUAL_ITEM_HEIGHT}px`;
+    listContainer.scrollTop = 0;
+    renderVisibleItems();
+  };
+
+  listContainer.onscroll = renderVisibleItems;
+
+  sizer.style.height = `${searchFilteredItems.length * VIRTUAL_ITEM_HEIGHT}px`;
+  renderVisibleItems();
+
+  topicSelect.appendChild(content);
 
   populateCategoryFilter();
 }
 
 function populateCategoryFilter() {
-  const categorySelect = document.getElementById(
-    "categorySelect",
-  ) as HTMLSelectElement;
+  const categorySelect = document.getElementById("categorySelect");
   if (!categorySelect) return;
-  const categories = new Set<string>();
-  state.dataStore.forEach((w: Word) => {
-    if (w.type !== state.currentType) return;
-    const t = w.topic || w.topic_ru || w.topic_kr;
-    if (
-      !t ||
-      (!state.currentTopic.includes("all") && !state.currentTopic.includes(t))
-    )
-      return;
-    const c = w.category || w.category_ru || w.category_kr;
-    if (c) categories.add(c);
-  });
-  categorySelect.innerHTML = '<option value="all">Все категории</option>';
-  Array.from(categories)
-    .sort()
-    .forEach((c) => {
-      const opt = document.createElement("option");
-      opt.value = c;
-      opt.textContent = parseBilingualString(c).ru;
-      categorySelect.appendChild(opt);
+
+  const wasOpen = categorySelect.querySelector(".multiselect-content.show") !== null;
+  categorySelect.innerHTML = "";
+
+  // Button
+  const btn = document.createElement("div");
+  btn.className = "multiselect-btn";
+  btn.style.cursor = "pointer";
+  
+  let currentLabel = "Все категории";
+  if (!state.currentCategory.includes("all") && state.currentCategory.length > 0) {
+     currentLabel = `Выбрано: ${state.currentCategory.length}`;
+  }
+
+  btn.innerHTML = `<span>${currentLabel}</span><span style="font-size: 10px; opacity: 0.6;">▼</span>`;
+  btn.onclick = (e) => {
+    e.stopPropagation();
+    // Close other dropdowns
+    document.querySelectorAll(".multiselect-content.show").forEach(el => {
+        if (el.parentElement !== categorySelect) el.classList.remove("show");
     });
-  categorySelect.value = "all";
-  state.currentCategory = "all";
+    categorySelect.querySelector(".multiselect-content")?.classList.toggle("show");
+  };
+  categorySelect.appendChild(btn);
+
+  const content = document.createElement("div");
+  content.className = "multiselect-content";
+  if (wasOpen) content.classList.add("show");
+
+  const getCategories = () => {
+    const categories = new Set<string>();
+    state.dataStore.forEach((w: Word) => {
+      if (w.type !== state.currentType) return;
+      const t = w.topic || w.topic_ru || w.topic_kr;
+      if (
+        !t ||
+        (!state.currentTopic.includes("all") && !state.currentTopic.includes(t))
+      )
+        return;
+      const c = w.category || w.category_ru || w.category_kr;
+      if (c) categories.add(c);
+    });
+    return Array.from(categories).sort();
+  };
+
+  // --- Search Input for Categories ---
+  const searchInput = document.createElement("input");
+  searchInput.type = "text";
+  searchInput.placeholder = "🔍 Поиск категорий...";
+  searchInput.className = "filter-search-input";
+  searchInput.onclick = (e) => e.stopPropagation();
+  searchInput.oninput = (e) => {
+    const val = (e.target as HTMLInputElement).value.toLowerCase();
+    content.querySelectorAll(".multiselect-item").forEach((el) => {
+       const text = el.textContent?.toLowerCase() || "";
+       (el as HTMLElement).style.display = text.includes(val) ? "flex" : "none";
+    });
+  };
+
+  const actionsDiv = document.createElement('div');
+  actionsDiv.style.cssText = 'display: flex; gap: 8px; padding: 5px 10px 10px; border-bottom: 1px solid var(--border-color);';
+  
+  const selectAllBtn = document.createElement('button');
+  selectAllBtn.className = 'btn-text';
+  selectAllBtn.style.fontSize = '12px';
+  selectAllBtn.textContent = 'Выбрать все';
+  selectAllBtn.onclick = (e) => {
+      e.stopPropagation();
+      state.currentCategory = getCategories();
+      if (state.currentCategory.length === 0) state.currentCategory = ['all'];
+      populateCategoryFilter();
+      render();
+  };
+
+  const deselectAllBtn = document.createElement('button');
+  deselectAllBtn.className = 'btn-text';
+  deselectAllBtn.style.fontSize = '12px';
+  deselectAllBtn.textContent = 'Сбросить';
+  deselectAllBtn.onclick = (e) => {
+      e.stopPropagation();
+      state.currentCategory = ['all'];
+      populateCategoryFilter();
+      render();
+  };
+
+  actionsDiv.appendChild(selectAllBtn);
+  actionsDiv.appendChild(deselectAllBtn);
+
+  // --- Virtual Scroll Setup ---
+  const listContainer = document.createElement("div");
+  listContainer.className = "multiselect-scroll-container";
+
+  const sizer = document.createElement("div");
+  const virtualContent = document.createElement("div");
+  virtualContent.className = "virtual-content";
+  sizer.appendChild(virtualContent);
+  listContainer.appendChild(sizer);
+
+  content.appendChild(actionsDiv);
+  content.appendChild(searchInput);
+  content.appendChild(listContainer);
+
+  const allItems = [{ value: "all", label: "Все категории" }, ...getCategories().map(c => ({ value: c, label: parseBilingualString(c).ru }))];
+  let searchFilteredItems = allItems;
+
+  const renderVisibleItems = () => {
+    const scrollTop = listContainer.scrollTop;
+    const viewportHeight = listContainer.clientHeight;
+
+    const startIndex = Math.max(0, Math.floor(scrollTop / VIRTUAL_ITEM_HEIGHT) - VIRTUAL_BUFFER);
+    const visibleItemsCount = Math.ceil(viewportHeight / VIRTUAL_ITEM_HEIGHT);
+    const endIndex = Math.min(searchFilteredItems.length, startIndex + visibleItemsCount + VIRTUAL_BUFFER * 2);
+
+    const topOffset = startIndex * VIRTUAL_ITEM_HEIGHT;
+    virtualContent.style.transform = `translateY(${topOffset}px)`;
+    virtualContent.innerHTML = "";
+
+    const fragment = document.createDocumentFragment();
+    for (let i = startIndex; i < endIndex; i++) {
+        const item = searchFilteredItems[i];
+        fragment.appendChild(createCategoryItem(item.value, item.label));
+    }
+    virtualContent.appendChild(fragment);
+  };
+
+  searchInput.oninput = () => {
+    const val = searchInput.value.toLowerCase();
+    searchFilteredItems = allItems.filter(item => item.label.toLowerCase().includes(val));
+    sizer.style.height = `${searchFilteredItems.length * VIRTUAL_ITEM_HEIGHT}px`;
+    listContainer.scrollTop = 0;
+    renderVisibleItems();
+  };
+
+  listContainer.onscroll = renderVisibleItems;
+
+  sizer.style.height = `${searchFilteredItems.length * VIRTUAL_ITEM_HEIGHT}px`;
+  renderVisibleItems();
+  
+  categorySelect.appendChild(content);
 }
 
 export function handleCategoryChange(val: string) {
-  state.currentCategory = val;
+  const isAllSelected = state.currentCategory.includes("all");
+  const isCurrentlyChecked = state.currentCategory.includes(val);
+
+  if (val === "all") {
+    state.currentCategory = ["all"];
+  } else if (isAllSelected) {
+    state.currentCategory = [val];
+  } else if (isCurrentlyChecked) {
+    state.currentCategory = state.currentCategory.filter((c) => c !== val);
+    if (state.currentCategory.length === 0) state.currentCategory = ["all"];
+  } else {
+    state.currentCategory.push(val);
+  }
+  populateCategoryFilter();
   render();
+}
+
+function createCategoryItem(value: string, label: string): HTMLElement {
+  const itemDiv = document.createElement("div");
+  itemDiv.className = "multiselect-item";
+  const isChecked = state.currentCategory.includes(value) || (value === "all" && state.currentCategory.includes("all"));
+  itemDiv.innerHTML = `<input type="checkbox" ${isChecked ? "checked" : ""}> <span>${label}</span>`;
+  itemDiv.onclick = (e) => {
+      e.stopPropagation();
+      handleCategoryChange(value);
+  };
+  return itemDiv;
 }
 
 export function setTypeFilter(type: string, btn: HTMLElement) {
@@ -179,6 +404,7 @@ export function setTypeFilter(type: string, btn: HTMLElement) {
     .forEach((b) => b.classList.remove("active"));
   if (btn) btn.classList.add("active");
   populateFilters();
+  updateFilterCounts();
   render();
 }
 
@@ -191,126 +417,84 @@ export function setStarFilter(star: string, btn: HTMLElement) {
   render();
 }
 
-function addDeleteAudioButton(container: HTMLElement) {
-    if (!("caches" in window)) return;
+export function resetFilters() {
+  state.currentType = "word";
+  state.currentStar = "all";
+  state.currentTopic = ["all"];
+  state.currentCategory = ["all"];
 
-    caches.has("topik-audio-v1").then(cacheExists => {
-        if (cacheExists) {
-            const deleteBtn = document.createElement("div");
-            deleteBtn.className = "btn-text delete-audio-btn";
-            deleteBtn.style.cssText = "text-align: center; cursor: pointer; font-size: 13px; display: flex; align-items: center; justify-content: center; gap: 6px; color: var(--danger);";
-            deleteBtn.innerHTML = "<span>🗑️</span> Удалить аудио";
-            deleteBtn.title = "Удалить все скачанные аудиофайлы";
-            deleteBtn.onclick = (e) => {
-                e.stopPropagation();
-                deleteTopicAudio();
-            };
-            container.appendChild(deleteBtn);
-        } else {
-            const existingBtn = container.querySelector('.delete-audio-btn');
-            if (existingBtn) existingBtn.remove();
-        }
-    });
+  // Обновляем UI переключателя типа
+  document.querySelectorAll("#type-filters .segment-btn").forEach((b) => {
+    b.classList.toggle("active", b.getAttribute("data-value") === "word");
+  });
+
+  // Обновляем UI фильтров уровня
+  document.querySelectorAll("#level-filters .filter-chip").forEach((b) => {
+    b.classList.toggle("active", b.getAttribute("data-value") === "all");
+  });
+
+  populateFilters(); // Пересоздает списки тем и категорий
+  updateFilterCounts(); // Обновляет счетчики
+  render(); // Перерисовывает сетку
+  showToast("Фильтры сброшены");
 }
 
-export async function downloadTopicAudio() {
-  if (!("caches" in window)) {
-    showToast("Кэширование недоступно в этом браузере");
-    return;
-  }
+export function updateFilterCounts() {
+  const levelFiltersContainer = document.getElementById("level-filters");
+  if (!levelFiltersContainer) return;
 
-  const topics = state.currentTopic;
-  if (topics.includes("all") || topics.length === 0) {
-    showToast("Выберите конкретную тему для скачивания");
-    return;
-  }
+  // Используем requestAnimationFrame, чтобы не блокировать UI при открытии панели
+  requestAnimationFrame(() => {
+    const counts: Record<string, number> = {
+      'all': 0,
+      '★★★': 0,
+      '★★☆': 0,
+      '★☆☆': 0,
+      'favorites': 0,
+      'mistakes': 0,
+    };
 
-  const words = state.dataStore.filter((w) => {
-    if (w.type !== state.currentType) return false;
-    const t = w.topic || w.topic_ru || w.topic_kr;
-    return t && topics.includes(t);
-  });
+    const type = state.currentType;
+    // Используем кэшированный список слов для текущего типа
+    const words = getWordsByType(type);
 
-  if (words.length === 0) {
-    showToast("Нет слов в выбранной теме");
-    return;
-  }
-
-  const urls = new Set<string>();
-  words.forEach((w) => {
-    if (w.audio_url) urls.add(w.audio_url);
-    if (w.audio_male) urls.add(w.audio_male);
-    if (w.example_audio) urls.add(w.example_audio);
-  });
-
-  if (urls.size === 0) {
-    showToast("Нет аудиофайлов для скачивания");
-    return;
-  }
-
-  const toastContainer = document.getElementById("toast-container");
-  let progressToast: HTMLDivElement | null = null;
-
-  if (toastContainer) {
-    progressToast = document.createElement("div");
-    progressToast.className = "toast-item";
-    progressToast.textContent = `⏳ Скачивание: 0%`;
-    toastContainer.appendChild(progressToast);
-  }
-
-  try {
-    const cache = await caches.open("topik-audio-v1");
-    const urlArray = Array.from(urls);
-    let completed = 0;
-    
-    // Скачиваем пачками по 5, чтобы не перегружать сеть
-    const batchSize = 5;
-    for (let i = 0; i < urlArray.length; i += batchSize) {
-      const batch = urlArray.slice(i, i + batchSize);
-      await Promise.all(batch.map(url => cache.add(url).catch(_e => console.warn("Cache fail:", url))));
+    // Используем классический цикл for для максимальной производительности
+    for (let i = 0; i < words.length; i++) {
+      const word = words[i];
+      counts.all++;
       
-      completed += batch.length;
-      if (progressToast) {
-        const percent = Math.min(100, Math.round((completed / urlArray.length) * 100));
-        progressToast.textContent = `⏳ Скачивание: ${percent}% (${Math.min(completed, urlArray.length)}/${urlArray.length})`;
+      if (word.level && counts[word.level] !== undefined) {
+        counts[word.level]++;
+      }
+      if (state.favorites.has(word.id)) {
+        counts.favorites++;
+      }
+      if (state.mistakes.has(word.id)) {
+        counts.mistakes++;
       }
     }
-    
-    if (progressToast) {
-      progressToast.textContent = `✅ Успешно скачано ${urls.size} файлов!`;
-      setTimeout(() => {
-        progressToast?.classList.add("toast-hide");
-        setTimeout(() => progressToast?.remove(), 500);
-      }, 3000);
-    } else {
-      showToast(`✅ Успешно скачано ${urls.size} файлов!`);
-    }
-  } catch (e) {
-    console.error(e);
-    if (progressToast) progressToast.remove();
-    showToast("Ошибка при скачивании");
-  }
-}
 
-export async function deleteTopicAudio() {
-  if (!("caches" in window)) {
-    showToast("Кэширование недоступно в этом браузере");
-    return;
-  }
-
-  try {
-    const cacheExists = await caches.has("topik-audio-v1");
-    if (!cacheExists) {
-      showToast("Нет скачанных аудиофайлов для удаления");
-      return;
-    }
-
-    showToast("⏳ Удаление аудиофайлов...");
-    await caches.delete("topik-audio-v1");
-    showToast("✅ Все скачанные аудиофайлы удалены");
-    document.querySelector('.delete-audio-btn')?.remove();
-  } catch (e) {
-    console.error(e);
-    showToast("Ошибка при удалении кэша");
-  }
+    const buttons = levelFiltersContainer.querySelectorAll<HTMLButtonElement>(".filter-chip");
+    buttons.forEach(btn => {
+      const filterValue = btn.dataset.value;
+      if (filterValue && counts[filterValue] !== undefined) {
+        const count = counts[filterValue];
+        
+        let countSpan = btn.querySelector<HTMLElement>('.filter-count');
+        if (!countSpan) {
+          countSpan = document.createElement('span');
+          countSpan.className = 'filter-count';
+          btn.appendChild(countSpan);
+        }
+        
+        const newText = String(count);
+        if (countSpan.textContent !== newText) {
+          countSpan.textContent = newText;
+          countSpan.classList.remove('pop');
+          void countSpan.offsetWidth; // Force reflow to restart animation
+          countSpan.classList.add('pop');
+        }
+      }
+    });
+  });
 }

@@ -170,9 +170,11 @@
 1. **User Custom Words:** ✅ **(Done)** Logic for adding/deleting custom words implemented.
 2. **Image Management:** ✅ **(Done)** Upload custom images, regenerate via AI (Edge Function), delete images.
 3. **Mistake Analysis:** ✅ **(Done)** Implemented breakdown by Topic/Part of Speech.
-4. **Advanced Search:** Filter by "Has Audio", "Has Image", "Has Example".
+4. **Advanced Filters:** ✅ **(Done)** Redesigned filter panel with virtual scrolling, search, and multi-select for topics/categories.
+5. **UI Polish:** ✅ **(Done)** Unified Card/List views, interactive Hanja grid, accordion details in list view.
 
 #### Phase 5: Technical Debt & Performance (Long-term)
 1.  **Full TypeScript Migration:** ✅ **(Done)**.
 2.  **Edge Functions**: ✅ **(Done)** Implemented for image regeneration.
 3.  **Offline Sync**: ✅ **(Done)** Background Sync implemented in Service Worker.
+4.  **Virtualization**: ✅ **(Done)** Implemented for Grid, List, and Filter dropdowns.

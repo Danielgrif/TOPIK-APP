@@ -16,15 +16,21 @@ export function openHanjaModal(char: string) {
 
   if (relatedWords.length === 0) {
     container.innerHTML =
-      '<div style="text-align:center; padding:20px; color:var(--text-sub);">Нет других слов с этим иероглифом.</div>';
+      '<div style="grid-column: 1/-1; text-align:center; padding:20px; color:var(--text-sub);">Нет других слов с этим иероглифом.</div>';
   } else {
     relatedWords.forEach((w: Word) => {
       const el = document.createElement("div");
-      el.className = "hanja-word-item";
+      el.className = "hanja-word-card";
+      
+      // Подсветка текущего иероглифа в слове
+      const hanjaHtml = w.word_hanja 
+        ? w.word_hanja.split('').map(c => c === char ? `<span class="highlight">${c}</span>` : c).join('')
+        : "";
+
       el.innerHTML = `
-                <div style="font-weight:bold; font-size:16px;">${w.word_kr}</div>
-                <div style="color:var(--primary); font-weight:600;">${w.word_hanja}</div>
-                <div style="color:var(--text-sub); font-size:13px;">${w.translation}</div>
+                <div class="hanja-card-word">${w.word_kr}</div>
+                <div class="hanja-card-hanja">${hanjaHtml}</div>
+                <div class="hanja-card-trans">${w.translation}</div>
             `;
       container.appendChild(el);
     });

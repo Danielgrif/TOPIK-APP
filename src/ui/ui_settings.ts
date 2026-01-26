@@ -135,8 +135,33 @@ export function toggleAutoUpdate(el: HTMLInputElement) {
  * Applies the current theme (dark/light) and accent color to the UI.
  */
 export function applyTheme() {
-  if (state.darkMode) document.body.classList.add("dark-mode");
-  else document.body.classList.remove("dark-mode");
+  const root = document.documentElement.style;
+
+  if (state.darkMode) {
+    document.body.classList.add("dark-mode");
+    
+    // Цвета для темной темы (Пастельные/Светлые для контраста)
+    root.setProperty('--section-info-border', '#74b9ff');
+    root.setProperty('--section-relation-border', '#fab1a0');
+    root.setProperty('--section-extra-border', '#55efc4');
+    
+    // Фон: низкая прозрачность, чтобы не конфликтовать с насыщенными фонами темных тем
+    root.setProperty('--section-info-bg', 'rgba(116, 185, 255, 0.1)');
+    root.setProperty('--section-relation-bg', 'rgba(250, 177, 160, 0.1)');
+    root.setProperty('--section-extra-bg', 'rgba(85, 239, 196, 0.1)');
+  } else {
+    document.body.classList.remove("dark-mode");
+    
+    // Цвета для светлой темы (Чуть темнее для четкости на белом)
+    root.setProperty('--section-info-border', '#0984e3');
+    root.setProperty('--section-relation-border', '#e17055');
+    root.setProperty('--section-extra-border', '#00b894');
+
+    // Фон: очень легкий оттенок
+    root.setProperty('--section-info-bg', 'rgba(9, 132, 227, 0.06)');
+    root.setProperty('--section-relation-bg', 'rgba(225, 112, 85, 0.06)');
+    root.setProperty('--section-extra-bg', 'rgba(0, 184, 148, 0.06)');
+  }
 
   const icon = state.darkMode ? "🌙" : "☀️";
 
