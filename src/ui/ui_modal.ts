@@ -1,5 +1,6 @@
 import { state } from "../core/state.ts";
 import { updateVoiceUI } from "./ui_settings.ts";
+import { showToast } from "../utils/utils.ts";
 import {
   updateStats,
   renderTopicMastery,
@@ -15,6 +16,7 @@ import { buildQuizModes, updateQuizCount, quitQuiz } from "./quiz.ts";
 
 const focusStack: HTMLElement[] = [];
 let _confirmHandler: EventListener | null = null;
+let _cancelCallback: (() => void) | null = null;
 
 function updateBottomNav(modalId: string | null) {
   const nav = document.getElementById("bottom-nav");
@@ -103,6 +105,14 @@ export function openModal(modalId: string) {
     renderForgettingCurve();
     renderSRSDistributionChart();
   }
+
+  // Auto-focus on new list input
+  if (modalId === "collections-modal") {
+    const titleInput = document.getElementById('new-list-title') as HTMLInputElement;
+    if (titleInput) {
+      setTimeout(() => titleInput.focus(), 100); // Timeout to ensure element is visible
+    }
+  }
   if (modalId === "achievements-modal") {
     renderAchievements();
   }
@@ -172,6 +182,9 @@ interface ConfirmOptions {
   showInput?: boolean;
   inputPlaceholder?: string;
   onValidate?: (val: string) => Promise<boolean>;
+  onCancel?: () => void;
+  showCopy?: boolean;
+  copyText?: string;
 }
 
 export function openConfirm(
@@ -193,8 +206,13 @@ export function openConfirm(
   const yesBtn = document.getElementById("confirm-yes");
   const inputContainer = document.getElementById("confirm-input-container");
   const input = document.getElementById("confirm-password") as HTMLInputElement;
+  const copyBtn = document.getElementById("confirm-copy-btn");
 
-  if (msgEl) msgEl.textContent = message || "Вы уверены?";
+  if (msgEl) {
+      msgEl.textContent = message || "Вы уверены?";
+      // Разрешаем переносы строк для списков
+      msgEl.style.whiteSpace = "pre-wrap";
+  }
 
   if (inputContainer && input) {
     if (options.showInput) {
@@ -214,12 +232,29 @@ export function openConfirm(
     }
   }
 
+  if (copyBtn) {
+    if (options.showCopy) {
+      copyBtn.style.display = "inline-block";
+      copyBtn.onclick = () => {
+        const text = options.copyText || message;
+        navigator.clipboard.writeText(text).then(() => {
+          showToast("Скопировано в буфер!");
+        });
+      };
+    } else {
+      copyBtn.style.display = "none";
+    }
+  }
+
+  _cancelCallback = options.onCancel || null;
+
   if (yesBtn) {
     if (_confirmHandler) {
       yesBtn.removeEventListener("click", _confirmHandler);
       _confirmHandler = null;
     }
     _confirmHandler = async () => {
+      _cancelCallback = null; // Если нажали "Да", отмену не вызываем
       if (options.showInput && options.onValidate) {
         const val = input ? input.value : "";
         const isValid = await options.onValidate(val);
@@ -243,6 +278,12 @@ export function closeConfirm() {
   const modal = document.getElementById("confirm-modal");
   if (!modal) return;
   modal.classList.remove("active");
+
+  if (_cancelCallback) {
+      _cancelCallback();
+      _cancelCallback = null;
+  }
+
   const yesBtn = document.getElementById("confirm-yes");
   if (yesBtn && _confirmHandler) {
     try {

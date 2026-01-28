@@ -1259,6 +1259,14 @@ body.dark-mode .color-option[data-value="pink"], body.dark-mode .stats-color-btn
     border-radius: 12px;
     border: 1px solid var(--border-color);
 }
+.trash-item.selected {
+    background: var(--primary-light);
+    border-color: var(--primary);
+}
+.trash-item-selector input[type="checkbox"] {
+    width: 18px;
+    height: 18px;
+}
 .trash-item-info {
     flex-grow: 1;
 }

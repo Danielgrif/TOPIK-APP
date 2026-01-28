@@ -1,10 +1,12 @@
 import { state } from "../core/state.ts";
-import { speak, showToast, playTone } from "../utils/utils.ts";
+import { speak, showToast, showUndoToast, playTone, getIconForValue } from "../utils/utils.ts";
 import { scheduleSaveState, recordAttempt } from "../core/db.ts";
 import { addXP, checkAchievements } from "../core/stats.ts";
 import { ensureSessionStarted, saveAndRender } from "./ui.ts";
 import { client } from "../core/supabaseClient.ts";
 import { Word } from "../types/index.ts";
+import { currentCollectionFilter, listItems, userLists } from "./ui_collections.ts";
+import { openModal, openConfirm } from "./ui_modal.ts";
 
 // --- Virtual Scroll Constants (for List View) ---
 const ITEM_HEIGHT_LIST = 82;
@@ -12,7 +14,6 @@ let ITEM_HEIGHT_GRID = 480;
 const MIN_COL_WIDTH = 340; // Увеличено для еще более крупных карточек
 const BUFFER_ITEMS = 10;
 const GRID_GAP = 16;
-const GRID_PADDING_X = 48; // 24px left + 24px right
 
 let virtualScrollInitialized = false;
 let scrollRafId: number | null = null;
@@ -128,11 +129,23 @@ function updateFilteredData() {
     const categories = Array.isArray(state.currentCategory) ? state.currentCategory : [state.currentCategory];
     if (!categories.includes("all") && !categories.includes(wCat))
       return false;
+    
+    // Фильтр по коллекции
+    if (currentCollectionFilter) {
+        if (currentCollectionFilter === 'uncategorized') {
+             // Проверяем, входит ли слово хоть в один список
+             const isInAnyList = Object.values(listItems).some(set => set.has(w.id as number));
+             if (isInAnyList) return false;
+        } else if (listItems[currentCollectionFilter]) {
+            if (!listItems[currentCollectionFilter].has(w.id as number)) return false;
+        }
+    }
+
     return true;
   });
 }
 
-function getFilteredData(): Word[] {
+export function getFilteredData(): Word[] {
   return currentFilteredData;
 }
 
@@ -200,7 +213,8 @@ function initGridVirtualScroll(grid: HTMLElement) {
   content.style.top = "0";
   content.style.left = "0";
   content.style.width = "100%";
-  content.style.padding = "24px 24px 100px 24px"; // Move padding here
+  const isMobile = window.innerWidth < 600;
+  content.style.padding = isMobile ? "16px 16px 100px 16px" : "24px 24px 100px 24px";
   content.style.boxSizing = "border-box";
   grid.appendChild(content);
 
@@ -238,7 +252,8 @@ function renderVisibleGridItems(params: {
   if (!content || !sizer) return;
 
   // Вычитаем padding, чтобы колонки рассчитывались для внутренней области
-  const gridWidth = grid.clientWidth - GRID_PADDING_X;
+  const paddingX = window.innerWidth < 600 ? 32 : 48;
+  const gridWidth = grid.clientWidth - paddingX;
   const gap = GRID_GAP;
   const colCount = Math.max(
     1,
@@ -383,9 +398,53 @@ function prefetchNextAudio(currentIndex: number, count: number = 3) {
   }
 }
 
+function setupLongPress(el: HTMLElement, itemId: string | number) {
+  let timer: number | null = null;
+  const duration = 600; // 600ms для активации
+
+  const start = (e: Event) => {
+    // Игнорируем, если уже в режиме выбора или клик был по кнопке/инпуту
+    if (state.selectMode || (e.target as HTMLElement).closest("button, input, textarea")) return;
+
+    timer = window.setTimeout(() => {
+      import("./ui_bulk.ts").then((m) => {
+        if (!state.selectMode) {
+          m.toggleSelectMode();
+          // Помечаем элемент, чтобы предотвратить срабатывание обычного клика после отпускания
+          el.dataset.lpHandled = "true";
+          // Выбираем элемент
+          m.toggleSelection(itemId);
+          if (navigator.vibrate) navigator.vibrate(50);
+        }
+      });
+    }, duration);
+  };
+
+  const clear = () => {
+    if (timer) {
+      clearTimeout(timer);
+      timer = null;
+    }
+  };
+
+  el.addEventListener("touchstart", start, { passive: true });
+  el.addEventListener("touchend", clear, { passive: true });
+  el.addEventListener("touchmove", clear, { passive: true });
+  el.addEventListener("mousedown", start);
+  el.addEventListener("mouseup", clear);
+  el.addEventListener("mouseleave", clear);
+}
+
 function createCardElement(item: Word, index: number): HTMLElement {
   const el = document.createElement("div");
   el.className = "card";
+  el.dataset.wordId = String(item.id);
+  
+  if (state.selectMode) {
+      el.classList.add("select-mode");
+      if (state.selectedWords.has(item.id)) el.classList.add("selected");
+  }
+
   if (state.hanjaMode) el.classList.add("hanja-mode");
   if (item.type === "grammar") el.classList.add("grammar-card");
   if (state.learned.has(item.id)) el.classList.add("learned");
@@ -393,6 +452,13 @@ function createCardElement(item: Word, index: number): HTMLElement {
 
   const inner = document.createElement("div");
   inner.className = "card-inner";
+  
+  // Checkbox overlay
+  const checkbox = document.createElement("div");
+  checkbox.className = "select-checkbox";
+  if (state.selectedWords.has(item.id)) checkbox.innerHTML = "✓";
+  el.appendChild(checkbox);
+
   const front = createCardFront(item, index);
   const back = createCardBack(item);
 
@@ -400,8 +466,19 @@ function createCardElement(item: Word, index: number): HTMLElement {
   inner.appendChild(back);
   el.appendChild(inner);
 
+  setupLongPress(el, item.id);
+
   let imageLoaded = false;
   el.onclick = (e) => {
+    if (el.dataset.lpHandled) return; // Игнорируем клик, если сработал Long Press
+
+    // Logic for Select Mode
+    if (state.selectMode) {
+        e.stopPropagation();
+        import("./ui_bulk.ts").then(m => m.toggleSelection(item.id));
+        return;
+    }
+
     // Не переворачивать, если клик был по кнопке
     if ((e.target as HTMLElement).closest("button")) return;
 
@@ -445,6 +522,51 @@ function createCardFront(item: Word, index: number): HTMLElement {
     prefetchNextAudio(index);
   };
   topRow.appendChild(speakBtn); // Left corner
+
+  // Кнопка добавления в список
+  const addListBtn = document.createElement("button");
+  addListBtn.className = "icon-btn";
+  addListBtn.textContent = "📁";
+  addListBtn.onclick = (e) => { e.stopPropagation(); openAddToListModal(item.id as number); };
+  // Вставляем перед сердечком
+  topRow.appendChild(addListBtn);
+
+  // Если активен фильтр по списку, добавляем кнопку удаления из этого списка
+  if (currentCollectionFilter) {
+    const removeListBtn = document.createElement("button");
+    removeListBtn.className = "icon-btn";
+    removeListBtn.textContent = "➖";
+    removeListBtn.title = "Убрать из этого списка";
+    removeListBtn.style.color = "var(--danger)";
+    removeListBtn.onclick = (e) => {
+      e.stopPropagation();
+      // Удаляем без подтверждения, но с возможностью отмены (Undo)
+      const listId = currentCollectionFilter!;
+      
+      // Оптимистичное удаление
+      listItems[listId]?.delete(item.id as number);
+      // Обновляем текущий вид
+      currentFilteredData = currentFilteredData.filter(w => w.id !== item.id);
+      render();
+
+      showUndoToast(
+          "Убрано из списка",
+          () => {
+              // Undo
+              listItems[listId]?.add(item.id as number);
+              // При отмене нужно сбросить кэш фильтрации, чтобы слово вернулось
+              // Проще всего вызвать render(), который перестроит список, но нужно вернуть слово в currentFilteredData
+              // Или просто сбросить currentFilteredData и вызвать render
+              render(); 
+          },
+          async () => {
+              // Commit
+              await client.from('list_items').delete().match({ list_id: listId, word_id: item.id });
+          }
+      );
+    };
+    topRow.appendChild(removeListBtn);
+  }
 
   const favBtn = document.createElement("button");
   favBtn.className = `icon-btn fav-btn ${isFav ? "active" : ""}`;
@@ -569,11 +691,14 @@ function createCardFront(item: Word, index: number): HTMLElement {
       ? `${obj.kr} (${obj.ru})`
       : obj.kr || obj.ru;
 
+  const topicIcon = getIconForValue(item.topic || item.topic_ru || "", "🏷");
+  const catIcon = getIconForValue(item.category || item.category_ru || "", "🔹");
+
   const tagsDiv = document.createElement("div");
   tagsDiv.className = "card-tags";
   tagsDiv.innerHTML = `
-      <span class="tag-pill topic">🏷 ${formatBi(topicObj)}</span>
-      <span class="tag-pill category">${formatBi(catObj)}</span>
+      <span class="tag-pill topic">${topicIcon} ${formatBi(topicObj)}</span>
+      <span class="tag-pill category">${catIcon} ${formatBi(catObj)}</span>
   `;
   if (item.isLocal) {
       tagsDiv.innerHTML += `<span class="tag-pill ai">⏳ AI</span>`;
@@ -666,27 +791,34 @@ function createCardBack(item: Word): HTMLElement {
 
     urlBtn.onclick = async (e) => {
       e.stopPropagation();
-      const imageUrl = prompt("Вставьте URL изображения (прямую ссылку):");
-      if (!imageUrl) return;
-
-      urlBtn.disabled = true;
-      urlBtn.classList.add("rotating");
-
-      try {
-        // 1. Загружаем картинку по URL. Может не сработать из-за CORS-политики сайта-источника.
-        const response = await fetch(imageUrl);
-        if (!response.ok) {
-          throw new Error(`Не удалось загрузить: ${response.statusText} (возможно, CORS)`);
+      
+      openConfirm(
+        "Вставьте URL изображения (прямую ссылку):",
+        () => {}, // Основное действие выполняется в onValidate
+        {
+          showInput: true,
+          inputPlaceholder: "https://example.com/image.jpg",
+          onValidate: async (imageUrl) => {
+            if (!imageUrl) return false;
+            urlBtn.disabled = true;
+            urlBtn.classList.add("rotating");
+            try {
+              const response = await fetch(imageUrl);
+              if (!response.ok) throw new Error(`Не удалось загрузить: ${response.statusText}`);
+              const imageBlob = await response.blob();
+              await uploadAndSaveImage(imageBlob, item, img, imgContainer, revealOverlay, deleteBtn);
+              showToast("✅ Картинка загружена!");
+              return true;
+            } catch (err: any) {
+              showToast("❌ Ошибка: " + (err.message || "Не удалось загрузить"));
+              return false; // Оставляем окно открытым, чтобы можно было исправить URL
+            } finally {
+              urlBtn.disabled = false;
+              urlBtn.classList.remove("rotating");
+            }
+          }
         }
-        const imageBlob = await response.blob();
-        await uploadAndSaveImage(imageBlob, item, img, imgContainer, revealOverlay, deleteBtn);
-        showToast("✅ Картинка загружена по URL!");
-      } catch (err: any) {
-        showToast("❌ Ошибка: " + (err.message || "Не удалось загрузить по URL"));
-      } finally {
-        urlBtn.disabled = false;
-        urlBtn.classList.remove("rotating");
-      }
+      );
     };
 
     // --- Кнопка удаления картинки ---
@@ -698,30 +830,30 @@ function createCardBack(item: Word): HTMLElement {
 
     deleteBtn.onclick = async (e) => {
       e.stopPropagation();
-      if (!confirm("Удалить текущее изображение?")) return;
-
-      deleteBtn.disabled = true;
-      try {
-        // Если картинка своя — удаляем файл из хранилища
-        if (item.image_source === 'custom' && item.image) {
-           const fileName = item.image.split('/').pop()?.split('?')[0];
-           if (fileName) await client.storage.from('image-files').remove([fileName]);
+      openConfirm("Удалить текущее изображение?", async () => {
+        deleteBtn.disabled = true;
+        try {
+          // Если картинка своя — удаляем файл из хранилища
+          if (item.image_source === 'custom' && item.image) {
+             const fileName = item.image.split('/').pop()?.split('?')[0];
+             if (fileName) await client.storage.from('image-files').remove([fileName]);
+          }
+  
+          // Очищаем поле в БД
+          const { error } = await client.from('vocabulary').update({ image: null, image_source: null }).eq('id', item.id);
+          if (error) throw error;
+  
+          // Обновляем UI: скрываем картинку, показываем заглушку
+          item.image = undefined;
+          item.image_source = undefined;
+          imgWrapper.remove();
+          showToast("🗑️ Картинка удалена");
+        } catch (err: any) {
+          console.error("Delete error:", err);
+          showToast("❌ Ошибка удаления");
+          deleteBtn.disabled = false;
         }
-
-        // Очищаем поле в БД
-        const { error } = await client.from('vocabulary').update({ image: null, image_source: null }).eq('id', item.id);
-        if (error) throw error;
-
-        // Обновляем UI: скрываем картинку, показываем заглушку
-        item.image = undefined;
-        item.image_source = undefined;
-        imgWrapper.remove();
-        showToast("🗑️ Картинка удалена");
-      } catch (err: any) {
-        console.error("Delete error:", err);
-        showToast("❌ Ошибка удаления");
-        deleteBtn.disabled = false;
-      }
+      });
     };
 
     const regenBtn = document.createElement("button");
@@ -961,6 +1093,16 @@ function createCardBack(item: Word): HTMLElement {
   const actions = document.createElement("div");
   actions.className = "card-back-actions";
 
+    // Кнопка редактирования
+    const editBtn = document.createElement("button");
+    editBtn.className = "action-btn";
+    editBtn.textContent = "✏️ Изменить";
+    editBtn.onclick = (e) => {
+        e.stopPropagation();
+        window.openEditWordModal(String(item.id), render);
+    };
+    actions.appendChild(editBtn);
+
   if (item.isLocal) {
     const delBtn = document.createElement("button");
     delBtn.className = "action-btn action-mistake";
@@ -968,7 +1110,17 @@ function createCardBack(item: Word): HTMLElement {
     delBtn.style.width = "100%";
     delBtn.onclick = (e) => {
       e.stopPropagation();
-      import("./ui_custom_words.ts").then((m) => m.deleteCustomWord(item.id));
+      const cardEl = (e.target as HTMLElement).closest('.card') || (e.target as HTMLElement).closest('.list-item-wrapper');
+      
+      openConfirm("Удалить заявку на это слово?", async () => {
+          if (cardEl) {
+            (cardEl as HTMLElement).style.transition = "all 0.3s ease";
+            (cardEl as HTMLElement).style.opacity = "0";
+            (cardEl as HTMLElement).style.transform = "scale(0.9)";
+            await new Promise(r => setTimeout(r, 300));
+          }
+          import("./ui_custom_words.ts").then((m) => m.deleteCustomWord(item.id));
+      });
     };
     actions.appendChild(delBtn);
     back.appendChild(actions);
@@ -1013,6 +1165,12 @@ function createCardBack(item: Word): HTMLElement {
 function createListItem(item: Word, index: number): HTMLElement {
   const container = document.createElement("div");
   container.className = "list-item-wrapper";
+  container.dataset.wordId = String(item.id);
+  
+  if (state.selectMode) {
+      container.classList.add("select-mode");
+      if (state.selectedWords.has(item.id)) container.classList.add("selected");
+  }
   // Убираем классы learned/mistake для контейнера, так как убираем полоску
 
   const el = document.createElement("div");
@@ -1022,6 +1180,12 @@ function createListItem(item: Word, index: number): HTMLElement {
   let statusIcon = "";
   if (state.learned.has(item.id)) statusIcon = "✅";
   else if (state.mistakes.has(item.id)) statusIcon = "❌";
+
+  // Checkbox overlay
+  const checkbox = document.createElement("div");
+  checkbox.className = "select-checkbox";
+  if (state.selectedWords.has(item.id)) checkbox.innerHTML = "✓";
+  el.appendChild(checkbox);
 
   const hanjaHtml = item.word_hanja 
     ? `<span class="list-hanja">${[...item.word_hanja].map(char => `<span class="list-hanja-char">${char}</span>`).join("")}</span>` 
@@ -1129,7 +1293,17 @@ function createListItem(item: Word, index: number): HTMLElement {
 
   details.innerHTML = `<div class="list-details-inner">${detailsContent || '<div class="list-detail-empty">Нет дополнительной информации</div>'}</div>`;
 
+  setupLongPress(el, item.id);
+
   el.onclick = (e) => {
+      if (el.dataset.lpHandled) return;
+
+      if (state.selectMode) {
+          e.stopPropagation();
+          import("./ui_bulk.ts").then(m => m.toggleSelection(item.id));
+          return;
+      }
+
       if ((e.target as HTMLElement).closest("button")) return;
       
       if (container.classList.contains("expanded")) {
@@ -1144,6 +1318,48 @@ function createListItem(item: Word, index: number): HTMLElement {
   container.appendChild(el);
   container.appendChild(details);
   return container;
+}
+
+async function openAddToListModal(wordId: number) {
+    const modal = document.getElementById('add-to-list-modal');
+    const content = document.getElementById('add-to-list-content');
+    if (!modal || !content) return;
+
+    const { data: { user } } = await client.auth.getUser();
+    if (!user) {
+        showToast("Войдите в аккаунт");
+        return;
+    }
+
+    const myLists = userLists.filter(l => l.user_id === user.id);
+    
+    content.innerHTML = myLists.map(list => {
+        const hasWord = listItems[list.id]?.has(wordId);
+        return `
+        <div class="multiselect-item" onclick="toggleWordInList('${list.id}', ${wordId}, this)">
+            <input type="checkbox" ${hasWord ? 'checked' : ''} style="pointer-events: none;">
+            <span style="margin-left: 10px;">${list.icon || '📁'} ${list.title}</span>
+        </div>
+        `;
+    }).join('');
+
+    openModal('add-to-list-modal');
+
+    // Глобальная функция для клика (можно вынести в window)
+    (window as any).toggleWordInList = async (listId: string, wId: number, el: HTMLElement) => {
+        const checkbox = el.querySelector('input') as HTMLInputElement;
+        const isAdding = !checkbox.checked;
+        checkbox.checked = isAdding;
+
+        if (isAdding) {
+            await client.from('list_items').insert({ list_id: listId, word_id: wId });
+            if (!listItems[listId]) listItems[listId] = new Set();
+            listItems[listId].add(wId);
+        } else {
+            await client.from('list_items').delete().match({ list_id: listId, word_id: wId });
+            listItems[listId]?.delete(wId);
+        }
+    };
 }
 
 function getAccuracy(id: string | number): number {

@@ -1,0 +1,209 @@
+import { state } from "../core/state.ts";
+import { render, getFilteredData } from "./ui_card.ts";
+import { showToast, showUndoToast } from "../utils/utils.ts";
+import { client } from "../core/supabaseClient.ts";
+import { openConfirm, openModal, closeModal } from "./ui_modal.ts";
+import { userLists, listItems } from "./ui_collections.ts";
+
+export function toggleSelectMode() {
+    state.selectMode = !state.selectMode;
+    state.selectedWords.clear();
+    updateBulkBar();
+    render();
+    
+    // Визуально переключаем кнопку в тулбаре
+    const btn = document.querySelector('[data-action="toggle-select-mode"]');
+    if (btn) btn.classList.toggle('active', state.selectMode);
+}
+
+export function toggleSelection(id: string | number) {
+    if (state.selectedWords.has(id)) {
+        state.selectedWords.delete(id);
+    } else {
+        state.selectedWords.add(id);
+    }
+    updateBulkBar();
+    
+    // Оптимизированное обновление UI без полного ререндера
+    const card = document.querySelector(`[data-word-id="${id}"]`);
+    if (card) {
+        if (state.selectedWords.has(id)) {
+            card.classList.add('selected');
+            const cb = card.querySelector('.select-checkbox');
+            if (cb) cb.innerHTML = '✓';
+        } else {
+            card.classList.remove('selected');
+            const cb = card.querySelector('.select-checkbox');
+            if (cb) cb.innerHTML = '';
+        }
+    }
+}
+
+function updateBulkBar() {
+    const bar = document.getElementById('bulk-bar');
+    const countEl = document.getElementById('bulk-count-val');
+    if (bar && countEl) {
+        if (state.selectMode) {
+            bar.classList.add('visible');
+            countEl.textContent = String(state.selectedWords.size);
+        } else {
+            bar.classList.remove('visible');
+        }
+    }
+}
+
+export function bulkDelete() {
+    if (state.selectedWords.size === 0) return;
+    
+    openConfirm(`Удалить выбранные слова (${state.selectedWords.size})?`, async () => {
+        const ids = Array.from(state.selectedWords);
+        
+        // Бэкап для отмены
+        const backup = state.dataStore.filter(w => state.selectedWords.has(w.id));
+        
+        // Оптимистичное удаление из локального стейта
+        state.dataStore = state.dataStore.filter(w => !state.selectedWords.has(w.id));
+        if (state.searchResults) {
+            state.searchResults = state.searchResults.filter(w => !state.selectedWords.has(w.id));
+        }
+
+        render();
+        toggleSelectMode(); // Выходим из режима выбора
+
+        showUndoToast(
+            `Удалено слов: ${ids.length}`,
+            () => {
+                // Undo
+                state.dataStore.push(...backup);
+                render();
+            },
+            async () => {
+                // Commit: Удаляем слова и их зависимости вручную (для надежности)
+                try {
+                    console.log(`🔥 Массовое удаление: ${ids.length} слов`);
+                    
+                    // 1. Удаляем прогресс изучения для этих слов
+                    await client.from("user_progress").delete().in("word_id", ids);
+                    // 2. Удаляем связи со списками (если есть мусорные записи)
+                    await client.from("list_items").delete().in("word_id", ids);
+                    // 3. Удаляем сами слова
+                    const { error, count } = await client.from("vocabulary").delete().in("id", ids).select('*', { count: 'exact' });
+                    console.log("   - Результат удаления:", { error, count });
+
+                    if (error) {
+                        console.error("Server delete error:", error);
+                        showToast(`❌ Ошибка сервера: ${error.message}`);
+                    } else if (count === 0) {
+                        showToast("⚠️ Ничего не удалено (проверьте права)");
+                    }
+                } catch (e) {
+                    console.error("Delete exception:", e);
+                }
+            }
+        );
+    });
+}
+
+export function bulkMoveToTopic() {
+    if (state.selectedWords.size === 0) return;
+
+    openConfirm(
+        "Введите новую тему для выбранных слов:",
+        () => {}, 
+        {
+            showInput: true,
+            inputPlaceholder: "Например: Мои слова",
+            onValidate: async (newTopic) => {
+                if (!newTopic.trim()) return false;
+                
+                const ids = Array.from(state.selectedWords);
+                const updates = { topic: newTopic.trim() };
+                
+                // Обновляем локально
+                state.dataStore.forEach(w => {
+                    if (state.selectedWords.has(w.id)) {
+                        w.topic = newTopic.trim();
+                    }
+                });
+                
+                // Обновляем в БД
+                const { error } = await client.from("vocabulary").update(updates).in("id", ids);
+                
+                if (error) {
+                    showToast("Ошибка обновления: " + error.message);
+                    return false;
+                }
+                
+                showToast(`Перемещено слов: ${ids.length}`);
+                toggleSelectMode();
+                render(); // Перерисовываем, чтобы обновить фильтры
+                return true;
+            }
+        }
+    );
+}
+
+export function bulkAddToList() {
+    if (state.selectedWords.size === 0) return;
+    
+    const modal = document.getElementById('add-to-list-modal');
+    const content = document.getElementById('add-to-list-content');
+    if (!modal || !content) return;
+
+    client.auth.getUser().then(({ data: { user } }: any) => {
+        if (!user) {
+            showToast("Войдите в аккаунт");
+            return;
+        }
+        const myLists = userLists.filter(l => l.user_id === user.id);
+        
+        content.innerHTML = `
+            <div style="padding: 10px; text-align: center; color: var(--text-sub); margin-bottom: 10px;">
+                Добавить ${state.selectedWords.size} слов в список:
+            </div>
+        ` + myLists.map(list => `
+            <div class="multiselect-item" onclick="window.handleBulkAddToList('${list.id}')">
+                <span style="margin-left: 10px;">${list.icon || '📁'} ${list.title}</span>
+            </div>
+        `).join('');
+        
+        openModal('add-to-list-modal');
+    });
+}
+
+// Глобальный обработчик для выбора списка
+(window as any).handleBulkAddToList = async (listId: string) => {
+    const ids = Array.from(state.selectedWords);
+    const rows = ids.map(id => ({ list_id: listId, word_id: id }));
+    
+    const { error } = await client.from('list_items').upsert(rows, { onConflict: 'list_id,word_id' });
+    
+    if (error) {
+        showToast("Ошибка: " + error.message);
+    } else {
+        showToast(`Добавлено в список!`);
+        // Обновляем локальный кэш списков
+        if (!listItems[listId]) listItems[listId] = new Set();
+        ids.forEach(id => listItems[listId].add(Number(id)));
+        
+        closeModal('add-to-list-modal');
+        toggleSelectMode();
+    }
+};
+
+export function selectAll() {
+    const words = getFilteredData();
+    words.forEach(w => state.selectedWords.add(w.id));
+    
+    // Визуально обновляем карточки без полной перерисовки
+    document.querySelectorAll('.card, .list-item-wrapper').forEach(el => {
+        const id = (el as HTMLElement).dataset.wordId;
+        if (id && state.selectedWords.has(Number(id))) {
+            el.classList.add('selected');
+            const cb = el.querySelector('.select-checkbox');
+            if (cb) cb.innerHTML = '✓';
+        }
+    });
+    
+    updateBulkBar();
+}

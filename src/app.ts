@@ -12,11 +12,12 @@ import {
 import {
   toggleSessionTimer,
   sortByWeakWords,
+  sortByTopic,
   shuffleWords,
   toggleViewMode,
   showError,
   saveAndRender,
-} from "./ui/ui.ts"; // Ensure this file is in ui/ folder
+} from "./ui/ui.ts";
 import {
   showUpdateNotification,
   setupGestures,
@@ -96,6 +97,7 @@ import {
   quitQuiz,
   buildQuizModes,
 } from "./ui/quiz.ts";
+import { setupTrash } from "./ui/ui_trash.ts";
 import { checkPronunciation } from "./core/speech.ts";
 
 let currentQuote: any = null;
@@ -134,6 +136,7 @@ try {
   console.error("❌ Worker failed to initialize:", e);
 }
 const APP_VERSION = "v56";
+const AI_MODEL_NAME = "Gemini 2.5 Flash";
 
 interface BeforeInstallPromptEvent extends Event {
   prompt: () => Promise<void>;
@@ -219,6 +222,9 @@ function setupGlobalListeners() {
             saveAndRender();
           }
           break;
+        case "sort-topic":
+          sortByTopic();
+          break;
         case "sort-weak":
           sortByWeakWords();
           break;
@@ -233,6 +239,7 @@ function setupGlobalListeners() {
           break;
         case "open-profile":
           openProfileModal();
+          import("./ui/ui_settings.ts").then(m => m.updateTrashRetentionUI());
           break;
         case "open-mistakes":
           import("./ui/ui_mistakes").then((m) => m.openMistakesModal());
@@ -281,7 +288,16 @@ function setupGlobalListeners() {
           }
           break;
         case "submit-word-request":
-          import("./ui/ui_custom_words.ts").then((m) => m.submitWordRequest());
+          import("./ui/ui_custom_words.ts")
+            .then((m) => m.submitWordRequest())
+            .catch((e) => console.error("❌ Failed to load submitWordRequest:", e));
+          break;
+        case "open-add-word-modal":
+          openModal("add-word-modal");
+          if (value) {
+            const select = document.getElementById("new-word-target-list") as HTMLSelectElement;
+            if (select) select.value = value;
+          }
           break;
         case "save-quote":
           if (currentQuote) {
@@ -346,6 +362,39 @@ function setupGlobalListeners() {
         case "reset-onboarding":
           import("./ui/ui_settings.ts").then((m) => m.resetOnboarding());
           break;
+        case "create-list":
+          import("./ui/ui_collections.ts").then((m) => m.createList());
+          break;
+        case "save-list-changes":
+          import("./ui/ui_collections.ts").then((m) => m.saveListChanges());
+          break;
+        case "save-word-changes":
+          import("./ui/ui_edit_word.ts").then((m) => m.saveWordChanges());
+          break;
+        case "delete-word":
+          import("./ui/ui_edit_word.ts").then((m) => m.deleteWord());
+          break;
+        case "open-collections-filter":
+          import("./ui/ui_collections.ts").then((_m) => { /* Logic to show filter selection modal */ openModal('collections-modal'); });
+          break;
+        case "toggle-select-mode":
+          import("./ui/ui_bulk.ts").then((m) => m.toggleSelectMode());
+          break;
+        case "bulk-delete":
+          import("./ui/ui_bulk.ts").then((m) => m.bulkDelete());
+          break;
+        case "bulk-move":
+          import("./ui/ui_bulk.ts").then((m) => m.bulkMoveToTopic());
+          break;
+        case "bulk-list":
+          import("./ui/ui_bulk.ts").then((m) => m.bulkAddToList());
+          break;
+        case "bulk-select-all":
+          import("./ui/ui_bulk.ts").then((m) => m.selectAll());
+          break;
+        case "set-trash-retention":
+          if (value) import("./ui/ui_settings.ts").then(m => m.setTrashRetention(value));
+          break;
       }
     }
   });
@@ -399,6 +448,44 @@ function setupGlobalListeners() {
       }
     }
   });
+
+  // Handle Enter key for creating a new list
+  const newListInput = document.getElementById('new-list-title') as HTMLInputElement;
+  if (newListInput) {
+    newListInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault(); // Prevent any default action
+        // Programmatically click the create button to reuse its logic
+        const createBtn = document.querySelector('[data-action="create-list"]') as HTMLButtonElement;
+        if (createBtn && !createBtn.disabled) {
+          createBtn.click();
+        }
+      }
+    });
+  }
+
+  // Validation for Topic/Category inputs (No numbers/symbols)
+  const validateTextOnly = (e: Event) => {
+    const input = e.target as HTMLInputElement;
+    // Allow: Letters (EN, RU, KR), spaces, hyphens. Remove: Numbers, symbols.
+    input.value = input.value.replace(/[^a-zA-Zа-яА-Я가-힣\u3130-\u318F\s\-]/g, '');
+  };
+
+  ['new-word-topic', 'new-word-category', 'edit-word-topic', 'edit-word-category'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener('input', validateTextOnly);
+  });
+
+  // Handle "Create new list" selection in dropdown
+  const targetListSelect = document.getElementById('new-word-target-list') as HTMLSelectElement;
+  if (targetListSelect) {
+    targetListSelect.addEventListener('change', () => {
+      if (targetListSelect.value === 'create-new-list') {
+        targetListSelect.value = ""; // Сбрасываем выбор
+        openModal('collections-modal');
+      }
+    });
+  }
 
   // Закрытие модальных окон по клавише Esc
   document.addEventListener("keydown", (e) => {
@@ -619,6 +706,23 @@ function setupNetworkListeners() {
   updateStatus();
 }
 
+function setupRealtimeUpdates() {
+  // Слушаем новые слова, добавленные через Worker (INSERT в таблицу vocabulary)
+  client
+    .channel('public:vocabulary')
+    .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'vocabulary' }, (payload: { new: any; }) => {
+      const newWord = payload.new;
+      // Проверяем, нет ли уже этого слова (на всякий случай)
+      if (newWord && !state.dataStore.find((w: any) => w.id === newWord.id)) {
+        console.log("🔥 Realtime: New word added", newWord.word_kr);
+        state.dataStore.unshift(newWord); // Добавляем в начало списка
+        showToast(`✨ Готово: ${newWord.word_kr}`); // Уведомляем пользователя
+        render(); // Обновляем экран
+      }
+    })
+    .subscribe();
+}
+
 async function init() {
   // 🧹 Принудительная очистка Service Worker в режиме разработки, чтобы избежать проблем с кэшем.
   // Это удалит старые воркеры для этого порта (origin) при каждой перезагрузке.
@@ -634,6 +738,7 @@ async function init() {
 
   setupGlobalListeners();
   setupNetworkListeners();
+  setupRealtimeUpdates(); // <--- Включаем прослушку обновлений
 
   renderSkeletons();
 
@@ -649,6 +754,28 @@ async function init() {
 
   if (searchWorker) searchWorker.onmessage = (e) => {
     state.searchResults = e.data;
+    
+    // Enhanced Search: Also filter by Topic and Category locally
+    const searchInput = document.getElementById("searchInput") as HTMLInputElement;
+    if (searchInput) {
+      const query = searchInput.value.trim().toLowerCase();
+      if (query.length > 1) {
+        const topicCatMatches = state.dataStore.filter(w => 
+          (w.topic && w.topic.toLowerCase().includes(query)) ||
+          (w.category && w.category.toLowerCase().includes(query))
+        );
+        
+        // Merge results (deduplicate by ID)
+        const existingIds = new Set(state.searchResults?.map(r => r.id) || []);
+        topicCatMatches.forEach(w => {
+          if (!existingIds.has(w.id)) {
+            state.searchResults?.push(w);
+            existingIds.add(w.id);
+          }
+        });
+      }
+    }
+    
     render();
   };
 
@@ -669,6 +796,7 @@ async function init() {
             await loadFromSupabase(session.user);
             saveAndRender();
             closeModal("login-modal");
+            import("./ui/ui_collections.ts").then(m => m.loadCollections());
             showWelcomeScreen(session.user);
           }
           if (event === "PASSWORD_RECOVERY") {
@@ -690,6 +818,7 @@ async function init() {
     updateAuthUI(session.user);
     cleanAuthUrl();
     await loadFromSupabase(session.user);
+    import("./ui/ui_collections.ts").then(m => m.loadCollections());
     showWelcomeScreen(session.user);
   } else {
     updateAuthUI(null);
@@ -719,10 +848,11 @@ async function init() {
   setupGestures();
   setupScrollBehavior();
   setupGridEffects();
+  setupTrash();
   setupLevelUpObserver();
 
   const verEl = document.getElementById("app-version");
-  if (verEl) verEl.textContent = `TOPIK Master ${APP_VERSION}`;
+  if (verEl) verEl.innerHTML = `TOPIK Master ${APP_VERSION} <span style="margin: 0 5px; opacity: 0.5;">|</span> ${AI_MODEL_NAME}`;
 
   const searchInput = document.getElementById(
     "searchInput",
@@ -930,4 +1060,11 @@ Object.assign(window, {
     }
   },
   dismissInstallBanner,
+  deleteList: (id: string, btn?: HTMLElement) => import("./ui/ui_collections.ts").then(m => m.deleteList(id, btn)),
+  openEditListModal: (id: string, title: string, icon: string) => import("./ui/ui_collections.ts").then(m => m.openEditListModal(id, title, icon)),
+  setCollectionFilter: (id: string) => import("./ui/ui_collections.ts").then(m => m.setCollectionFilter(id)),
+  openEditWordModal: (id: string | number, onUpdate?: () => void) => import("./ui/ui_edit_word.ts").then(m => m.openEditWordModal(id, onUpdate)),
+  restoreWord: (id: number) => (window as any).restoreWord(id),
+  permanentlyDeleteWord: (id: number, btn: HTMLElement) => (window as any).permanentlyDeleteWord(id, btn),
+  toggleTrashSelection: (id: number, checked: boolean) => (window as any).toggleTrashSelection(id, checked),
 });

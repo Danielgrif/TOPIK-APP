@@ -31,6 +31,7 @@ export interface Word {
   category?: string;
   category_ru?: string;
   category_kr?: string;
+  deleted_at?: string;
 }
 
 export interface Achievement {

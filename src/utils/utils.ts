@@ -2,6 +2,51 @@ import { state } from "../core/state.ts";
 import { duckBackgroundMusic } from "../ui/ui_settings.ts";
 
 /**
+ * Icons mapping for topics and categories
+ */
+export const ICONS_MAP: Record<string, string> = {
+  "daily": "🏠", "life": "🏠", "жизнь": "🏠",
+  "economics": "💰", "economy": "💰", "экономика": "💰",
+  "politics": "🏛️", "политика": "🏛️",
+  "society": "👥", "social": "👥", "общество": "👥",
+  "culture": "🎭", "культура": "🎭",
+  "health": "🏥", "здоровье": "🏥",
+  "environment": "🌳", "nature": "🌳", "природа": "🌳", "экология": "🌳",
+  "science": "🔬", "наука": "🔬",
+  "education": "🎓", "school": "🎓", "образование": "🎓", "школа": "🎓",
+  "history": "📜", "история": "📜",
+  "art": "🎨", "искусство": "🎨",
+  "sports": "⚽", "спорт": "⚽",
+  "weather": "🌤️", "погода": "🌤️",
+  "shopping": "🛍️", "покупки": "🛍️",
+  "travel": "✈️", "путешествия": "✈️",
+  "food": "🍔", "cooking": "🍳", "еда": "🍔",
+  "work": "💼", "job": "💼", "работа": "💼",
+  "feelings": "😊", "emotion": "😊", "чувства": "😊",
+  "personality": "🧠", "характер": "🧠",
+  "appearance": "👀", "внешность": "👀",
+  "hobbies": "🎮", "хобби": "🎮",
+  "noun": "📦", "существительное": "📦",
+  "verb": "🏃", "глагол": "🏃",
+  "adjective": "💎", "прилагательное": "💎",
+  "adverb": "🚀", "наречие": "🚀",
+  "particle": "🔗", "частица": "🔗",
+  "suffix": "📎", "суффикс": "📎",
+  "pronoun": "👈", "местоимение": "👈",
+  "number": "🔢", "числительное": "🔢",
+  "interjection": "❗", "междометие": "❗"
+};
+
+export function getIconForValue(value: string, defaultIcon: string = "🔹"): string {
+  if (!value || value === "all") return "🌍";
+  const lower = value.toLowerCase();
+  for (const key in ICONS_MAP) {
+    if (lower.includes(key)) return ICONS_MAP[key];
+  }
+  return defaultIcon;
+}
+
+/**
  * Creates a debounced function that delays invoking `fn` until after `wait` milliseconds.
  */
 export function debounce<T extends (...args: unknown[]) => unknown>(
@@ -12,6 +57,55 @@ export function debounce<T extends (...args: unknown[]) => unknown>(
   return function (this: ThisParameterType<T>, ...args: Parameters<T>) {
     clearTimeout(t);
     t = window.setTimeout(() => fn.apply(this, args), wait);
+  };
+}
+
+/**
+ * Shows a toast with an Undo button.
+ * Executes onCommit after timeout if not undone.
+ */
+export function showUndoToast(msg: string, onUndo: () => void, onCommit: () => void, timeout: number = 5000) {
+  const container = document.getElementById("toast-container");
+  if (!container) {
+    onCommit();
+    return;
+  }
+
+  const el = document.createElement("div");
+  el.className = "toast-item";
+  el.style.cssText = "display: flex; align-items: center; justify-content: space-between; gap: 15px; min-width: 280px; padding-right: 10px;";
+  
+  el.innerHTML = `
+    <span>${msg}</span>
+    <button style="background: rgba(255,255,255,0.2); border: none; color: inherit; padding: 5px 10px; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: bold;">↩ Отмена</button>
+    <div style="position: absolute; bottom: 0; left: 0; height: 3px; background: rgba(255,255,255,0.7); width: 100%; transition: width ${timeout}ms linear;"></div>
+  `;
+
+  container.appendChild(el);
+  
+  // Запуск анимации полоски
+  requestAnimationFrame(() => {
+      const bar = el.querySelector("div") as HTMLElement;
+      if (bar) bar.style.width = "0%";
+  });
+
+  let isUndone = false;
+  const undoBtn = el.querySelector("button") as HTMLElement;
+
+  const timer = setTimeout(() => {
+    if (!isUndone) {
+      onCommit();
+      el.classList.add("toast-hide");
+      setTimeout(() => el.remove(), 300);
+    }
+  }, timeout);
+
+  undoBtn.onclick = () => {
+    isUndone = true;
+    clearTimeout(timer);
+    onUndo();
+    el.classList.add("toast-hide");
+    setTimeout(() => el.remove(), 300);
   };
 }
 

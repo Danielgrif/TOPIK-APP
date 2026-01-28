@@ -58,6 +58,13 @@ declare global {
     closeConfirm: () => void;
     quitQuiz: () => void;
     dismissInstallBanner: () => void;
+    deleteList: (id: string, btn?: HTMLElement) => void;
+    openEditListModal: (id: string, title: string, icon: string) => void;
+    setCollectionFilter: (id: string) => void;
+    openEditWordModal: (id: string | number, onUpdate?: () => void) => void;
+    restoreWord: (id: number) => void;
+    permanentlyDeleteWord: (id: number, btn: HTMLElement) => void;
+    handleBulkAddToList: (listId: string) => void;
 
     // Auth & Settings
     handleAuth: (type: string) => void;

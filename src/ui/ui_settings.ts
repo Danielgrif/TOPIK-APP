@@ -558,6 +558,28 @@ export function resetAllSettings() {
   });
 }
 
+export function setTrashRetention(days: string | number) {
+  const retentionDays = Number(days);
+  if (![7, 30, 90, 365].includes(retentionDays)) return;
+
+  state.trashRetentionDays = retentionDays;
+  
+  updateTrashRetentionUI();
+
+  showToast(`Срок хранения в корзине: ${retentionDays === 365 ? '1 год' : `${retentionDays} дн.`}`);
+  immediateSaveState();
+  syncGlobalStats();
+}
+
+export function updateTrashRetentionUI() {
+    const container = document.getElementById('trash-retention-options');
+    if (container) {
+        container.querySelectorAll('.segment-btn').forEach(btn => {
+            btn.classList.toggle('active', btn.getAttribute('data-value') === String(state.trashRetentionDays));
+        });
+    }
+}
+
 export function resetOnboarding() {
   localStorage.removeItem("onboarding_completed_v1");
   showToast("🎓 Обучение сброшено. Перезагрузка...");

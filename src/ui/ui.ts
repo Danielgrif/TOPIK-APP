@@ -147,6 +147,22 @@ export function enableQuizKeyboard(container: HTMLElement) {
 }
 
 /**
+ * Sorts the word list by Topic -> Category -> Alphabet.
+ */
+export function sortByTopic() {
+  state.dataStore.sort((a, b) => {
+    const topicA = a.topic || a.topic_ru || a.topic_kr || "zzz";
+    const topicB = b.topic || b.topic_ru || b.topic_kr || "zzz";
+    if (topicA !== topicB) return topicA.localeCompare(topicB);
+    const catA = a.category || a.category_ru || a.category_kr || "zzz";
+    const catB = b.category || b.category_ru || b.category_kr || "zzz";
+    if (catA !== catB) return catA.localeCompare(catB);
+    return (a.word_kr || "").localeCompare(b.word_kr || "");
+  });
+  render();
+}
+
+/**
  * Sorts the word list by accuracy (weakest first).
  */
 export function sortByWeakWords() {

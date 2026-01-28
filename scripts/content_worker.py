@@ -1,5 +1,5 @@
 # Перед запуском установите необходимые библиотеки командой:
-# pip install supabase python-dotenv requests idna edge-tts pillow google-genai
+# pip install supabase python-dotenv requests idna edge-tts pillow google-generativeai
 
 import os
 import re
@@ -45,7 +45,7 @@ try:
 except ImportError as e:
     logging.error(f"❌ Ошибка импорта библиотек: {e}")
     logging.error("Вероятно, файлы библиотек повреждены. Попробуйте выполнить эту команду для исправления:")
-    logging.error(f'"{sys.executable}" -m pip install --force-reinstall requests idna urllib3 chardet certifi aiohttp edge-tts supabase pillow google-genai')
+    logging.error(f'"{sys.executable}" -m pip install --force-reinstall requests idna urllib3 chardet certifi aiohttp edge-tts supabase pillow google-generativeai')
     sys.exit(1)
 
 # Пытаемся загрузить .env (стандарт) или env (если файл назван без точки)
@@ -89,6 +89,7 @@ parser.add_argument("--force-images", action="store_true", help="Принуди�
 parser.add_argument("--force-audio", action="store_true", help="Принудительно обновить аудио (перезаписать старые)")
 parser.add_argument("--force-quotes", action="store_true", help="Принудительно обновить аудио только для цитат")
 parser.add_argument("--check", action="store_true", help="Запустить проверку целостности файлов и ссылок (удаление битых)")
+parser.add_argument("--retry-errors", action="store_true", help="Сбросить статус ошибочных заявок на 'pending' для повторной обработки")
 parser.add_argument("--concurrency", type=int, default=0, help="Количество одновременных потоков (0 = авто-подбор, по умолчанию 0)")
 args = parser.parse_args()
 
@@ -166,6 +167,15 @@ if GEMINI_API_KEY:
 else:
     logging.warning("⚠️ GEMINI_API_KEY не найден. Генерация контента через AI будет недоступна.")
 
+if args.retry_errors:
+    try:
+        logging.info("🔄 Сброс заявок со статусом 'error' на 'pending'...")
+        res = supabase.table('word_requests').update({'status': 'pending'}).eq('status', 'error').execute()
+        count = len(res.data) if res.data else 0
+        logging.info(f"✅ Сброшено заявок: {count}")
+    except Exception as e:
+        logging.error(f"❌ Ошибка сброса заявок: {e}")
+
 def clean_query_for_pixabay(text):
     """Очищает текст перевода для лучшего поиска картинок."""
     if not text: return ""
@@ -188,7 +198,16 @@ async def delete_old_file(bucket, url):
     try:
         filename = unquote(url.split('/')[-1].split('?')[0])
         loop = asyncio.get_running_loop()
-        await loop.run_in_executor(None, lambda: supabase.storage.from_(bucket).remove([filename]))
+        
+        def _do_delete():
+            for i in range(3):
+                try:
+                    return supabase.storage.from_(bucket).remove([filename])
+                except Exception as e:
+                    if "10035" in str(e) or "10054" in str(e): time.sleep(0.5); continue
+                    raise e
+
+        await loop.run_in_executor(None, _do_delete)
         logging.info(f"🗑 Удален старый файл: {filename}")
     except Exception as e:
         logging.warning(f"⚠️ Не удалось удалить старый файл {url}: {e}")
@@ -394,15 +413,33 @@ if args.check:
 async def upload_to_supabase(bucket, path, data, content_type):
     """Асинхронная обертка для загрузки в Supabase"""
     loop = asyncio.get_running_loop()
-    # upsert=True позволяет перезаписывать файлы, избегая ошибок дубликатов
-    await loop.run_in_executor(None, lambda: supabase.storage.from_(bucket).upload(
-        path=path, file=data, file_options={"content-type": content_type, "upsert": "true"}
-    ))
+    
+    def _do_upload():
+        for i in range(3):
+            try:
+                if hasattr(data, 'seek'): data.seek(0)
+                return supabase.storage.from_(bucket).upload(
+                    path=path, file=data, file_options={"content-type": content_type, "upsert": "true"}
+                )
+            except Exception as e:
+                if "10035" in str(e) or "10054" in str(e): time.sleep(1); continue
+                raise e
 
-async def update_db_record(row_id, updates):
+    await loop.run_in_executor(None, _do_upload)
+
+async def update_db_record(row_id, updates, table='vocabulary'):
     """Асинхронная обертка для обновления БД"""
     loop = asyncio.get_running_loop()
-    await loop.run_in_executor(None, lambda: supabase.table('vocabulary').update(updates).eq("id", row_id).execute())
+    
+    def _do_update():
+        for i in range(3):
+            try:
+                return supabase.table(table).update(updates).eq("id", row_id).execute()
+            except Exception as e:
+                if "10035" in str(e) or "10054" in str(e): time.sleep(1); continue
+                raise e
+
+    await loop.run_in_executor(None, _do_update)
 
 async def handle_main_audio(session, row, word, word_hash, force_audio=False):
     """Обработка основного аудио (Женский голос - SunHi)"""
@@ -422,7 +459,10 @@ async def handle_main_audio(session, row, word, word_hash, force_audio=False):
             logging.info(f"✅ Audio Female: {word}")
             return {'audio_url': url}
         finally:
-            if os.path.exists(filepath): os.remove(filepath)
+            try:
+                if os.path.exists(filepath): os.remove(filepath)
+            except Exception: pass # Игнорируем ошибки удаления (WinError 32), почистим позже
+
     return {}
 
 async def handle_male_audio(row, word, word_hash, force_audio=False):
@@ -442,7 +482,10 @@ async def handle_male_audio(row, word, word_hash, force_audio=False):
             logging.info(f"✅ Audio Male: {word}")
             return {'audio_male': url}
         finally:
-            if os.path.exists(filepath): os.remove(filepath)
+            try:
+                if os.path.exists(filepath): os.remove(filepath)
+            except Exception: pass
+
     return {}
 
 async def handle_example_audio(row, example, force_audio=False):
@@ -471,7 +514,10 @@ async def handle_example_audio(row, example, force_audio=False):
             logging.info(f"✅ Example: {example[:10]}...")
             return {'example_audio': url}
         finally:
-            if os.path.exists(filepath): os.remove(filepath)
+            try:
+                if os.path.exists(filepath): os.remove(filepath)
+            except Exception: pass
+
     return {}
 
 async def handle_image(session, row, translation, word_hash, force_images):
@@ -587,97 +633,177 @@ async def process_word_request(request):
     word_kr = request.get('word_kr')
     user_id = request.get('user_id')
     
-    if not word_kr or not GEMINI_API_KEY:
+    # Проверяем наличие ручных данных (минимум перевод)
+    has_manual_data = bool(request.get('translation'))
+
+    if not word_kr:
         return
 
-    logging.info(f"🤖 AI обрабатывает запрос: {word_kr}")
+    if not has_manual_data and not GEMINI_API_KEY:
+        logging.warning(f"⚠️ Пропуск {word_kr}: нет ключа Gemini и нет ручных данных.")
+        # FIX: Явно обновляем статус на ошибку, чтобы клиент не ждал вечно
+        supabase.table('word_requests').update({
+            'status': 'error', 
+            'my_notes': 'Server Error: Missing Gemini API Key'
+        }).eq('id', req_id).execute()
+        return
+
+    logging.info(f"🤖 Обработка запроса: {word_kr} (Ручные данные: {has_manual_data})")
 
     try:
-        # 1. Запрос к Gemini для получения данных
-        prompt = f"""
-        Analyze the Korean word '{word_kr}'. Return a JSON object with the following fields:
-        - word_kr: the word itself (corrected if needed)
-        - translation: Russian translation (concise)
-        - word_hanja: Hanja characters (if applicable, else empty string)
-        - topic: A relevant topic category in format "Topic (Тема)" (e.g. "School (Школа)")
-        - category: Part of speech in format "Noun (Существительное)" etc.
-        - level: TOPIK level (e.g. "★☆☆", "★★☆", "★★★") based on difficulty
-        - example_kr: A simple Korean example sentence using the word
-        - example_ru: Russian translation of the example
-        - synonyms: Comma-separated synonyms (Korean)
-        - antonyms: Comma-separated antonyms (Korean)
-        - type: "word" or "grammar" (usually "word")
-        
-        Ensure the response is valid JSON.
-        """
-        
-        response = await asyncio.to_thread(
-            genai.GenerativeModel('gemini-pro').generate_content,
-            contents=prompt
-        )
-        text_response = response.text
-        
-        if not text_response:
-            logging.error(f"❌ Пустой ответ от AI для {word_kr}")
-            return
-        
-        # Очистка от markdown ```json ... ```
-        if "```json" in text_response:
-            text_response = text_response.split("```json")[1].split("```")[0]
-        elif "```" in text_response:
-            text_response = text_response.split("```")[1].split("```")[0]
-            
-        data = json.loads(text_response.strip())
-
-        if not data.get('word_kr'):
-            logging.error(f"❌ AI не вернул обязательное поле word_kr для запроса {req_id}")
-            return
-        
-        # 2. Проверка на дубликаты в vocabulary
-        # Если слово уже есть, мы можем просто обновить его или проигнорировать
-        # Для простоты, если слово есть, мы не добавляем дубликат, а просто помечаем заявку как processed
-        existing = supabase.table('vocabulary').select('id').eq('word_kr', data.get('word_kr')).execute()
-        
-        word_id = None
-        existing_data = getattr(existing, 'data', None)
-
-        # Фильтрация ключей, чтобы избежать ошибок SQL, если AI вернет лишние поля
-        allowed_keys = {
-            'word_kr', 'translation', 'word_hanja', 'topic', 'category', 
-            'level', 'type', 'example_kr', 'example_ru', 'synonyms', 'antonyms'
-        }
-        clean_data = {k: v for k, v in data.items() if k in allowed_keys}
-        
-        if existing_data and isinstance(existing_data, list) and len(existing_data) > 0:
-            logging.info(f"ℹ️ Слово {data.get('word_kr')} уже есть в базе.")
-            word_id = existing_data[0]['id']
+        items_to_process = []
+        if has_manual_data:
+            manual_item = request.copy()
+            manual_item['word_kr'] = word_kr
+            items_to_process.append(manual_item)
         else:
-            # 3. Вставка в vocabulary
-            # Если вы хотите, чтобы слово было видно ТОЛЬКО пользователю, нужно добавить поле user_id в vocabulary
-            # Сейчас схема vocabulary общая. Добавим слово как общее.
-            insert_res = supabase.table('vocabulary').insert(clean_data).execute()
-            insert_data = getattr(insert_res, 'data', None)
-            
-            if insert_data and isinstance(insert_data, list) and len(insert_data) > 0:
-                word_id = insert_data[0]['id']
-                logging.info(f"✅ Слово {data.get('word_kr')} добавлено в словарь.")
-                
-                # Генерируем медиа для нового слова сразу
-                # FIX: Захватываем результат и обновляем запись в БД
-                async with aiohttp.ClientSession() as session:
-                    updates = await _generate_content_for_word(session, insert_data[0])
-                    if updates:
-                        await update_db_record(word_id, updates)
+            # 1. Запрос к Gemini для получения данных
+            prompt = f"""
+            Analyze the Korean word '{word_kr}'.
+            1. Check for typos. If the input looks like a typo (e.g. 'gkrry' -> '학교', or '안영' -> '안녕'), use the CORRECTED word for analysis.
+            If it has multiple distinct meanings (homonyms), return a JSON ARRAY of objects.
+            If it has a single meaning, return a single JSON object.
 
-        # 4. Обновление статуса заявки
-        supabase.table('word_requests').update({'status': 'processed'}).eq('id', req_id).execute()
+            Each object must have the following fields:
+            - word_kr: the CORRECTED word itself
+            - translation: Russian translation (concise)
+            - word_hanja: Hanja characters (if applicable, else empty string)
+            - topic: A relevant topic category in format "Topic (Тема)" (e.g. "School (Школа)")
+            - category: Part of speech in format "Noun (Существительное)" etc.
+            - level: TOPIK level (e.g. "★☆☆", "★★☆", "★★★") based on difficulty
+            - example_kr: A simple Korean example sentence using the word
+            - example_ru: Russian translation of the example
+            - synonyms: Comma-separated synonyms (Korean)
+            - antonyms: Comma-separated antonyms (Korean)
+            - type: "word" or "grammar" (usually "word")
+            
+            Ensure the response is valid JSON.
+            """
+            
+            # Список моделей для перебора (Fallback стратегия)
+            models_to_try = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-flash-latest']
+            text_response = None
+            last_error = None
+
+            for model_name in models_to_try:
+                try:
+                    # FIX: Добавляем таймаут, чтобы воркер не завис на ожидании ответа от Google
+                    response = await asyncio.wait_for(asyncio.to_thread(
+                        genai.GenerativeModel(model_name).generate_content,
+                        contents=prompt
+                    ), timeout=30.0)
+                    text_response = response.text
+                    
+                    if text_response:
+                        logging.info(f"✅ Ответ получен от модели: {model_name}")
+                        break
+                except Exception as e:
+                    logging.warning(f"⚠️ Ошибка модели {model_name}: {e}")
+                    last_error = e
+            
+            if not text_response:
+                logging.error(f"❌ Все модели AI недоступны для {word_kr}. Ошибка: {last_error}")
+                supabase.table('word_requests').update({'status': 'error', 'my_notes': f'All AI models failed: {last_error}'}).eq('id', req_id).execute()
+                return
+            
+            # Очистка от markdown ```json ... ```
+            if "```json" in text_response:
+                text_response = text_response.split("```json")[1].split("```")[0]
+            elif "```" in text_response:
+                text_response = text_response.split("```")[1].split("```")[0]
+                
+            try:
+                parsed_data = json.loads(text_response.strip())
+            except json.JSONDecodeError:
+                logging.error(f"❌ Ошибка парсинга JSON для {word_kr}")
+                supabase.table('word_requests').update({'status': 'error', 'my_notes': 'Invalid JSON'}).eq('id', req_id).execute()
+                return
+
+            if isinstance(parsed_data, list):
+                items_to_process = parsed_data
+            elif isinstance(parsed_data, dict):
+                items_to_process = [parsed_data]
+            else:
+                logging.error(f"❌ Неверный формат ответа AI для {word_kr}")
+                supabase.table('word_requests').update({'status': 'error'}).eq('id', req_id).execute()
+                return
         
-        # Опционально: Добавить слово в "Изучаемые" пользователя, который его запросил
-        if word_id and user_id:
-             try:
-                 supabase.table('user_progress').upsert({'user_id': user_id, 'word_id': word_id, 'is_learned': False}).execute()
-             except Exception as e:
-                 logging.warning(f"Не удалось добавить в прогресс пользователя: {e}")
+        if not items_to_process:
+             logging.error(f"❌ Нет данных для обработки {word_kr}")
+             supabase.table('word_requests').update({'status': 'error'}).eq('id', req_id).execute()
+             return
+
+        # Обработка каждого элемента (значения слова)
+        for data in items_to_process:
+            if not data.get('word_kr'):
+                continue
+            
+            # Применяем ручные настройки темы/категории, если они были указаны пользователем
+            # Это позволяет переопределить то, что придумал AI
+            if request.get('topic'): data['topic'] = request.get('topic')
+            if request.get('category'): data['category'] = request.get('category')
+
+            # 2. Проверка на дубликаты в vocabulary
+            # Проверяем не только по слову, но и по переводу, чтобы различать омонимы
+            existing = supabase.table('vocabulary').select('id, translation').eq('word_kr', data.get('word_kr')).execute()
+            existing_rows = getattr(existing, 'data', []) or []
+            
+            word_id = None
+            
+            # Ищем точное совпадение по переводу (или очень похожее)
+            for row in existing_rows:
+                if row.get('translation') == data.get('translation'):
+                    word_id = row['id']
+                    logging.info(f"ℹ️ Слово {data.get('word_kr')} ({data.get('translation')}) уже есть в базе.")
+                    break
+            
+            if not word_id:
+                # 3. Вставка в vocabulary
+                allowed_keys = {
+                    'word_kr', 'translation', 'word_hanja', 'topic', 'category', 
+                    'level', 'type', 'example_kr', 'example_ru', 'synonyms', 'antonyms',
+                    'user_id' # Добавляем поле владельца
+                }
+                # Если есть user_id в запросе, добавляем его в данные для вставки
+                if user_id: data['user_id'] = user_id
+                
+                clean_data = {k: v for k, v in data.items() if k in allowed_keys}
+                
+                insert_res = supabase.table('vocabulary').insert(clean_data).execute()
+                insert_data = getattr(insert_res, 'data', None)
+                
+                if insert_data and isinstance(insert_data, list) and len(insert_data) > 0:
+                    word_id = insert_data[0]['id']
+                    logging.info(f"✅ Слово {data.get('word_kr')} ({data.get('translation')}) добавлено.")
+                    
+                    # Генерируем медиа для нового слова сразу
+                    async with aiohttp.ClientSession() as session:
+                        updates = await _generate_content_for_word(session, insert_data[0])
+                        if updates:
+                            await update_db_record(word_id, updates)
+
+            # Опционально: Добавить слово в "Изучаемые" пользователя, который его запросил
+            if word_id and user_id:
+                 try:
+                     supabase.table('user_progress').upsert({'user_id': user_id, 'word_id': word_id, 'is_learned': False}).execute()
+                 except Exception as e:
+                     logging.warning(f"Не удалось добавить в прогресс пользователя: {e}")
+
+            # 5. Добавление в список пользователя (если указан target_list_id)
+            target_list_id = request.get('target_list_id')
+            if word_id and target_list_id:
+                try:
+                    supabase.table('list_items').upsert({'list_id': target_list_id, 'word_id': word_id}).execute()
+                    logging.info(f"✅ Слово добавлено в список {target_list_id}")
+                except Exception as e:
+                    logging.warning(f"⚠️ Ошибка добавления в список: {e}")
+
+        # 4. Обновление статуса заявки (после обработки всех вариантов)
+        supabase.table('word_requests').update({'status': 'processed'}).eq('id', req_id).execute()
+
+    except asyncio.TimeoutError:
+        logging.error(f"❌ Timeout AI для {word_kr}")
+        supabase.table('word_requests').update({'status': 'error', 'my_notes': 'AI Timeout'}).eq('id', req_id).execute()
 
     except Exception as e:
         logging.error(f"❌ Ошибка AI обработки для {word_kr}: {e}")
@@ -706,7 +832,10 @@ async def handle_quote_audio(row, force_audio=False):
             logging.info(f"✅ Quote Audio: {text[:15]}...")
             return {'audio_url': url}
         finally:
-            if os.path.exists(filepath): os.remove(filepath)
+            try:
+                if os.path.exists(filepath): os.remove(filepath)
+            except Exception: pass
+
     return {}
 
 async def process_quote(sem, session, row):
@@ -716,8 +845,7 @@ async def process_quote(sem, session, row):
         try:
             updates = await handle_quote_audio(row, args.force_audio or args.force_quotes)
             if updates:
-                loop = asyncio.get_running_loop()
-                await loop.run_in_executor(None, lambda: supabase.table('quotes').update(updates).eq("id", row_id).execute())
+                await update_db_record(row_id, updates, table='quotes')
         except Exception as e:
             logging.error(f"❌ Ошибка цитаты {row_id}: {e}")
 
@@ -748,14 +876,31 @@ async def measure_network_quality():
         logging.warning(f"⚠️ Не удалось измерить скорость ({e}). Использую значение по умолчанию (5).")
         return 5
 
-async def main_loop():
-    logging.info("🚀 Воркер запущен (Async Mode).")
-    
-    concurrency = args.concurrency
-    if concurrency == 0:
-        concurrency = await measure_network_quality()
-        logging.info(f"⚡ Автоматически установлено потоков: {concurrency}")
-    
+async def user_requests_loop():
+    """Приоритетный цикл для обработки заявок пользователей"""
+    logging.info("👀 Запущен мониторинг пользовательских заявок (Приоритетный поток)...")
+    while True:
+        try:
+            # Всегда проверяем заявки
+            reqs = supabase.table('word_requests').select("*").eq('status', 'pending').limit(5).execute()
+            if reqs.data:
+                logging.info(f"⚡ Найдено {len(reqs.data)} новых заявок от пользователей.")
+                for req in reqs.data:
+                    await process_word_request(req)
+                # Если были задачи, проверяем снова почти сразу
+                await asyncio.sleep(0.5)
+            else:
+                # Если пусто, спим 2 секунды (достаточно часто для отзывчивости)
+                await asyncio.sleep(2)
+        except Exception as e:
+            logging.error(f"❌ Ошибка в цикле заявок: {e}")
+            await asyncio.sleep(5)
+
+async def background_tasks_loop(initial_concurrency):
+    """Фоновый цикл для обслуживания контента (цитаты, пропуски)"""
+    concurrency = initial_concurrency
+    logging.info(f"🛠 Запущены фоновые задачи (Начальных потоков: {concurrency})...")
+
     # Локальный кэш игнорируемых ID (чтобы не долбить одни и те же ошибки)
     ignore_ids = set()
 
@@ -763,15 +908,6 @@ async def main_loop():
         try:
             cleanup_temp_files()
             
-            # 0. Обработка заявок пользователей (Word Requests)
-            if GEMINI_API_KEY:
-                try:
-                    reqs = supabase.table('word_requests').select("*").eq('status', 'pending').limit(5).execute()
-                    for req in reqs.data:
-                        await process_word_request(req)
-                except Exception as e:
-                    logging.error(f"Ошибка обработки заявок: {e}")
-
             # 0.5. Обработка цитат (Quotes)
             try:
                 q_query = supabase.table('quotes').select("*")
@@ -779,6 +915,8 @@ async def main_loop():
                     # Обрабатываем те, у которых нет аудио (NULL или пустая строка)
                     q_query = q_query.or_("audio_url.is.null,audio_url.eq.")
                 
+                # FIX: Ограничиваем лимит цитат за раз, чтобы чаще проверять заявки пользователей
+                q_query = q_query.limit(5)
                 q_res = q_query.execute()
                 quotes = q_res.data or []
                 
@@ -821,8 +959,8 @@ async def main_loop():
                     logging.info("🏁 Обработка цитат завершена.")
                     break
                 elif not args.force_images and not args.force_audio:
-                    logging.info("💤 Нет новых слов. Жду 60 сек...")
-                    await asyncio.sleep(60)
+                    logging.info("💤 Нет новых слов. Жду 5 сек...")
+                    await asyncio.sleep(5)
                 else:
                     logging.info("🏁 Обработка завершена (force mode).")
                     break
@@ -867,11 +1005,51 @@ async def main_loop():
             logging.error(f"🔥 Критическая ошибка цикла: {main_e}")
             await asyncio.sleep(60)
 
+def check_schema_health():
+    """Проверяет наличие необходимых колонок в таблице vocabulary."""
+    logging.info("🔍 Проверка схемы базы данных...")
+    expected_columns = [
+        'id', 'word_kr', 'translation', 'image', 'image_source', 
+        'audio_url', 'audio_male', 'example_audio', 'type'
+    ]
+    
+    try:
+        # Делаем запрос к колонкам, чтобы проверить их существование
+        supabase.table('vocabulary').select(",".join(expected_columns)).limit(1).execute()
+        logging.info("✅ Схема таблицы vocabulary корректна.")
+        return True
+    except Exception as e:
+        err_msg = str(e)
+        match = re.search(r"Could not find the '([^']+)' column", err_msg)
+        if match:
+            missing = match.group(1)
+            logging.error(f"🚨 ОШИБКА СХЕМЫ: В таблице vocabulary нет колонки '{missing}'")
+            logging.error(f"❌ Воркер не сможет работать корректно. Пожалуйста, примените SQL-миграции.")
+        return False
+
+async def main_loop():
+    logging.info("🚀 Воркер запущен (Parallel Mode).")
+    
+    concurrency = args.concurrency
+    if concurrency == 0:
+        concurrency = await measure_network_quality()
+        logging.info(f"⚡ Автоматически установлено потоков для фона: {concurrency}")
+    
+    # Проверка схемы перед запуском
+    check_schema_health()
+    
+    # Запускаем оба цикла параллельно
+    await asyncio.gather(
+        user_requests_loop(),
+        background_tasks_loop(concurrency)
+    )
+
 if __name__ == "__main__":
     try:
-        # FIX: Исправление для Windows (WinError 10035)
-        if sys.platform == 'win32':
-            asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+        # FIX: Отключаем принудительный SelectorEventLoop, так как он вызывает WinError 10035 при нагрузке.
+        # ProactorEventLoop (по умолчанию в Python 3.8+) работает стабильнее с SSL/Sockets на Windows.
+        # if sys.platform == 'win32':
+        #     asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
             
         asyncio.run(main_loop())
     except KeyboardInterrupt:

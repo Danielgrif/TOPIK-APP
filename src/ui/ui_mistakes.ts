@@ -83,7 +83,7 @@ function renderMistakesContent() {
       </button>
     </div>
 
-    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 20px;">
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 15px; margin-bottom: 20px;">
       
       <!-- By Topic -->
       <div style="background: var(--surface-2); padding: 15px; border-radius: 16px;">

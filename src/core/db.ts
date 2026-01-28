@@ -83,6 +83,7 @@ export function immediateSaveState() {
     );
     localStorage.setItem("custom_words_v1", JSON.stringify(state.customWords));
     localStorage.setItem("favorite_quotes_v1", JSON.stringify(state.favoriteQuotes));
+    localStorage.setItem("trash_retention_v1", String(state.trashRetentionDays));
     // Сжимаем кэш словаря, так как он самый большой
     localStorage.setItem("vocabulary_cache_v1", compress(JSON.stringify(state.dataStore)));
     localStorage.setItem("tts_volume_v1", String(state.ttsVolume));
@@ -176,6 +177,19 @@ function processVocabularyData(serverData: Word[]) {
   });
   state.dataStore = Array.from(uniqueMap.values());
 
+  // Сортировка по умолчанию: Тема -> Категория -> Слово
+  state.dataStore.sort((a, b) => {
+    const topicA = a.topic || a.topic_ru || a.topic_kr || "zzz";
+    const topicB = b.topic || b.topic_ru || b.topic_kr || "zzz";
+    if (topicA !== topicB) return topicA.localeCompare(topicB);
+
+    const catA = a.category || a.category_ru || a.category_kr || "zzz";
+    const catB = b.category || b.category_ru || b.category_kr || "zzz";
+    if (catA !== catB) return catA.localeCompare(catB);
+
+    return (a.word_kr || "").localeCompare(b.word_kr || "");
+  });
+
   state.dataStore.forEach((w) => {
     if (!w.type) w.type = "word";
     w._parsedTopic = parseBilingualString(w.topic || w.topic_ru || w.topic_kr);
@@ -211,7 +225,7 @@ export async function fetchVocabulary() {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 30000);
 
-    const { data, error } = await client.from("vocabulary").select("*").abortSignal(controller.signal);
+    const { data, error } = await client.from("vocabulary").select("*").is('deleted_at', null).abortSignal(controller.signal);
     clearTimeout(timeoutId);
 
     if (error) throw error;
@@ -328,6 +342,10 @@ export async function loadFromSupabase(user: { id: string }) {
         if (s.ttsVolume !== undefined) {
           state.ttsVolume = s.ttsVolume;
           localStorage.setItem("tts_volume_v1", String(state.ttsVolume));
+        }
+        if (s.trashRetentionDays !== undefined) {
+          state.trashRetentionDays = s.trashRetentionDays;
+          localStorage.setItem("trash_retention_v1", String(state.trashRetentionDays));
         }
         if (s.streakLastDate !== undefined)
           state.streak.lastDate = s.streakLastDate;

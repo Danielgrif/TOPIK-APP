@@ -33,6 +33,9 @@ export interface AppState {
   studyGoal: StudyGoal;
   favoriteQuotes: any[];
   dirtyWordIds: Set<string | number>;
+  trashRetentionDays: number;
+  selectMode: boolean;
+  selectedWords: Set<string | number>;
 
   currentStar: string;
   currentTopic: string[];
@@ -95,6 +98,9 @@ export const state: AppState = {
   studyGoal: { type: "words", target: 10 },
   favoriteQuotes: [],
   dirtyWordIds: new Set(),
+  trashRetentionDays: 30,
+  selectMode: false,
+  selectedWords: new Set(),
 
   currentStar: "all",
   currentTopic: ["all"],
@@ -357,6 +363,9 @@ try {
   state.studyGoal = load("study_goal_v1", { type: "words", target: 10 });
   state.favoriteQuotes = load("favorite_quotes_v1", []);
   state.dirtyWordIds = new Set(load("dirty_ids_v1", []));
+  state.trashRetentionDays = localStorage.getItem("trash_retention_v1") !== null
+      ? Number(localStorage.getItem("trash_retention_v1"))
+      : 30;
   state.quizDifficulty = localStorage.getItem("quiz_difficulty_v1") || "all";
   state.quizTopic = localStorage.getItem("quiz_topic_v1") || "all";
   state.quizCategory = localStorage.getItem("quiz_category_v1") || "all";

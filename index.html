@@ -283,6 +283,42 @@
         0%, 100% { transform: translate(-50%, -50%) scale(1) rotate(-10deg); }
         50% { transform: translate(-45%, -45%) scale(1.1) rotate(10deg); }
       }
+
+      /* Bulk Selection Styles */
+      .bulk-bar {
+        position: fixed;
+        bottom: 80px;
+        left: 50%;
+        transform: translateX(-50%) translateY(150px);
+        background: var(--surface-1);
+        border: 1px solid var(--border-color);
+        border-radius: 16px;
+        padding: 10px 20px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 15px;
+        box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+        z-index: 900;
+        transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        width: 90%;
+        max-width: 400px;
+      }
+      .bulk-bar.visible { transform: translateX(-50%) translateY(0); }
+      .bulk-count { font-weight: 800; font-size: 16px; color: var(--primary); white-space: nowrap; }
+      .bulk-actions { display: flex; gap: 8px; }
+      
+      .select-checkbox {
+        position: absolute; top: 10px; left: 10px; width: 24px; height: 24px;
+        border-radius: 50%; border: 2px solid var(--text-sub); background: var(--surface-1);
+        z-index: 20; display: none; align-items: center; justify-content: center;
+        transition: transform 0.2s;
+      }
+      .card.select-mode .select-checkbox, .list-item-wrapper.select-mode .select-checkbox { display: flex; }
+      .card.selected, .list-item-wrapper.selected .list-item { border-color: var(--primary); background: var(--surface-2); }
+      .card.selected .select-checkbox, .list-item-wrapper.selected .select-checkbox {
+        background: var(--primary); border-color: var(--primary); color: white;
+      }
     </style>
   </head>
   <body>
@@ -373,6 +409,7 @@
                 <button class="view-btn active" data-action="toggle-view" data-value="grid">▦</button>
                 <button class="view-btn" data-action="toggle-view" data-value="list">☰</button>
             </div>
+            <button class="tool-btn" data-action="toggle-select-mode" title="Выбрать">☑️</button>
             <button class="tool-btn fire-btn" data-action="start-daily-challenge">🔥</button>
             <button class="tool-btn" data-action="toggle-filter-panel">
               <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="21" x2="4" y2="14"></line><line x1="4" y1="10" x2="4" y2="3"></line><line x1="12" y1="21" x2="12" y2="12"></line><line x1="12" y1="8" x2="12" y2="3"></line><line x1="20" y1="21" x2="20" y2="16"></line><line x1="20" y1="12" x2="20" y2="3"></line><line x1="1" y1="14" x2="7" y2="14"></line><line x1="9" y1="8" x2="15" y2="8"></line><line x1="17" y1="16" x2="23" y2="16"></line></svg>
@@ -384,8 +421,17 @@
       <div id="vocabulary-grid" class="grid"></div>
     </main>
 
-    <!-- Floating Action Button for Adding Words -->
-    <button class="fab-btn" data-modal-target="add-word-modal" title="Предложить слово">+</button>
+    <!-- Bulk Actions Bar -->
+    <div id="bulk-bar" class="bulk-bar">
+        <div class="bulk-count"><span id="bulk-count-val">0</span></div>
+        <div class="bulk-actions">
+            <button class="btn-icon" data-action="bulk-select-all" title="Выбрать все" style="background: var(--surface-3);">∀</button>
+            <button class="btn-icon" data-action="bulk-move" title="Переместить в тему" style="background: var(--surface-3);">🏷️</button>
+            <button class="btn-icon" data-action="bulk-list" title="Добавить в список" style="background: var(--surface-3);">📁</button>
+            <button class="btn-icon" data-action="bulk-delete" title="Удалить" style="background: rgba(255,0,0,0.1); color: var(--danger);">🗑️</button>
+            <button class="btn-icon" data-action="toggle-select-mode" title="Отмена" style="margin-left: 10px;">✕</button>
+        </div>
+    </div>
 
     </div> <!-- End of #app-container -->
 
@@ -419,15 +465,23 @@
         </div>
         <div class="filter-section">
           <div class="filter-label">Тема</div>
-          <div id="topicSelect" class="custom-select-container"></div>
+          <button id="topic-filter-btn" class="search-box" style="text-align: left; cursor: pointer; display: flex; justify-content: space-between; align-items: center;" data-modal-target="topic-modal"><span>Все темы</span> <span>›</span></button>
         </div>
         <div class="filter-section">
           <div class="filter-label">Категория</div>
-          <div id="categorySelect" class="custom-select-container"></div>
+          <button id="category-filter-btn" class="search-box" style="text-align: left; cursor: pointer; display: flex; justify-content: space-between; align-items: center;" data-modal-target="category-modal"><span>Все категории</span> <span>›</span></button>
+        </div>
+        <div class="filter-section">
+          <div class="filter-label">Коллекции</div>
+          <button id="collection-filter-btn" class="search-box" style="text-align: left; cursor: pointer; display: flex; justify-content: space-between; align-items: center;" data-action="open-collections-filter"><span>Все слова</span> <span>›</span></button>
         </div>
         <div class="filter-section">
           <div class="filter-label">Сортировка</div>
           <div class="sort-actions">
+            <button class="sort-btn" data-action="sort-topic">
+                <span class="sort-icon">🏷️</span>
+                <span>По темам</span>
+            </button>
             <button class="sort-btn" data-action="sort-weak">
                 <span class="sort-icon">💪</span>
                 <span>Слабые</span>
@@ -456,6 +510,9 @@
       </button>
       <button class="nav-btn" data-modal-target="stats-modal">
         <span class="nav-icon">📊</span><span class="nav-label">Статистика</span>
+      </button>
+      <button class="nav-btn" data-modal-target="collections-modal">
+        <span class="nav-icon">📁</span><span class="nav-label">Списки</span>
       </button>
       <button class="nav-btn" data-modal-target="profile-modal">
         <span class="nav-icon">👤</span><span class="nav-label">Профиль</span>
@@ -493,6 +550,136 @@
         <div id="stats-details"></div>
         <div id="topic-mastery"></div>
         </div>
+      </div>
+    </div>
+
+    <!-- Topic Selection Modal -->
+    <div
+      id="topic-modal"
+      class="modal"
+      role="dialog"
+      aria-modal="true"
+      tabindex="-1"
+      data-close-modal="topic-modal"
+    >
+      <div class="modal-content">
+        <div class="modal-header">
+          <h3>🏷️ Выбор темы</h3>
+          <div class="header-actions">
+            <button class="btn btn-icon close-modal-btn" data-close-modal="topic-modal">✕</button>
+          </div>
+        </div>
+        <div id="topic-modal-content" class="filter-modal-body"></div>
+      </div>
+    </div>
+
+    <!-- Category Selection Modal -->
+    <div id="category-modal" class="modal" role="dialog" aria-modal="true" tabindex="-1" data-close-modal="category-modal">
+      <div class="modal-content">
+        <div class="modal-header"><h3>🔹 Выбор категории</h3><div class="header-actions"><button class="btn btn-icon close-modal-btn" data-close-modal="category-modal">✕</button></div></div>
+        <div id="category-modal-content" class="filter-modal-body"></div>
+      </div>
+    </div>
+
+    <!-- Collections Manager Modal -->
+    <div id="collections-modal" class="modal" role="dialog" aria-modal="true" tabindex="-1" data-close-modal="collections-modal">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h3>📁 Управление списками</h3>
+          <div class="header-actions"><button class="btn btn-icon close-modal-btn" data-close-modal="collections-modal">✕</button></div>
+        </div>
+        
+        <div class="collection-create-card">
+            <div class="input-group">
+                <input type="text" id="new-list-icon" class="search-box" placeholder="📁" style="width: 50px; text-align: center; margin-right: 8px;" maxlength="2">
+                <input type="text" id="new-list-title" class="search-box" placeholder="Название нового списка...">
+                <button class="btn btn-quiz" data-action="create-list" style="padding: 0 15px;">➕</button>
+            </div>
+            <div class="collection-options">
+                <label class="switch-label">
+                    <input type="checkbox" id="new-list-public">
+                    <span class="slider-round"></span>
+                    <span class="switch-text">Сделать публичным</span>
+                </label>
+            </div>
+        </div>
+
+        <div class="section-divider"></div>
+        <div class="section-title-sm">Ваши коллекции</div>
+
+        <div id="collections-list" class="collections-list-container"></div>
+      </div>
+    </div>
+
+    <!-- Edit List Modal -->
+    <div id="edit-list-modal" class="modal" role="dialog" aria-modal="true" tabindex="-1" data-close-modal="edit-list-modal">
+      <div class="modal-content modal-centered" style="max-width: 350px;">
+        <div class="modal-header">
+          <h3>✏️ Редактирование</h3>
+          <div class="header-actions"><button class="btn btn-icon close-modal-btn" data-close-modal="edit-list-modal">✕</button></div>
+        </div>
+        <input type="hidden" id="edit-list-id">
+        <div class="input-group" style="margin-bottom: 15px; gap: 10px;">
+            <input type="text" id="edit-list-icon" class="search-box" placeholder="📁" style="width: 60px; text-align: center; font-size: 20px;" maxlength="2">
+            <input type="text" id="edit-list-title" class="search-box" placeholder="Название списка" style="flex: 1;">
+        </div>
+        <div style="display: flex; gap: 10px;">
+            <button class="btn" onclick="closeModal('edit-list-modal')" style="flex: 1;">Отмена</button>
+            <button class="btn btn-quiz" data-action="save-list-changes" style="flex: 1;">Сохранить</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Edit Word Modal -->
+    <div id="edit-word-modal" class="modal" role="dialog" aria-modal="true" tabindex="-1" data-close-modal="edit-word-modal">
+      <div class="modal-content modal-centered">
+        <div class="modal-header">
+          <h3>✏️ Редактирование слова</h3>
+          <div class="header-actions"><button class="btn btn-icon close-modal-btn" data-close-modal="edit-word-modal">✕</button></div>
+        </div>
+        <input type="hidden" id="edit-word-id">
+        <div class="input-group" style="margin-bottom: 15px; display: flex; flex-direction: column; gap: 10px;">
+            <label class="setting-label">Слово (KR)</label>
+            <input type="text" id="edit-word-kr" class="search-box" style="width: 100%;">
+            <label class="setting-label">Перевод (RU)</label>
+            <input type="text" id="edit-word-ru" class="search-box" style="width: 100%;">
+            <label class="setting-label">Тема (например: Школа)</label>
+            <input type="text" id="edit-word-topic" class="search-box" style="width: 100%;" list="topic-suggestions">
+            <label class="setting-label">Категория (например: Глагол)</label>
+            <input type="text" id="edit-word-category" class="search-box" style="width: 100%;" list="category-suggestions">
+        </div>
+        <div style="display: flex; gap: 10px;">
+            <button class="btn" data-action="delete-word" style="background: rgba(255,0,0,0.1); color: var(--danger); flex: 1;">Удалить</button>
+            <button class="btn btn-quiz" data-action="save-word-changes" style="flex: 2;">Сохранить</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Trash Modal -->
+    <div id="trash-modal" class="modal" role="dialog" aria-modal="true" tabindex="-1" data-close-modal="trash-modal">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h3>🗑️ Корзина</h3>
+          <div class="header-actions">
+            <button id="restore-all-btn" class="btn-text" style="color: var(--success); display: none;">Восстановить все</button>
+            <button id="empty-trash-btn" class="btn-text" style="color: var(--danger); display: none;">Очистить корзину</button>
+            <button class="btn btn-icon close-modal-btn" data-close-modal="trash-modal">✕</button>
+          </div>
+        </div>
+        <div id="trash-list" class="trash-list-container">
+            <!-- Deleted items will be rendered here -->
+        </div>
+      </div>
+    </div>
+
+    <datalist id="topic-suggestions"></datalist>
+    <datalist id="category-suggestions"></datalist>
+
+    <!-- Add Word To List Modal -->
+    <div id="add-to-list-modal" class="modal" role="dialog" aria-modal="true" tabindex="-1" data-close-modal="add-to-list-modal">
+      <div class="modal-content">
+        <div class="modal-header"><h3>Добавить в список</h3><div class="header-actions"><button class="btn btn-icon close-modal-btn" data-close-modal="add-to-list-modal">✕</button></div></div>
+        <div id="add-to-list-content" class="filter-modal-body"></div>
       </div>
     </div>
 
@@ -600,6 +787,7 @@
         <button class="btn btn-icon close-modal-btn" data-action="close-confirm" style="position: absolute; top: 15px; right: 15px; z-index: 1;">✕</button>
         <div style="font-size: 20px; font-weight: 800; margin-bottom: 10px;">⚠️ Подтверждение</div>
         <div style="margin-bottom: 20px; color: var(--text-sub); line-height: 1.5;" id="confirm-message">Вы уверены?</div>
+        <button id="confirm-copy-btn" class="btn-text" style="display: none; margin: -10px auto 15px auto; font-size: 13px; background: var(--surface-3);">📋 Копировать</button>
         <div id="confirm-input-container" style="display: none; margin-bottom: 15px;">
           <form onsubmit="return false;">
             <input type="password" id="confirm-password" class="search-box" placeholder="Введите пароль" style="width: 100%; text-align: center;">
@@ -721,11 +909,44 @@
             <button class="btn btn-icon close-modal-btn" data-close-modal="add-word-modal">✕</button>
           </div>
         </div>
-        <div style="margin-bottom: 20px; color: var(--text-sub); font-size: 14px; line-height: 1.5;">
-          Введите слово на корейском. Наш AI найдет перевод, примеры и озвучку, после чего добавит его в общую базу.
+        
+        <!-- Form View -->
+        <div id="add-word-form-view">
+            <div style="margin-bottom: 20px; color: var(--text-sub); font-size: 14px; line-height: 1.5;">
+            Введите одно слово или несколько через запятую. Наш AI (Gemini 2.5) найдет перевод, примеры и озвучку.
+            </div>
+            
+            <div class="input-group" style="margin-bottom: 20px;">
+                <textarea id="new-word-input" class="search-box" rows="3" placeholder="Например: 학교, 사랑, 가다" style="width: 100%; resize: vertical;"></textarea>
+                <button class="btn-icon" id="scan-image-btn" title="Распознать с камеры (Скоро)" style="position: absolute; bottom: 10px; right: 10px; width: 32px; height: 32px; font-size: 16px;">📷</button>
+            </div>
+            
+            <div style="margin-bottom: 10px; font-size: 14px; font-weight: 600;">Добавить в список (обязательно):</div>
+            <select id="new-word-target-list" class="search-box" style="width: 100%; margin-bottom: 20px;"></select>
+
+            <details style="margin-bottom: 20px; background: var(--surface-2); border-radius: 8px; padding: 10px;">
+                <summary style="cursor: pointer; font-size: 14px; font-weight: 600; color: var(--primary);">🔧 Настроить тему/категорию (опционально)</summary>
+                <div style="margin-top: 10px; display: flex; flex-direction: column; gap: 10px;">
+                    <input type="text" id="new-word-topic" class="search-box" placeholder="Тема (напр. Мои слова)" style="width: 100%;">
+                    <input type="text" id="new-word-category" class="search-box" placeholder="Категория (напр. Сущ.)" style="width: 100%;">
+                </div>
+            </details>
+
+            <button class="btn btn-quiz" data-action="submit-word-request" style="width: 100%;">Отправить заявку</button>
         </div>
-        <input type="text" id="new-word-input" class="search-box" placeholder="Например: 학교" style="width: 100%; margin-bottom: 20px;">
-        <button class="btn btn-quiz" data-action="submit-word-request" style="width: 100%;">Отправить заявку</button>
+
+        <!-- Progress View (Hidden by default) -->
+        <div id="add-word-progress-view" style="display: none; text-align: center; padding: 20px 0;">
+            <div class="spinner-wrapper" style="width: 60px; height: 60px; margin: 0 auto 20px;">
+                <div class="loader-circle" style="border-width: 4px;"></div>
+            </div>
+            <h3 style="margin-bottom: 10px;">AI обрабатывает слова...</h3>
+            <div class="progress-container" style="background: var(--surface-3); height: 8px; border-radius: 4px; overflow: hidden; margin-bottom: 10px;">
+                <div id="word-request-progress-bar" style="width: 0%; height: 100%; background: var(--primary); transition: width 0.3s;"></div>
+            </div>
+            <div id="word-request-status-text" style="color: var(--text-sub); font-size: 14px;">Ожидание...</div>
+            <button id="cancel-word-request-btn" class="btn" style="margin-top: 20px; background: var(--surface-2); color: var(--text-sub); font-size: 13px; padding: 8px 16px;">Отмена</button>
+        </div>
       </div>
     </div>
 
@@ -824,7 +1045,7 @@
                         <div style="display: flex; justify-content: space-between; margin-bottom: 10px;">
                             <div class="setting-left"><span class="setting-icon">🎨</span><span class="setting-label">Цветовая тема</span></div>
                         </div>
-                        <div style="display: flex; gap: 10px; justify-content: space-between;">
+                        <div style="display: flex; gap: 10px; justify-content: space-between; flex-wrap: wrap;">
                             <button class="color-option" data-action="set-accent" data-value="purple"></button>
                             <button class="color-option" data-action="set-accent" data-value="blue"></button>
                             <button class="color-option" data-action="set-accent" data-value="green"></button>
@@ -893,9 +1114,26 @@
                             <span class="slider"></span>
                         </label>
                     </div>
+                    <div class="setting-item">
+                        <div class="setting-left"><span class="setting-icon">🧠</span><span class="setting-label">AI Модель</span></div>
+                        <div class="setting-right"><span class="setting-value" style="font-size: 12px; background: var(--surface-3); padding: 4px 8px; border-radius: 6px;">Gemini 2.5 Flash</span></div>
+                    </div>
                     <div class="setting-item" data-modal-target="quotes-modal" style="cursor: pointer;">
                         <div class="setting-left"><span class="setting-icon">📜</span><span class="setting-label">Избранные цитаты</span></div>
                         <div class="setting-right"><span class="setting-arrow">›</span></div>
+                    </div>
+                    <div class="setting-item" data-modal-target="trash-modal" style="cursor: pointer;">
+                        <div class="setting-left"><span class="setting-icon">🗑️</span><span class="setting-label">Корзина</span></div>
+                        <div class="setting-right"><span id="trash-count-badge" class="badge-count" style="display: none;">0</span><span class="setting-arrow">›</span></div>
+                    </div>
+                    <div class="setting-item" style="display: block;">
+                        <div class="setting-left" style="margin-bottom: 10px;"><span class="setting-icon">⏳</span><span class="setting-label">Хранение в корзине</span></div>
+                        <div class="segment-control" id="trash-retention-options">
+                            <button class="segment-btn" data-action="set-trash-retention" data-value="7">7 дн.</button>
+                            <button class="segment-btn" data-action="set-trash-retention" data-value="30">30 дн.</button>
+                            <button class="segment-btn" data-action="set-trash-retention" data-value="90">90 дн.</button>
+                            <button class="segment-btn" data-action="set-trash-retention" data-value="365">1 год</button>
+                        </div>
                     </div>
                     <div class="setting-item" data-modal-target="achievements-modal" style="cursor: pointer;">
                         <div class="setting-left"><span class="setting-icon">🏆</span><span class="setting-label">Достижения</span></div>
