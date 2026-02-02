@@ -1,43 +1,85 @@
 import { state } from "../core/state.ts";
-import { duckBackgroundMusic } from "../ui/ui_settings.ts";
 
 /**
  * Icons mapping for topics and categories
  */
 export const ICONS_MAP: Record<string, string> = {
-  "daily": "🏠", "life": "🏠", "жизнь": "🏠",
-  "economics": "💰", "economy": "💰", "экономика": "💰",
-  "politics": "🏛️", "политика": "🏛️",
-  "society": "👥", "social": "👥", "общество": "👥",
-  "culture": "🎭", "культура": "🎭",
-  "health": "🏥", "здоровье": "🏥",
-  "environment": "🌳", "nature": "🌳", "природа": "🌳", "экология": "🌳",
-  "science": "🔬", "наука": "🔬",
-  "education": "🎓", "school": "🎓", "образование": "🎓", "школа": "🎓",
-  "history": "📜", "история": "📜",
-  "art": "🎨", "искусство": "🎨",
-  "sports": "⚽", "спорт": "⚽",
-  "weather": "🌤️", "погода": "🌤️",
-  "shopping": "🛍️", "покупки": "🛍️",
-  "travel": "✈️", "путешествия": "✈️",
-  "food": "🍔", "cooking": "🍳", "еда": "🍔",
-  "work": "💼", "job": "💼", "работа": "💼",
-  "feelings": "😊", "emotion": "😊", "чувства": "😊",
-  "personality": "🧠", "характер": "🧠",
-  "appearance": "👀", "внешность": "👀",
-  "hobbies": "🎮", "хобби": "🎮",
-  "noun": "📦", "существительное": "📦",
-  "verb": "🏃", "глагол": "🏃",
-  "adjective": "💎", "прилагательное": "💎",
-  "adverb": "🚀", "наречие": "🚀",
-  "particle": "🔗", "частица": "🔗",
-  "suffix": "📎", "суффикс": "📎",
-  "pronoun": "👈", "местоимение": "👈",
-  "number": "🔢", "числительное": "🔢",
-  "interjection": "❗", "междометие": "❗"
+  daily: "🏠",
+  life: "🏠",
+  жизнь: "🏠",
+  economics: "💰",
+  economy: "💰",
+  экономика: "💰",
+  politics: "🏛️",
+  политика: "🏛️",
+  society: "👥",
+  social: "👥",
+  общество: "👥",
+  culture: "🎭",
+  культура: "🎭",
+  health: "🏥",
+  здоровье: "🏥",
+  environment: "🌳",
+  nature: "🌳",
+  природа: "🌳",
+  экология: "🌳",
+  science: "🔬",
+  наука: "🔬",
+  education: "🎓",
+  school: "🎓",
+  образование: "🎓",
+  школа: "🎓",
+  history: "📜",
+  история: "📜",
+  art: "🎨",
+  искусство: "🎨",
+  sports: "⚽",
+  спорт: "⚽",
+  weather: "🌤️",
+  погода: "🌤️",
+  shopping: "🛍️",
+  покупки: "🛍️",
+  travel: "✈️",
+  путешествия: "✈️",
+  food: "🍔",
+  cooking: "🍳",
+  еда: "🍔",
+  work: "💼",
+  job: "💼",
+  работа: "💼",
+  feelings: "😊",
+  emotion: "😊",
+  чувства: "😊",
+  personality: "🧠",
+  характер: "🧠",
+  appearance: "👀",
+  внешность: "👀",
+  hobbies: "🎮",
+  хобби: "🎮",
+  noun: "📦",
+  существительное: "📦",
+  verb: "🏃",
+  глагол: "🏃",
+  adjective: "💎",
+  прилагательное: "💎",
+  adverb: "🚀",
+  наречие: "🚀",
+  particle: "🔗",
+  частица: "🔗",
+  suffix: "📎",
+  суффикс: "📎",
+  pronoun: "👈",
+  местоимение: "👈",
+  number: "🔢",
+  числительное: "🔢",
+  interjection: "❗",
+  междометие: "❗",
 };
 
-export function getIconForValue(value: string, defaultIcon: string = "🔹"): string {
+export function getIconForValue(
+  value: string,
+  defaultIcon: string = "🔹",
+): string {
   if (!value || value === "all") return "🌍";
   const lower = value.toLowerCase();
   for (const key in ICONS_MAP) {
@@ -64,7 +106,12 @@ export function debounce<T extends (...args: unknown[]) => unknown>(
  * Shows a toast with an Undo button.
  * Executes onCommit after timeout if not undone.
  */
-export function showUndoToast(msg: string, onUndo: () => void, onCommit: () => void, timeout: number = 5000) {
+export function showUndoToast(
+  msg: string,
+  onUndo: () => void,
+  onCommit: () => void,
+  timeout: number = 5000,
+) {
   const container = document.getElementById("toast-container");
   if (!container) {
     onCommit();
@@ -73,8 +120,9 @@ export function showUndoToast(msg: string, onUndo: () => void, onCommit: () => v
 
   const el = document.createElement("div");
   el.className = "toast-item";
-  el.style.cssText = "display: flex; align-items: center; justify-content: space-between; gap: 15px; min-width: 280px; padding-right: 10px;";
-  
+  el.style.cssText =
+    "display: flex; align-items: center; justify-content: space-between; gap: 15px; min-width: 280px; padding-right: 10px;";
+
   el.innerHTML = `
     <span>${msg}</span>
     <button style="background: rgba(255,255,255,0.2); border: none; color: inherit; padding: 5px 10px; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: bold;">↩ Отмена</button>
@@ -82,11 +130,11 @@ export function showUndoToast(msg: string, onUndo: () => void, onCommit: () => v
   `;
 
   container.appendChild(el);
-  
+
   // Запуск анимации полоски
   requestAnimationFrame(() => {
-      const bar = el.querySelector("div") as HTMLElement;
-      if (bar) bar.style.width = "0%";
+    const bar = el.querySelector("div") as HTMLElement;
+    if (bar) bar.style.width = "0%";
   });
 
   let isUndone = false;
@@ -217,7 +265,7 @@ export function generateDiffHtml(user: string, correct: string): string {
 }
 
 // Helper: Выполнить функцию при первом взаимодействии пользователя
-let interactionListeners: { type: string, handler: EventListener }[] = [];
+let interactionListeners: { type: string; handler: EventListener }[] = [];
 
 function cleanupInteractionListeners() {
   interactionListeners.forEach(({ type, handler }) => {
@@ -232,7 +280,7 @@ function onUserInteraction(fn: () => void) {
     cleanupInteractionListeners();
     fn();
   };
-  ['click', 'touchstart', 'keydown'].forEach(evt => {
+  ["click", "touchstart", "keydown"].forEach((evt) => {
     document.addEventListener(evt, handler, { capture: true, once: true });
     interactionListeners.push({ type: evt, handler });
   });
@@ -269,7 +317,16 @@ export function cancelSpeech() {
  * Plays a synthesized tone using Web Audio API.
  */
 
-type ToneType = "success" | "failure" | "survival-success" | "life-lost" | "cash-register" | "achievement-unlock" | "pop" | "flip" | "tick";
+type ToneType =
+  | "success"
+  | "failure"
+  | "survival-success"
+  | "life-lost"
+  | "cash-register"
+  | "achievement-unlock"
+  | "pop"
+  | "flip"
+  | "tick";
 
 export function playTone(
   type: ToneType = "success",
@@ -320,7 +377,7 @@ export function playTone(
         o.frequency.setValueAtTime(523.25, now); // C5
         o.frequency.setValueAtTime(659.25, now + 0.1); // E5
         o.frequency.setValueAtTime(783.99, now + 0.2); // G5
-        o.frequency.setValueAtTime(1046.50, now + 0.3); // C6
+        o.frequency.setValueAtTime(1046.5, now + 0.3); // C6
         g.gain.setValueAtTime(0.1, now);
         g.gain.linearRampToValueAtTime(0.1, now + 0.3);
         g.gain.exponentialRampToValueAtTime(0.001, now + 0.8);
@@ -379,34 +436,46 @@ export function playComboSound(streak: number): Promise<void> {
     try {
       const ctx = _ensureAudio();
       if (!ctx) return resolve();
-      
+
       // C Major Scale frequencies
       const scale = [
-        261.63, 293.66, 329.63, 349.23, 392.00, 440.00, 493.88, // 4th octave
-        523.25, 587.33, 659.25, 698.46, 783.99, 880.00, 987.77, // 5th octave
-        1046.50 // C6
+        261.63,
+        293.66,
+        329.63,
+        349.23,
+        392.0,
+        440.0,
+        493.88, // 4th octave
+        523.25,
+        587.33,
+        659.25,
+        698.46,
+        783.99,
+        880.0,
+        987.77, // 5th octave
+        1046.5, // C6
       ];
-      
+
       const index = Math.min(streak - 1, scale.length - 1);
       const freq = scale[Math.max(0, index)];
-      
+
       const o = ctx.createOscillator();
       const g = ctx.createGain();
       o.connect(g);
       g.connect(ctx.destination);
-      
+
       const now = ctx.currentTime;
-      
+
       o.type = "triangle";
       o.frequency.setValueAtTime(freq, now);
       o.frequency.linearRampToValueAtTime(freq * 1.05, now + 0.1); // Slight slide up
-      
+
       g.gain.setValueAtTime(0.1, now);
       g.gain.exponentialRampToValueAtTime(0.001, now + 0.3);
-      
+
       o.start();
       o.stop(now + 0.3);
-      
+
       setTimeout(resolve, 300);
     } catch {
       resolve();
@@ -417,12 +486,16 @@ export function playComboSound(streak: number): Promise<void> {
 /**
  * Simulates a typewriter effect on an element.
  */
-export function typeText(element: HTMLElement, text: string, speed: number = 40): Promise<void> {
+export function typeText(
+  element: HTMLElement,
+  text: string,
+  speed: number = 40,
+): Promise<void> {
   return new Promise((resolve) => {
     element.textContent = "";
     element.classList.add("typing-effect");
     let i = 0;
-    
+
     function type() {
       if (i < text.length) {
         element.textContent += text.charAt(i);
@@ -433,7 +506,7 @@ export function typeText(element: HTMLElement, text: string, speed: number = 40)
         resolve();
       }
     }
-    
+
     type();
   });
 }
@@ -446,7 +519,9 @@ export function speak(
   url: string | null | undefined,
 ): Promise<void> {
   // Приглушаем музыку в начале
-  duckBackgroundMusic(true);
+  document.dispatchEvent(
+    new CustomEvent("duck-music", { detail: { duck: true } }),
+  );
 
   // FIX: Останавливаем любое предыдущее аудио перед запуском нового
   if (_currentAudio) {
@@ -497,12 +572,14 @@ export function speak(
 
         const isAutoplayBlock = e.name === "NotAllowedError";
         if (isAutoplayBlock) {
-          console.warn("🔊 Autoplay blocked (Audio). Attempting TTS fallback...");
+          console.warn(
+            "🔊 Autoplay blocked (Audio). Attempting TTS fallback...",
+          );
           // Если нет текста для фоллбэка, ставим аудио в очередь на клик
           if (!t) {
-             // FIX: Не резолвим промис сразу, а ждем взаимодействия
-             onUserInteraction(() => speak(null, url).then(resolve));
-             return;
+            // FIX: Не резолвим промис сразу, а ждем взаимодействия
+            onUserInteraction(() => speak(null, url).then(resolve));
+            return;
           }
         } else {
           console.warn("Audio play error", e);
@@ -540,11 +617,13 @@ export function speak(
       u.onend = () => resolve();
       u.onerror = (e) => {
         // FIX: Игнорируем ошибку автовоспроизведения для TTS
-        if (e.error === 'not-allowed') {
-           console.warn("🔊 TTS Autoplay blocked. Queuing retry on interaction.");
-           // FIX: Ждем взаимодействия
-           onUserInteraction(() => speak(t, null).then(resolve));
-           return;
+        if (e.error === "not-allowed") {
+          console.warn(
+            "🔊 TTS Autoplay blocked. Queuing retry on interaction.",
+          );
+          // FIX: Ждем взаимодействия
+          onUserInteraction(() => speak(t, null).then(resolve));
+          return;
         }
         console.warn("SpeechSynthesis error", e);
         resolve(); // Всегда разрешаем промис, чтобы восстановить громкость
@@ -559,57 +638,10 @@ export function speak(
 
   // Когда озвучка завершена (успешно или с ошибкой), восстанавливаем громкость
   promise.finally(() => {
-    duckBackgroundMusic(false);
+    document.dispatchEvent(
+      new CustomEvent("duck-music", { detail: { duck: false } }),
+    );
   });
 
   return promise;
-}
-
-/**
- * Simple LZW compression for strings (to save localStorage space).
- */
-export function compress(s: string): string {
-  const dict: Record<string, number> = {};
-  const data = (s + "").split("");
-  const out: number[] = [];
-  let currChar;
-  let phrase = data[0];
-  let code = 256;
-  for (let i = 1; i < data.length; i++) {
-    currChar = data[i];
-    if (dict[phrase + currChar] != null) {
-      phrase += currChar;
-    } else {
-      out.push(phrase.length > 1 ? dict[phrase] : phrase.charCodeAt(0));
-      dict[phrase + currChar] = code;
-      code++;
-      phrase = currChar;
-    }
-  }
-  out.push(phrase.length > 1 ? dict[phrase] : phrase.charCodeAt(0));
-  return out.map((c) => String.fromCharCode(c)).join("");
-}
-
-/**
- * Simple LZW decompression.
- */
-export function decompress(s: string): string {
-  const dict: Record<number, string> = {};
-  const data = (s + "").split("");
-  let currChar = data[0];
-  let oldPhrase = currChar;
-  const out = [currChar];
-  let code = 256;
-  let phrase;
-  for (let i = 1; i < data.length; i++) {
-    const currCode = data[i].charCodeAt(0);
-    if (currCode < 256) phrase = data[i];
-    else phrase = dict[currCode] ? dict[currCode] : oldPhrase + currChar;
-    out.push(phrase);
-    currChar = phrase.charAt(0);
-    dict[code] = oldPhrase + currChar;
-    code++;
-    oldPhrase = phrase;
-  }
-  return out.join("");
 }

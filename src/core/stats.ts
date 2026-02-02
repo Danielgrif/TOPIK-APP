@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { state } from "./state.ts";
 import { showToast, playTone } from "../utils/utils.ts";
 import { showLevelUpAnimation } from "../ui/ui_interactions.ts";
@@ -21,10 +22,10 @@ export function addXP(val: number) {
     state.userStats.xp -= requiredForCurrentLevel;
     currentLevel++;
     showLevelUpAnimation(currentLevel);
-    
+
     requiredForCurrentLevel = getXPForNextLevel(currentLevel);
   }
-  
+
   state.userStats.level = currentLevel;
   updateXPUI();
   scheduleSaveState();
@@ -133,11 +134,11 @@ export function updateSRSBadge() {
     });
     const q = Scheduler.getQueue({ limit: 999 });
     const badge = document.getElementById("srs-badge");
-    
+
     if (badge) {
       const currentCount = parseInt(badge.textContent || "0");
       const newCount = q.length;
-      
+
       badge.textContent = String(q.length);
       badge.style.display = q.length > 0 ? "inline-block" : "none";
 
@@ -493,7 +494,7 @@ export function renderDetailedStats() {
   }
 
   const days = getLast7DaysActivity();
-  const additionalHtml = ''; // Define additionalHtml to prevent error
+  const additionalHtml = ""; // Define additionalHtml to prevent error
   let streakHtml = `
     <div id="streak-calendar-card" class="streak-calendar-card" style="background: var(--surface-1); padding: 20px; border-radius: 16px; border: 1px solid var(--border-color); margin-bottom: 20px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 15px;">
       <div style="display: flex; align-items: center; gap: 15px;">
@@ -593,7 +594,7 @@ export function renderActivityChart() {
     d.setDate(now.getDate() - i);
     const localDateStr = d.toLocaleDateString("en-CA");
     labels.push(d.toLocaleDateString("ru-RU", { weekday: "short" }));
-    
+
     // Hybrid approach:
     // 1. Count newly learned words (precise)
     let learnedCount = 0;
@@ -607,11 +608,13 @@ export function renderActivityChart() {
     // 2. If learned count is 0 (likely past days before migration), fallback to session activity
     // This ensures the chart isn't empty for past active days
     if (learnedCount === 0 && i > 0) {
-        const sessionActivity = state.sessions
-            .filter(s => new Date(s.date).toLocaleDateString("en-CA") === localDateStr)
-            .reduce((acc, s) => acc + (s.wordsReviewed || 0), 0);
-        // Use session activity but scale it down slightly to approximate "learned" vs "reviewed"
-        learnedCount = Math.ceil(sessionActivity * 0.5); 
+      const sessionActivity = state.sessions
+        .filter(
+          (s) => new Date(s.date).toLocaleDateString("en-CA") === localDateStr,
+        )
+        .reduce((acc, s) => acc + (s.wordsReviewed || 0), 0);
+      // Use session activity but scale it down slightly to approximate "learned" vs "reviewed"
+      learnedCount = Math.ceil(sessionActivity * 0.5);
     }
 
     dataPoints.push(learnedCount);
@@ -645,16 +648,20 @@ export function renderActivityChart() {
         y: {
           beginAtZero: true,
           grid: { color: theme.gridColor, drawBorder: false },
-          ticks: { color: theme.textColor, font: { family: theme.fontFamily }, precision: 0 }
+          ticks: {
+            color: theme.textColor,
+            font: { family: theme.fontFamily },
+            precision: 0,
+          },
         },
         x: {
           grid: { display: false },
-          ticks: { color: theme.textColor, font: { family: theme.fontFamily } }
-        }
+          ticks: { color: theme.textColor, font: { family: theme.fontFamily } },
+        },
       },
       animation: {
         duration: 1000,
-        easing: 'easeOutQuart'
+        easing: "easeOutQuart",
       },
       tooltip: {
         backgroundColor: theme.tooltipBg,
@@ -667,8 +674,8 @@ export function renderActivityChart() {
         displayColors: false,
         callbacks: {
           label: (context: any) => `📝 ~${context.raw} слов`,
-        }
-      }
+        },
+      },
     },
   });
 }
@@ -685,8 +692,8 @@ export function renderLearnedChart() {
   // Group learned words by level
   const levels = { "★☆☆": 0, "★★☆": 0, "★★★": 0 };
   const totals = { "★☆☆": 0, "★★☆": 0, "★★★": 0 };
-  
-  state.dataStore.forEach(w => {
+
+  state.dataStore.forEach((w) => {
     if (w.level && w.level in totals) {
       // @ts-ignore
       totals[w.level]++;
@@ -701,13 +708,15 @@ export function renderLearnedChart() {
     type: "bar",
     data: {
       labels: Object.keys(levels),
-      datasets: [{
-        label: "Изучено",
-        data: Object.values(levels),
-        backgroundColor: ["#00b894", "#0984e3", "#6c5ce7"],
-        borderRadius: 6,
-        barThickness: 25,
-      }]
+      datasets: [
+        {
+          label: "Изучено",
+          data: Object.values(levels),
+          backgroundColor: ["#00b894", "#0984e3", "#6c5ce7"],
+          borderRadius: 6,
+          barThickness: 25,
+        },
+      ],
     },
     options: {
       responsive: true,
@@ -730,22 +739,26 @@ export function renderLearnedChart() {
               const val = context.raw;
               const pct = total > 0 ? Math.round((val / total) * 100) : 0;
               return `📚 ${val} из ${total} (${pct}%)`;
-            }
-          }
-        }
+            },
+          },
+        },
       },
       scales: {
         y: {
           beginAtZero: true,
           grid: { color: theme.gridColor, drawBorder: false },
-          ticks: { color: theme.textColor, font: { family: theme.fontFamily }, precision: 0 }
+          ticks: {
+            color: theme.textColor,
+            font: { family: theme.fontFamily },
+            precision: 0,
+          },
         },
         x: {
           grid: { display: false },
-          ticks: { color: theme.textColor, font: { family: theme.fontFamily } }
-        }
-      }
-    }
+          ticks: { color: theme.textColor, font: { family: theme.fontFamily } },
+        },
+      },
+    },
   });
 }
 
@@ -758,7 +771,7 @@ export function renderAccuracyChart() {
 
   const theme = getChartTheme();
   const recentSessions = state.sessions.slice(-10);
-  
+
   if (recentSessions.length === 0) {
     // Если нет данных, можно очистить канвас или нарисовать "Нет данных"
     // В данном случае просто выходим, оставляя пустой канвас (или старый график, если он был, но destroyChart его удалил)
@@ -810,21 +823,26 @@ export function renderAccuracyChart() {
           padding: 10,
           cornerRadius: 8,
           callbacks: {
-            label: (context: any) => `🎯 ${context.raw}%`
-          }
-        }
+            label: (context: any) => `🎯 ${context.raw}%`,
+          },
+        },
       },
       scales: {
         y: {
           beginAtZero: true,
           max: 100,
           grid: { color: theme.gridColor, drawBorder: false },
-          ticks: { color: theme.textColor, font: { family: theme.fontFamily } }
+          ticks: { color: theme.textColor, font: { family: theme.fontFamily } },
         },
         x: {
           grid: { display: false },
-          ticks: { color: theme.textColor, font: { family: theme.fontFamily }, maxRotation: 0, autoSkip: true }
-        }
+          ticks: {
+            color: theme.textColor,
+            font: { family: theme.fontFamily },
+            maxRotation: 0,
+            autoSkip: true,
+          },
+        },
       },
     },
   });
@@ -842,13 +860,15 @@ export function renderForgettingCurve() {
   // --- Calculate User's Average Stability ---
   let totalInterval = 0;
   let reviewedCount = 0;
-  Object.values(state.wordHistory).forEach(h => {
-      if (h && h.sm2 && h.sm2.interval > 1) { // Use interval > 1 to only count reviewed words
-          totalInterval += h.sm2.interval;
-          reviewedCount++;
-      }
+  Object.values(state.wordHistory).forEach((h) => {
+    if (h && h.sm2 && h.sm2.interval > 1) {
+      // Use interval > 1 to only count reviewed words
+      totalInterval += h.sm2.interval;
+      reviewedCount++;
+    }
   });
-  const averageStability = reviewedCount > 0 ? totalInterval / reviewedCount : 2.5;
+  const averageStability =
+    reviewedCount > 0 ? totalInterval / reviewedCount : 2.5;
 
   const labels = [];
   const theoreticalData = [];
@@ -900,8 +920,11 @@ export function renderForgettingCurve() {
       plugins: {
         legend: {
           display: true,
-          position: 'top',
-          labels: { color: theme.textColor, font: { family: theme.fontFamily } }
+          position: "top",
+          labels: {
+            color: theme.textColor,
+            font: { family: theme.fontFamily },
+          },
         },
         tooltip: {
           backgroundColor: theme.tooltipBg,
@@ -910,21 +933,22 @@ export function renderForgettingCurve() {
           borderColor: theme.gridColor,
           borderWidth: 1,
           callbacks: {
-            label: (context: any) => `🧠 ${context.dataset.label}: ${Math.round(context.raw)}%`
-          }
-        }
+            label: (context: any) =>
+              `🧠 ${context.dataset.label}: ${Math.round(context.raw)}%`,
+          },
+        },
       },
       scales: {
         y: {
           beginAtZero: true,
           max: 100,
           grid: { color: theme.gridColor, drawBorder: false },
-          ticks: { color: theme.textColor, font: { family: theme.fontFamily } }
+          ticks: { color: theme.textColor, font: { family: theme.fontFamily } },
         },
         x: {
           grid: { display: false },
-          ticks: { color: theme.textColor, font: { family: theme.fontFamily } }
-        }
+          ticks: { color: theme.textColor, font: { family: theme.fontFamily } },
+        },
       },
     },
   });
@@ -980,7 +1004,7 @@ export function renderSRSDistributionChart() {
             color: theme.textColor,
             font: { family: theme.fontFamily, size: 12 },
             padding: 20,
-          }
+          },
         },
         tooltip: {
           backgroundColor: theme.tooltipBg,
@@ -993,12 +1017,15 @@ export function renderSRSDistributionChart() {
           callbacks: {
             label: (context: any) => {
               const val = context.raw;
-              const total = context.dataset.data.reduce((a: number, b: number) => a + b, 0);
+              const total = context.dataset.data.reduce(
+                (a: number, b: number) => a + b,
+                0,
+              );
               const pct = total > 0 ? Math.round((val / total) * 100) : 0;
               return ` ${context.label}: ${val} (${pct}%)`;
-            }
-          }
-        }
+            },
+          },
+        },
       },
       animation: {
         animateRotate: true,
@@ -1006,34 +1033,36 @@ export function renderSRSDistributionChart() {
         duration: 1200,
       },
     },
-    plugins: [{
-        id: 'centerText',
+    plugins: [
+      {
+        id: "centerText",
         afterDraw: (chart: any) => {
-            const ctx = chart.ctx;
-            const { width, height } = chart;
+          const ctx = chart.ctx;
+          const { width, height } = chart;
 
-            ctx.restore();
-            const fontSize = (height / 115).toFixed(2);
-            ctx.font = `bold ${fontSize}em ${theme.fontFamily}`;
-            ctx.textBaseline = 'middle';
-            ctx.textAlign = 'center';
+          ctx.restore();
+          const fontSize = (height / 115).toFixed(2);
+          ctx.font = `bold ${fontSize}em ${theme.fontFamily}`;
+          ctx.textBaseline = "middle";
+          ctx.textAlign = "center";
 
-            const text = `${totalWords}`;
-            const textX = width / 2;
-            const textY = height / 2;
+          const text = `${totalWords}`;
+          const textX = width / 2;
+          const textY = height / 2;
 
-            const label = 'слов';
-            const labelFontSize = (height / 250).toFixed(2);
-            
-            ctx.fillStyle = theme.textColor;
-            ctx.fillText(text, textX, textY - (height * 0.05));
-            
-            ctx.font = `600 ${labelFontSize}em ${theme.fontFamily}`;
-            ctx.fillStyle = theme.textColor.replace(')', ', 0.7)');
-            ctx.fillText(label, textX, textY + (height * 0.08));
+          const label = "слов";
+          const labelFontSize = (height / 250).toFixed(2);
 
-            ctx.save();
-        }
-    }]
+          ctx.fillStyle = theme.textColor;
+          ctx.fillText(text, textX, textY - height * 0.05);
+
+          ctx.font = `600 ${labelFontSize}em ${theme.fontFamily}`;
+          ctx.fillStyle = theme.textColor.replace(")", ", 0.7)");
+          ctx.fillText(label, textX, textY + height * 0.08);
+
+          ctx.save();
+        },
+      },
+    ],
   });
 }

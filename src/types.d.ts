@@ -65,6 +65,7 @@ declare global {
     restoreWord: (id: number) => void;
     permanentlyDeleteWord: (id: number, btn: HTMLElement) => void;
     handleBulkAddToList: (listId: string) => void;
+    toggleWordInList: (listId: string, wId: number, el: HTMLElement) => void;
 
     // Auth & Settings
     handleAuth: (type: string) => void;

@@ -1,5 +1,9 @@
 import { state } from "../core/state.ts";
-import { parseBilingualString, showToast, getIconForValue } from "../utils/utils.ts";
+import {
+  parseBilingualString,
+  showToast,
+  getIconForValue,
+} from "../utils/utils.ts";
 import { render } from "./ui_card.ts";
 import { Word } from "../types/index.ts";
 
@@ -81,7 +85,9 @@ function createMultiselectItem(value: string, label: string): HTMLElement {
   const itemDiv = document.createElement("div");
   itemDiv.className = "multiselect-item";
 
-  const isChecked = state.currentTopic.includes(value) || (value === "all" && state.currentTopic.includes("all"));
+  const isChecked =
+    state.currentTopic.includes(value) ||
+    (value === "all" && state.currentTopic.includes("all"));
   const icon = getIconForValue(value, "🏷️");
   itemDiv.innerHTML = `<input type="checkbox" ${isChecked ? "checked" : ""}> <span style="margin-right: 6px;">${icon}</span> <span>${label}</span>`;
 
@@ -97,9 +103,10 @@ export function populateFilters() {
   // Update Topic Button Text
   const topicBtn = document.getElementById("topic-filter-btn");
   if (topicBtn) {
-    const countLabel = state.currentTopic.includes("all") || state.currentTopic.length === 0
-    ? "Все темы"
-    : `Выбрано: ${state.currentTopic.length}`;
+    const countLabel =
+      state.currentTopic.includes("all") || state.currentTopic.length === 0
+        ? "Все темы"
+        : `Выбрано: ${state.currentTopic.length}`;
     topicBtn.innerHTML = `<span>${countLabel}</span> <span>›</span>`;
   }
 
@@ -107,7 +114,7 @@ export function populateFilters() {
   const topicContainer = document.getElementById("topic-modal-content");
   if (topicContainer) {
     topicContainer.innerHTML = "";
-    
+
     // --- Search Input for Topics ---
     const searchInput = document.createElement("input");
     searchInput.type = "text";
@@ -118,31 +125,33 @@ export function populateFilters() {
       const val = (e.target as HTMLInputElement).value.toLowerCase();
       topicContainer.querySelectorAll(".multiselect-item").forEach((el) => {
         const text = el.textContent?.toLowerCase() || "";
-        (el as HTMLElement).style.display = text.includes(val) ? "flex" : "none";
+        (el as HTMLElement).style.display = text.includes(val)
+          ? "flex"
+          : "none";
       });
     };
     topicContainer.appendChild(searchInput);
 
-    const actionsDiv = document.createElement('div');
-    actionsDiv.className = 'multiselect-actions';
-    
-    const selectAllBtn = document.createElement('button');
-    selectAllBtn.className = 'multiselect-action-btn';
-    selectAllBtn.textContent = 'Выбрать все';
+    const actionsDiv = document.createElement("div");
+    actionsDiv.className = "multiselect-actions";
+
+    const selectAllBtn = document.createElement("button");
+    selectAllBtn.className = "multiselect-action-btn";
+    selectAllBtn.textContent = "Выбрать все";
     selectAllBtn.onclick = (e) => {
       e.stopPropagation();
       state.currentTopic = getTopicsForCurrentType();
-      if (state.currentTopic.length === 0) state.currentTopic = ['all'];
+      if (state.currentTopic.length === 0) state.currentTopic = ["all"];
       populateFilters();
       render();
     };
 
-    const deselectAllBtn = document.createElement('button');
-    deselectAllBtn.className = 'multiselect-action-btn';
-    deselectAllBtn.textContent = 'Сбросить';
+    const deselectAllBtn = document.createElement("button");
+    deselectAllBtn.className = "multiselect-action-btn";
+    deselectAllBtn.textContent = "Сбросить";
     deselectAllBtn.onclick = (e) => {
       e.stopPropagation();
-      state.currentTopic = ['all'];
+      state.currentTopic = ["all"];
       populateFilters();
       render();
     };
@@ -166,16 +175,28 @@ export function populateFilters() {
     topicContainer.appendChild(listContainer);
 
     const sortedTopics = getTopicsForCurrentType();
-    const allItems = [{ value: "all", label: "Все темы" }, ...sortedTopics.map(t => ({ value: t, label: parseBilingualString(t).ru }))];
+    const allItems = [
+      { value: "all", label: "Все темы" },
+      ...sortedTopics.map((t) => ({
+        value: t,
+        label: parseBilingualString(t).ru,
+      })),
+    ];
     let searchFilteredItems = allItems;
 
     const renderVisibleItems = () => {
       const scrollTop = listContainer.scrollTop;
       const viewportHeight = listContainer.clientHeight;
 
-      const startIndex = Math.max(0, Math.floor(scrollTop / VIRTUAL_ITEM_HEIGHT) - VIRTUAL_BUFFER);
+      const startIndex = Math.max(
+        0,
+        Math.floor(scrollTop / VIRTUAL_ITEM_HEIGHT) - VIRTUAL_BUFFER,
+      );
       const visibleItemsCount = Math.ceil(viewportHeight / VIRTUAL_ITEM_HEIGHT);
-      const endIndex = Math.min(searchFilteredItems.length, startIndex + visibleItemsCount + VIRTUAL_BUFFER * 2);
+      const endIndex = Math.min(
+        searchFilteredItems.length,
+        startIndex + visibleItemsCount + VIRTUAL_BUFFER * 2,
+      );
 
       const topOffset = startIndex * VIRTUAL_ITEM_HEIGHT;
       virtualContent.style.transform = `translateY(${topOffset}px)`;
@@ -183,8 +204,8 @@ export function populateFilters() {
 
       const fragment = document.createDocumentFragment();
       for (let i = startIndex; i < endIndex; i++) {
-          const item = searchFilteredItems[i];
-          fragment.appendChild(createMultiselectItem(item.value, item.label));
+        const item = searchFilteredItems[i];
+        fragment.appendChild(createMultiselectItem(item.value, item.label));
       }
       virtualContent.appendChild(fragment);
     };
@@ -192,7 +213,9 @@ export function populateFilters() {
     // Override input handler to update virtual list
     searchInput.oninput = (e) => {
       const val = (e.target as HTMLInputElement).value.toLowerCase();
-      searchFilteredItems = allItems.filter(item => item.label.toLowerCase().includes(val));
+      searchFilteredItems = allItems.filter((item) =>
+        item.label.toLowerCase().includes(val),
+      );
       sizer.style.height = `${searchFilteredItems.length * VIRTUAL_ITEM_HEIGHT}px`;
       listContainer.scrollTop = 0;
       renderVisibleItems();
@@ -211,8 +234,11 @@ function populateCategoryFilter() {
   const catBtn = document.getElementById("category-filter-btn");
   if (catBtn) {
     let currentLabel = "Все категории";
-    if (!state.currentCategory.includes("all") && state.currentCategory.length > 0) {
-       currentLabel = `Выбрано: ${state.currentCategory.length}`;
+    if (
+      !state.currentCategory.includes("all") &&
+      state.currentCategory.length > 0
+    ) {
+      currentLabel = `Выбрано: ${state.currentCategory.length}`;
     }
     catBtn.innerHTML = `<span>${currentLabel}</span> <span>›</span>`;
   }
@@ -229,7 +255,8 @@ function populateCategoryFilter() {
         const t = w.topic || w.topic_ru || w.topic_kr;
         if (
           !t ||
-          (!state.currentTopic.includes("all") && !state.currentTopic.includes(t))
+          (!state.currentTopic.includes("all") &&
+            !state.currentTopic.includes(t))
         )
           return;
         const c = w.category || w.category_ru || w.category_kr;
@@ -245,26 +272,26 @@ function populateCategoryFilter() {
     searchInput.className = "search-box";
     searchInput.style.marginBottom = "10px";
 
-    const actionsDiv = document.createElement('div');
-    actionsDiv.className = 'multiselect-actions';
-    
-    const selectAllBtn = document.createElement('button');
-    selectAllBtn.className = 'multiselect-action-btn';
-    selectAllBtn.textContent = 'Выбрать все';
+    const actionsDiv = document.createElement("div");
+    actionsDiv.className = "multiselect-actions";
+
+    const selectAllBtn = document.createElement("button");
+    selectAllBtn.className = "multiselect-action-btn";
+    selectAllBtn.textContent = "Выбрать все";
     selectAllBtn.onclick = (e) => {
       e.stopPropagation();
       state.currentCategory = getCategories();
-      if (state.currentCategory.length === 0) state.currentCategory = ['all'];
+      if (state.currentCategory.length === 0) state.currentCategory = ["all"];
       populateCategoryFilter();
       render();
     };
 
-    const deselectAllBtn = document.createElement('button');
-    deselectAllBtn.className = 'multiselect-action-btn';
-    deselectAllBtn.textContent = 'Сбросить';
+    const deselectAllBtn = document.createElement("button");
+    deselectAllBtn.className = "multiselect-action-btn";
+    deselectAllBtn.textContent = "Сбросить";
     deselectAllBtn.onclick = (e) => {
       e.stopPropagation();
-      state.currentCategory = ['all'];
+      state.currentCategory = ["all"];
       populateCategoryFilter();
       render();
     };
@@ -287,16 +314,28 @@ function populateCategoryFilter() {
     listContainer.appendChild(sizer);
     catContainer.appendChild(listContainer);
 
-    const allItems = [{ value: "all", label: "Все категории" }, ...getCategories().map(c => ({ value: c, label: parseBilingualString(c).ru }))];
+    const allItems = [
+      { value: "all", label: "Все категории" },
+      ...getCategories().map((c) => ({
+        value: c,
+        label: parseBilingualString(c).ru,
+      })),
+    ];
     let searchFilteredItems = allItems;
 
     const renderVisibleItems = () => {
       const scrollTop = listContainer.scrollTop;
       const viewportHeight = listContainer.clientHeight;
 
-      const startIndex = Math.max(0, Math.floor(scrollTop / VIRTUAL_ITEM_HEIGHT) - VIRTUAL_BUFFER);
+      const startIndex = Math.max(
+        0,
+        Math.floor(scrollTop / VIRTUAL_ITEM_HEIGHT) - VIRTUAL_BUFFER,
+      );
       const visibleItemsCount = Math.ceil(viewportHeight / VIRTUAL_ITEM_HEIGHT);
-      const endIndex = Math.min(searchFilteredItems.length, startIndex + visibleItemsCount + VIRTUAL_BUFFER * 2);
+      const endIndex = Math.min(
+        searchFilteredItems.length,
+        startIndex + visibleItemsCount + VIRTUAL_BUFFER * 2,
+      );
 
       const topOffset = startIndex * VIRTUAL_ITEM_HEIGHT;
       virtualContent.style.transform = `translateY(${topOffset}px)`;
@@ -304,15 +343,17 @@ function populateCategoryFilter() {
 
       const fragment = document.createDocumentFragment();
       for (let i = startIndex; i < endIndex; i++) {
-          const item = searchFilteredItems[i];
-          fragment.appendChild(createCategoryItem(item.value, item.label));
+        const item = searchFilteredItems[i];
+        fragment.appendChild(createCategoryItem(item.value, item.label));
       }
       virtualContent.appendChild(fragment);
     };
 
     searchInput.oninput = () => {
       const val = searchInput.value.toLowerCase();
-      searchFilteredItems = allItems.filter(item => item.label.toLowerCase().includes(val));
+      searchFilteredItems = allItems.filter((item) =>
+        item.label.toLowerCase().includes(val),
+      );
       sizer.style.height = `${searchFilteredItems.length * VIRTUAL_ITEM_HEIGHT}px`;
       listContainer.scrollTop = 0;
       renderVisibleItems();
@@ -345,12 +386,14 @@ export function handleCategoryChange(val: string) {
 function createCategoryItem(value: string, label: string): HTMLElement {
   const itemDiv = document.createElement("div");
   itemDiv.className = "multiselect-item";
-  const isChecked = state.currentCategory.includes(value) || (value === "all" && state.currentCategory.includes("all"));
+  const isChecked =
+    state.currentCategory.includes(value) ||
+    (value === "all" && state.currentCategory.includes("all"));
   const icon = getIconForValue(value, "🔹");
   itemDiv.innerHTML = `<input type="checkbox" ${isChecked ? "checked" : ""}> <span style="margin-right: 6px;">${icon}</span> <span>${label}</span>`;
   itemDiv.onclick = (e) => {
-      e.stopPropagation();
-      handleCategoryChange(value);
+    e.stopPropagation();
+    handleCategoryChange(value);
   };
   return itemDiv;
 }
@@ -404,12 +447,12 @@ export function updateFilterCounts() {
   // Используем requestAnimationFrame, чтобы не блокировать UI при открытии панели
   requestAnimationFrame(() => {
     const counts: Record<string, number> = {
-      'all': 0,
-      '★★★': 0,
-      '★★☆': 0,
-      '★☆☆': 0,
-      'favorites': 0,
-      'mistakes': 0,
+      all: 0,
+      "★★★": 0,
+      "★★☆": 0,
+      "★☆☆": 0,
+      favorites: 0,
+      mistakes: 0,
     };
 
     const type = state.currentType;
@@ -420,7 +463,7 @@ export function updateFilterCounts() {
     for (let i = 0; i < words.length; i++) {
       const word = words[i];
       counts.all++;
-      
+
       if (word.level && counts[word.level] !== undefined) {
         counts[word.level]++;
       }
@@ -432,25 +475,26 @@ export function updateFilterCounts() {
       }
     }
 
-    const buttons = levelFiltersContainer.querySelectorAll<HTMLButtonElement>(".filter-chip");
-    buttons.forEach(btn => {
+    const buttons =
+      levelFiltersContainer.querySelectorAll<HTMLButtonElement>(".filter-chip");
+    buttons.forEach((btn) => {
       const filterValue = btn.dataset.value;
       if (filterValue && counts[filterValue] !== undefined) {
         const count = counts[filterValue];
-        
-        let countSpan = btn.querySelector<HTMLElement>('.filter-count');
+
+        let countSpan = btn.querySelector<HTMLElement>(".filter-count");
         if (!countSpan) {
-          countSpan = document.createElement('span');
-          countSpan.className = 'filter-count';
+          countSpan = document.createElement("span");
+          countSpan.className = "filter-count";
           btn.appendChild(countSpan);
         }
-        
+
         const newText = String(count);
         if (countSpan.textContent !== newText) {
           countSpan.textContent = newText;
-          countSpan.classList.remove('pop');
+          countSpan.classList.remove("pop");
           void countSpan.offsetWidth; // Force reflow to restart animation
-          countSpan.classList.add('pop');
+          countSpan.classList.add("pop");
         }
       }
     });

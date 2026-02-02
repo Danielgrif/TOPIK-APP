@@ -1,7 +1,8 @@
 import { state } from "../core/state.ts";
 import { client } from "../core/supabaseClient.ts";
 import { showToast } from "../utils/utils.ts";
-import { immediateSaveState, createLocalBackup } from "../core/db.ts";
+import { immediateSaveState } from "../core/db.ts";
+import { createLocalBackup } from "../core/backup.ts";
 import {
   updateStats,
   updateSRSBadge,
@@ -38,7 +39,7 @@ export async function resetAllProgress() {
       streakFreeze: 0,
       lastDailyReward: null,
       achievements: [],
- survivalHealth: 0,
+      survivalHealth: 0,
     };
     state.learned = new Set();
     state.mistakes = new Set();

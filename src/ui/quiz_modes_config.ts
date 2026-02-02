@@ -117,7 +117,12 @@ class SprintQuizConfig extends BaseQuizConfig {
       } else {
         showToast(msg, 800);
       }
-      return { timeChange: bonus, livesChange: 0, gameOver: false, streak: this.streak };
+      return {
+        timeChange: bonus,
+        livesChange: 0,
+        gameOver: false,
+        streak: this.streak,
+      };
     } else {
       this.streak = 0;
       showToast("-5 сек!", 800);
@@ -169,7 +174,12 @@ class SurvivalQuizConfig extends BaseQuizConfig {
     if (isCorrect) {
       this.streak++;
       showComboEffect("+3 сек!");
-      return { timeChange: 3, livesChange: 0, gameOver: false, streak: this.streak };
+      return {
+        timeChange: 3,
+        livesChange: 0,
+        gameOver: false,
+        streak: this.streak,
+      };
     } else {
       this.streak = 0;
       const newLives = lives - 1;

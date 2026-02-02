@@ -10,10 +10,10 @@ function resetIdleTimer() {
   if (idleTimer) clearTimeout(idleTimer);
   if (state.sessionActive && !state.sessionInterval) {
     // Если была пауза, возобновляем
-    toggleSessionTimer(); 
+    toggleSessionTimer();
     showToast("▶️ Сессия возобновлена");
   }
-  
+
   if (state.sessionActive) {
     idleTimer = window.setTimeout(() => {
       if (state.sessionActive && state.sessionInterval) {
@@ -25,8 +25,10 @@ function resetIdleTimer() {
 }
 
 function setupIdleListeners() {
-  const events = ['mousedown', 'keydown', 'touchstart', 'scroll'];
-  events.forEach(evt => document.addEventListener(evt, resetIdleTimer, { passive: true }));
+  const events = ["mousedown", "keydown", "touchstart", "scroll"];
+  events.forEach((evt) =>
+    document.addEventListener(evt, resetIdleTimer, { passive: true }),
+  );
 }
 
 // Инициализация слушателей один раз
@@ -97,10 +99,13 @@ export function editSessionTime() {
     showToast("Сначала запустите сессию");
     return;
   }
-  
+
   const currentMins = Math.floor(state.sessionSeconds / 60);
-  const newMinsStr = prompt("Введите время сессии (в минутах):", String(currentMins));
-  
+  const newMinsStr = prompt(
+    "Введите время сессии (в минутах):",
+    String(currentMins),
+  );
+
   if (newMinsStr !== null) {
     const newMins = parseInt(newMinsStr, 10);
     if (!isNaN(newMins) && newMins >= 0) {

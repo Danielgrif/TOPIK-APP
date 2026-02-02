@@ -9,7 +9,8 @@ export function renderFavoriteQuotes() {
   container.innerHTML = "";
 
   if (!state.favoriteQuotes || state.favoriteQuotes.length === 0) {
-    container.innerHTML = '<div style="text-align:center; padding:40px; color:var(--text-sub);">У вас пока нет избранных цитат.<br>Добавляйте их с экрана приветствия!</div>';
+    container.innerHTML =
+      '<div style="text-align:center; padding:40px; color:var(--text-sub);">У вас пока нет избранных цитат.<br>Добавляйте их с экрана приветствия!</div>';
     return;
   }
 
@@ -23,7 +24,7 @@ export function renderFavoriteQuotes() {
       <div class="quote-content">
         <div class="quote-kr">${quote.quote_kr}</div>
         <div class="quote-ru">${quote.quote_ru}</div>
-        ${quote.literal_translation ? `<div class="quote-literal">(${quote.literal_translation})</div>` : ''}
+        ${quote.literal_translation ? `<div class="quote-literal">(${quote.literal_translation})</div>` : ""}
       </div>
       <div class="quote-actions">
         <button class="btn-icon speak-quote-btn">🔊</button>
@@ -42,6 +43,7 @@ export function renderFavoriteQuotes() {
 }
 
 function removeQuote(id: number | string) {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   state.favoriteQuotes = state.favoriteQuotes.filter((q: any) => q.id !== id);
   immediateSaveState();
   renderFavoriteQuotes();

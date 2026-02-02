@@ -1,3 +1,4 @@
+/* eslint-disable no-console */
 import { state } from "../core/state.ts";
 import { showToast } from "../utils/utils.ts";
 import { render } from "./ui_card.ts";
@@ -5,20 +6,170 @@ import { scheduleSaveState, immediateSaveState } from "../core/db.ts";
 import { openConfirm } from "./ui_modal.ts";
 import { syncGlobalStats } from "../core/sync.ts";
 
-const THEME_PALETTES: Record<string, { main: string; hover: string; light: string; accent: string; bg: string; surface: string; surface2: string; border: string; textMain: string; textSub: string; textTertiary: string }> = {
-  purple: { main: "#7c3aed", hover: "#6d28d9", light: "rgba(124, 58, 237, 0.15)", accent: "#a78bfa", bg: "#f5f3ff", surface: "#ffffff", surface2: "#ede9fe", border: "#ddd6fe", textMain: "#2e1065", textSub: "#5b21b6", textTertiary: "#7c3aed" },
-  blue:   { main: "#2563eb", hover: "#1d4ed8", light: "rgba(37, 99, 235, 0.15)", accent: "#60a5fa", bg: "#e0f2fe", surface: "#ffffff", surface2: "#dbeafe", border: "#bfdbfe", textMain: "#172554", textSub: "#1e40af", textTertiary: "#2563eb" },
-  green:  { main: "#059669", hover: "#047857", light: "rgba(5, 150, 105, 0.15)", accent: "#34d399", bg: "#f0fdf4", surface: "#ffffff", surface2: "#dcfce7", border: "#bbf7d0", textMain: "#022c22", textSub: "#047857", textTertiary: "#059669" },
-  orange: { main: "#ea580c", hover: "#c2410c", light: "rgba(234, 88, 12, 0.15)", accent: "#fb923c", bg: "#fff7ed", surface: "#ffffff", surface2: "#ffedd5", border: "#fed7aa", textMain: "#431407", textSub: "#c2410c", textTertiary: "#ea580c" },
-  pink:   { main: "#db2777", hover: "#be185d", light: "rgba(219, 39, 119, 0.15)", accent: "#f472b6", bg: "#fdf2f8", surface: "#ffffff", surface2: "#fce7f3", border: "#fbcfe8", textMain: "#500724", textSub: "#be185d", textTertiary: "#db2777" },
+const THEME_PALETTES: Record<
+  string,
+  {
+    main: string;
+    hover: string;
+    light: string;
+    accent: string;
+    bg: string;
+    surface: string;
+    surface2: string;
+    border: string;
+    textMain: string;
+    textSub: string;
+    textTertiary: string;
+  }
+> = {
+  purple: {
+    main: "#7c3aed",
+    hover: "#6d28d9",
+    light: "rgba(124, 58, 237, 0.15)",
+    accent: "#a78bfa",
+    bg: "#f5f3ff",
+    surface: "#ffffff",
+    surface2: "#ede9fe",
+    border: "#ddd6fe",
+    textMain: "#2e1065",
+    textSub: "#5b21b6",
+    textTertiary: "#7c3aed",
+  },
+  blue: {
+    main: "#2563eb",
+    hover: "#1d4ed8",
+    light: "rgba(37, 99, 235, 0.15)",
+    accent: "#60a5fa",
+    bg: "#e0f2fe",
+    surface: "#ffffff",
+    surface2: "#dbeafe",
+    border: "#bfdbfe",
+    textMain: "#172554",
+    textSub: "#1e40af",
+    textTertiary: "#2563eb",
+  },
+  green: {
+    main: "#059669",
+    hover: "#047857",
+    light: "rgba(5, 150, 105, 0.15)",
+    accent: "#34d399",
+    bg: "#f0fdf4",
+    surface: "#ffffff",
+    surface2: "#dcfce7",
+    border: "#bbf7d0",
+    textMain: "#022c22",
+    textSub: "#047857",
+    textTertiary: "#059669",
+  },
+  orange: {
+    main: "#ea580c",
+    hover: "#c2410c",
+    light: "rgba(234, 88, 12, 0.15)",
+    accent: "#fb923c",
+    bg: "#fff7ed",
+    surface: "#ffffff",
+    surface2: "#ffedd5",
+    border: "#fed7aa",
+    textMain: "#431407",
+    textSub: "#c2410c",
+    textTertiary: "#ea580c",
+  },
+  pink: {
+    main: "#db2777",
+    hover: "#be185d",
+    light: "rgba(219, 39, 119, 0.15)",
+    accent: "#f472b6",
+    bg: "#fdf2f8",
+    surface: "#ffffff",
+    surface2: "#fce7f3",
+    border: "#fbcfe8",
+    textMain: "#500724",
+    textSub: "#be185d",
+    textTertiary: "#db2777",
+  },
 };
 
-const THEME_PALETTES_DARK: Record<string, { main: string; hover: string; light: string; accent: string; bg: string; surface: string; surface2: string; border: string; textMain: string; textSub: string; textTertiary: string }> = {
-  purple: { main: "#a78bfa", hover: "#8b5cf6", light: "rgba(167, 139, 250, 0.15)", accent: "#c4b5fd", bg: "#1e1b4b", surface: "#28235e", surface2: "#312e6f", border: "#3730a3", textMain: "#ede9fe", textSub: "#a78bfa", textTertiary: "#8b5cf6" },
-  blue:   { main: "#60a5fa", hover: "#3b82f6", light: "rgba(96, 165, 250, 0.15)", accent: "#93c5fd", bg: "#172554", surface: "#1e3a8a", surface2: "#1d4ed8", border: "#2563eb", textMain: "#dbeafe", textSub: "#60a5fa", textTertiary: "#3b82f6" },
-  green:  { main: "#34d399", hover: "#10b981", light: "rgba(52, 211, 153, 0.15)", accent: "#6ee7b7", bg: "#064e3b", surface: "#065f46", surface2: "#047857", border: "#059669", textMain: "#d1fae5", textSub: "#34d399", textTertiary: "#10b981" },
-  orange: { main: "#fb923c", hover: "#f97316", light: "rgba(251, 146, 60, 0.15)", accent: "#fdba74", bg: "#431407", surface: "#7c2d12", surface2: "#9a3412", border: "#c2410c", textMain: "#ffedd5", textSub: "#fb923c", textTertiary: "#f97316" },
-  pink:   { main: "#f472b6", hover: "#ec4899", light: "rgba(244, 114, 182, 0.15)", accent: "#f9a8d4", bg: "#701a75", surface: "#86198f", surface2: "#9d174d", border: "#be185d", textMain: "#fce7f3", textSub: "#f472b6", textTertiary: "#ec4899" },
+const THEME_PALETTES_DARK: Record<
+  string,
+  {
+    main: string;
+    hover: string;
+    light: string;
+    accent: string;
+    bg: string;
+    surface: string;
+    surface2: string;
+    border: string;
+    textMain: string;
+    textSub: string;
+    textTertiary: string;
+  }
+> = {
+  purple: {
+    main: "#a78bfa",
+    hover: "#8b5cf6",
+    light: "rgba(167, 139, 250, 0.15)",
+    accent: "#c4b5fd",
+    bg: "#1e1b4b",
+    surface: "#28235e",
+    surface2: "#312e6f",
+    border: "#3730a3",
+    textMain: "#ede9fe",
+    textSub: "#a78bfa",
+    textTertiary: "#8b5cf6",
+  },
+  blue: {
+    main: "#60a5fa",
+    hover: "#3b82f6",
+    light: "rgba(96, 165, 250, 0.15)",
+    accent: "#93c5fd",
+    bg: "#172554",
+    surface: "#1e3a8a",
+    surface2: "#1d4ed8",
+    border: "#2563eb",
+    textMain: "#dbeafe",
+    textSub: "#60a5fa",
+    textTertiary: "#3b82f6",
+  },
+  green: {
+    main: "#34d399",
+    hover: "#10b981",
+    light: "rgba(52, 211, 153, 0.15)",
+    accent: "#6ee7b7",
+    bg: "#064e3b",
+    surface: "#065f46",
+    surface2: "#047857",
+    border: "#059669",
+    textMain: "#d1fae5",
+    textSub: "#34d399",
+    textTertiary: "#10b981",
+  },
+  orange: {
+    main: "#fb923c",
+    hover: "#f97316",
+    light: "rgba(251, 146, 60, 0.15)",
+    accent: "#fdba74",
+    bg: "#431407",
+    surface: "#7c2d12",
+    surface2: "#9a3412",
+    border: "#c2410c",
+    textMain: "#ffedd5",
+    textSub: "#fb923c",
+    textTertiary: "#f97316",
+  },
+  pink: {
+    main: "#f472b6",
+    hover: "#ec4899",
+    light: "rgba(244, 114, 182, 0.15)",
+    accent: "#f9a8d4",
+    bg: "#701a75",
+    surface: "#86198f",
+    surface2: "#9d174d",
+    border: "#be185d",
+    textMain: "#fce7f3",
+    textSub: "#f472b6",
+    textTertiary: "#ec4899",
+  },
 };
 
 /**
@@ -139,28 +290,28 @@ export function applyTheme() {
 
   if (state.darkMode) {
     document.body.classList.add("dark-mode");
-    
+
     // Цвета для темной темы (Пастельные/Светлые для контраста)
-    root.setProperty('--section-info-border', '#74b9ff');
-    root.setProperty('--section-relation-border', '#fab1a0');
-    root.setProperty('--section-extra-border', '#55efc4');
-    
+    root.setProperty("--section-info-border", "#74b9ff");
+    root.setProperty("--section-relation-border", "#fab1a0");
+    root.setProperty("--section-extra-border", "#55efc4");
+
     // Фон: низкая прозрачность, чтобы не конфликтовать с насыщенными фонами темных тем
-    root.setProperty('--section-info-bg', 'rgba(116, 185, 255, 0.1)');
-    root.setProperty('--section-relation-bg', 'rgba(250, 177, 160, 0.1)');
-    root.setProperty('--section-extra-bg', 'rgba(85, 239, 196, 0.1)');
+    root.setProperty("--section-info-bg", "rgba(116, 185, 255, 0.1)");
+    root.setProperty("--section-relation-bg", "rgba(250, 177, 160, 0.1)");
+    root.setProperty("--section-extra-bg", "rgba(85, 239, 196, 0.1)");
   } else {
     document.body.classList.remove("dark-mode");
-    
+
     // Цвета для светлой темы (Чуть темнее для четкости на белом)
-    root.setProperty('--section-info-border', '#0984e3');
-    root.setProperty('--section-relation-border', '#e17055');
-    root.setProperty('--section-extra-border', '#00b894');
+    root.setProperty("--section-info-border", "#0984e3");
+    root.setProperty("--section-relation-border", "#e17055");
+    root.setProperty("--section-extra-border", "#00b894");
 
     // Фон: очень легкий оттенок
-    root.setProperty('--section-info-bg', 'rgba(9, 132, 227, 0.06)');
-    root.setProperty('--section-relation-bg', 'rgba(225, 112, 85, 0.06)');
-    root.setProperty('--section-extra-bg', 'rgba(0, 184, 148, 0.06)');
+    root.setProperty("--section-info-bg", "rgba(9, 132, 227, 0.06)");
+    root.setProperty("--section-relation-bg", "rgba(225, 112, 85, 0.06)");
+    root.setProperty("--section-extra-bg", "rgba(0, 184, 148, 0.06)");
   }
 
   const icon = state.darkMode ? "🌙" : "☀️";
@@ -218,13 +369,15 @@ export function applyAccentColor() {
   target.setProperty("--text-tertiary", palette.textTertiary);
 
   // Update active state in UI if selector exists
-  document.querySelectorAll(".color-option, .stats-color-btn").forEach((btn) => {
-    if (btn instanceof HTMLElement)
-      btn.classList.toggle(
-        "active",
-        btn.getAttribute("data-value") === state.themeColor,
-      );
-  });
+  document
+    .querySelectorAll(".color-option, .stats-color-btn")
+    .forEach((btn) => {
+      if (btn instanceof HTMLElement)
+        btn.classList.toggle(
+          "active",
+          btn.getAttribute("data-value") === state.themeColor,
+        );
+    });
 }
 
 /**
@@ -268,14 +421,18 @@ export function toggleFocusMode() {
   if (state.viewMode !== "list") {
     const grid = document.getElementById("vocabulary-grid");
     const oldScroll = grid ? grid.scrollTop : 0;
-    const oldHeight = state.focusMode ? 400 : Math.floor(window.innerHeight * 0.75);
-    
+    const oldHeight = state.focusMode
+      ? 400
+      : Math.floor(window.innerHeight * 0.75);
+
     render();
-    
+
     if (grid && oldScroll > 0) {
-        const newHeight = state.focusMode ? Math.floor(window.innerHeight * 0.75) : 400;
-        // Корректируем скролл пропорционально изменению высоты
-        grid.scrollTop = oldScroll * (newHeight / oldHeight);
+      const newHeight = state.focusMode
+        ? Math.floor(window.innerHeight * 0.75)
+        : 400;
+      // Корректируем скролл пропорционально изменению высоты
+      grid.scrollTop = oldScroll * (newHeight / oldHeight);
     }
   }
 }
@@ -398,16 +555,27 @@ export function applyBackgroundMusic(forcePlay: boolean = false) {
         if (e.name !== "AbortError") {
           console.warn("Music play failed:", e);
           showToast(`Ошибка аудио: ${e.message}`); // Показываем ошибку пользователю
-          
+
           // Fallback: Пробуем найти любой другой рабочий трек, если текущий не грузится
-          const fallbackTrack = state.MUSIC_TRACKS.find((t) => t.id !== trackId && t.id === "default") || state.MUSIC_TRACKS[0];
+          const fallbackTrack =
+            state.MUSIC_TRACKS.find(
+              (t) => t.id !== trackId && t.id === "default",
+            ) || state.MUSIC_TRACKS[0];
           if (fallbackTrack && fallbackTrack.id !== trackId) {
-              console.log("Attempting fallback track:", fallbackTrack.name);
-              inactivePlayer.src = `./audio/${encodeURIComponent(fallbackTrack.filename)}`;
-              inactivePlayer.play().then(() => {
-                crossfade(inactivePlayer, activePlayer, state.backgroundMusicVolume, 0);
+            console.log("Attempting fallback track:", fallbackTrack.name);
+            inactivePlayer.src = `./audio/${encodeURIComponent(fallbackTrack.filename)}`;
+            inactivePlayer
+              .play()
+              .then(() => {
+                crossfade(
+                  inactivePlayer,
+                  activePlayer,
+                  state.backgroundMusicVolume,
+                  0,
+                );
                 activePlayerId = activePlayerId === "a" ? "b" : "a";
-              }).catch((err) => console.warn("Fallback failed:", err));
+              })
+              .catch((err) => console.warn("Fallback failed:", err));
           }
         }
       });
@@ -430,16 +598,24 @@ export function applyBackgroundMusic(forcePlay: boolean = false) {
   }
 }
 
+// Listen for ducking events from utils.ts
+document.addEventListener("duck-music", (e: Event) => {
+  const detail = (e as CustomEvent).detail;
+  duckBackgroundMusic(detail.duck);
+});
+
 /**
  * Temporarily lowers volume for TTS.
  */
 export function duckBackgroundMusic(duck: boolean) {
   if (!state.backgroundMusicEnabled) return;
   const player = document.getElementById(
-    activePlayerId === "a" ? "music-player-a" : "music-player-b"
+    activePlayerId === "a" ? "music-player-a" : "music-player-b",
   ) as HTMLAudioElement;
   if (player) {
-    const target = duck ? state.backgroundMusicVolume * 0.2 : state.backgroundMusicVolume;
+    const target = duck
+      ? state.backgroundMusicVolume * 0.2
+      : state.backgroundMusicVolume;
     player.volume = target;
   }
 }
@@ -563,21 +739,26 @@ export function setTrashRetention(days: string | number) {
   if (![7, 30, 90, 365].includes(retentionDays)) return;
 
   state.trashRetentionDays = retentionDays;
-  
+
   updateTrashRetentionUI();
 
-  showToast(`Срок хранения в корзине: ${retentionDays === 365 ? '1 год' : `${retentionDays} дн.`}`);
+  showToast(
+    `Срок хранения в корзине: ${retentionDays === 365 ? "1 год" : `${retentionDays} дн.`}`,
+  );
   immediateSaveState();
   syncGlobalStats();
 }
 
 export function updateTrashRetentionUI() {
-    const container = document.getElementById('trash-retention-options');
-    if (container) {
-        container.querySelectorAll('.segment-btn').forEach(btn => {
-            btn.classList.toggle('active', btn.getAttribute('data-value') === String(state.trashRetentionDays));
-        });
-    }
+  const container = document.getElementById("trash-retention-options");
+  if (container) {
+    container.querySelectorAll(".segment-btn").forEach((btn) => {
+      btn.classList.toggle(
+        "active",
+        btn.getAttribute("data-value") === String(state.trashRetentionDays),
+      );
+    });
+  }
 }
 
 export function resetOnboarding() {

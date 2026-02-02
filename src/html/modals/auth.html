@@ -1,0 +1,233 @@
+<!-- Login Modal -->
+<div id="login-modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="auth-title" aria-describedby="auth-desc" tabindex="-1" data-close-modal="login-modal">
+  <div class="modal-content modal-centered auth-modal-content">
+    <div class="auth-container">
+    <div class="modal-header no-border">
+      <h3 id="auth-title">🔐 Профиль</h3>
+      <div class="header-actions">
+        <button class="btn btn-icon close-modal-btn" data-close-modal="login-modal">✕</button>
+      </div>
+    </div>
+    <div id="auth-desc" class="auth-description">
+      Войдите, чтобы сохранить прогресс в облаке и синхронизировать устройства.
+    </div>
+    <form onsubmit="return false;" class="auth-form">
+      <div class="input-group">
+        <label for="auth-email" class="visually-hidden">Email</label>
+        <input type="email" id="auth-email" name="email" class="auth-input" placeholder="Email" autocomplete="username">
+      </div>
+      
+      <div id="auth-password-container" class="input-group">
+          <label for="auth-password" class="visually-hidden">Пароль</label>
+          <input type="password" id="auth-password" name="password" class="auth-input" placeholder="Пароль" autocomplete="current-password">
+          <button type="button" data-action="toggle-password" id="toggle-password-btn" class="password-toggle" title="Показать пароль">👁️</button>
+          <div class="password-strength"><div id="strength-bar"></div></div>
+      </div>
+    </form>
+    
+    <div id="auth-buttons" class="auth-actions">
+      <button class="btn auth-submit-btn" data-action="auth" data-value="login">Войти</button>
+      <button class="btn auth-switch-btn" data-action="auth" data-value="signup">Регистрация</button>
+    </div>
+    <div id="auth-reset-buttons" style="display: none;">
+        <button class="btn auth-submit-btn" data-action="auth" data-value="reset">Отправить ссылку</button>
+    </div>
+    
+    <div id="auth-social" class="auth-social-section">
+        <div class="auth-separator"><span>ИЛИ</span></div>
+        <button class="btn google-btn" data-action="auth-google">
+            <svg width="20" height="20" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/></svg>
+            <span>Войти через Google</span>
+        </button>
+    </div>
+
+    <div class="auth-footer">
+      <a href="#" id="auth-forgot-link" data-action="toggle-reset-mode" data-value="true">Забыли пароль?</a>
+      <a href="#" id="auth-back-link" data-action="toggle-reset-mode" data-value="false" style="display: none;">← Назад ко входу</a>
+    </div>
+    <div id="auth-error" class="auth-error-msg"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Profile Modal -->
+<div id="profile-modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="profile-modal-title" tabindex="-1" data-close-modal="profile-modal">
+  <div class="modal-content" style="padding: 0; background: var(--bg);">
+    <div class="modal-body-container">
+      
+      <!-- Header -->
+      <div class="profile-header">
+        <h3 id="profile-modal-title">Профиль</h3>
+        <button class="btn btn-icon close-modal-btn" data-close-modal="profile-modal">✕</button>
+      </div>
+
+      <div style="padding: 20px;">
+        <!-- User Info Card -->
+        <div class="user-profile-card">
+            <div class="user-avatar-large" id="profile-avatar-large">👤</div>
+            <div class="profile-name-container" style="display: flex; align-items: center; gap: 8px; justify-content: center; width: 100%;">
+                <div class="user-name" id="profile-name-display" style="margin-bottom: 0;">guest@example.com</div>
+                <button class="btn-icon" id="edit-profile-name-btn" title="Изменить имя" style="font-size: 14px; padding: 4px; width: 24px; height: 24px;">✏️</button>
+            </div>
+            <label for="profile-name-input" class="visually-hidden">Новое имя профиля</label>
+            <input type="text" id="profile-name-input" name="profile-name" class="search-box" style="display: none; text-align: center; margin-bottom: 4px; width: 80%; padding: 8px;" maxlength="20" />
+            <div class="user-role" id="profile-role">Студент</div>
+        </div>
+
+        <!-- Appearance -->
+        <div class="settings-section">
+            <div class="settings-section-title">Внешний вид</div>
+            <div class="settings-list">
+                <div class="setting-item">
+                    <div class="setting-left"><span class="setting-icon">🌙</span><span class="setting-label">Ночной режим</span></div>
+                    <label class="switch">
+                        <input type="checkbox" id="dark-mode-toggle-switch" data-action="toggle-dark-mode">
+                        <span class="slider"></span>
+                    </label>
+                </div>
+                <div class="setting-item">
+                    <div class="setting-left"><span class="setting-icon">🌗</span><span class="setting-label">Авто-тема (по времени)</span></div>
+                    <label class="switch">
+                        <input type="checkbox" id="auto-theme-toggle-switch" data-action="toggle-auto-theme">
+                        <span class="slider"></span>
+                    </label>
+                </div>
+                <div class="setting-item" style="display: block;">
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 10px;">
+                        <div class="setting-left"><span class="setting-icon">🎨</span><span class="setting-label">Цветовая тема</span></div>
+                    </div>
+                    <div style="display: flex; gap: 10px; justify-content: space-between; flex-wrap: wrap;">
+                        <button class="color-option" data-action="set-accent" data-value="purple"></button>
+                        <button class="color-option" data-action="set-accent" data-value="blue"></button>
+                        <button class="color-option" data-action="set-accent" data-value="green"></button>
+                        <button class="color-option" data-action="set-accent" data-value="orange"></button>
+                        <button class="color-option" data-action="set-accent" data-value="pink"></button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Learning & Audio -->
+        <div class="settings-section">
+            <div class="settings-section-title">Обучение</div>
+            <div class="settings-list">
+                <div class="setting-item">
+                    <div class="setting-left"><span class="setting-icon">🉐</span><span class="setting-label">Показывать Hanja</span></div>
+                    <label class="switch">
+                        <input type="checkbox" id="hanja-setting-check" data-action="toggle-hanja">
+                        <span class="slider"></span>
+                    </label>
+                </div>
+                <div class="setting-item" onclick="document.getElementById('voice-setting-btn').click()" style="cursor: pointer;">
+                    <div class="setting-left"><span class="setting-icon">🗣️</span><span class="setting-label">Голос</span></div>
+                    <div class="setting-right">
+                        <button id="voice-setting-btn" class="btn-text" data-action="toggle-voice">👩 Женский</button>
+                    </div>
+                </div>
+                <div class="setting-item" style="display: block;">
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
+                        <div class="setting-left"><span class="setting-icon">⏩</span><span class="setting-label">Скорость</span></div>
+                        <span id="speed-val" class="setting-value">1.0x</span>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 10px;">
+                        <span style="font-size: 12px;">🐢</span>
+                        <input type="range" id="speed-slider" min="0.5" max="1.5" step="0.1" value="0.9" style="flex: 1;" data-action="set-speed">
+                        <span style="font-size: 12px;">🐇</span>
+                    </div>
+                </div>
+                <div class="setting-item">
+                    <div class="setting-left"><span class="setting-icon">🎵</span><span class="setting-label">Фоновая музыка</span></div>
+                    <label class="switch">
+                        <input type="checkbox" id="background-music-check" data-action="toggle-music">
+                        <span class="slider"></span>
+                    </label>
+                </div>
+                <div class="setting-item">
+                    <div class="setting-left"><span class="setting-icon">🔊</span><span class="setting-label">Громкость</span></div>
+                    <div class="setting-right" style="flex: 1; justify-content: flex-end;">
+                        <input type="range" id="background-music-volume-slider" min="0" max="1" step="0.05" value="0.3" style="width: 80px;" data-action="set-music-volume">
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- App & Data -->
+        <div class="settings-section">
+            <div class="settings-section-title">Приложение</div>
+            <div class="settings-list">
+                <button id="install-app-btn" class="setting-item" data-action="install-app" style="width: 100%; display: none; color: var(--primary);">
+                    <div class="setting-left"><span class="setting-icon">📲</span><span class="setting-label">Установить приложение</span></div>
+                </button>
+                <div class="setting-item">
+                    <div class="setting-left"><span class="setting-icon">🔄</span><span class="setting-label">Автообновление</span></div>
+                    <label class="switch">
+                        <input type="checkbox" id="auto-update-check" data-action="toggle-auto-update">
+                        <span class="slider"></span>
+                    </label>
+                </div>
+                <div class="setting-item">
+                    <div class="setting-left"><span class="setting-icon">🧠</span><span class="setting-label">AI Модель</span></div>
+                    <div class="setting-right"><span class="setting-value" style="font-size: 12px; background: var(--surface-3); padding: 4px 8px; border-radius: 6px;">Gemini 2.5 Flash</span></div>
+                </div>
+                <div class="setting-item" data-modal-target="quotes-modal" style="cursor: pointer;">
+                    <div class="setting-left"><span class="setting-icon">📜</span><span class="setting-label">Избранные цитаты</span></div>
+                    <div class="setting-right"><span class="setting-arrow">›</span></div>
+                </div>
+                <div class="setting-item" data-modal-target="trash-modal" style="cursor: pointer;">
+                    <div class="setting-left"><span class="setting-icon">🗑️</span><span class="setting-label">Корзина</span></div>
+                    <div class="setting-right"><span id="trash-count-badge" class="badge-count" style="display: none;">0</span><span class="setting-arrow">›</span></div>
+                </div>
+                <div class="setting-item" style="display: block;">
+                    <div class="setting-left" style="margin-bottom: 10px;"><span class="setting-icon">⏳</span><span class="setting-label">Хранение в корзине</span></div>
+                    <div class="segment-control" id="trash-retention-options">
+                        <button class="segment-btn" data-action="set-trash-retention" data-value="7">7 дн.</button>
+                        <button class="segment-btn" data-action="set-trash-retention" data-value="30">30 дн.</button>
+                        <button class="segment-btn" data-action="set-trash-retention" data-value="90">90 дн.</button>
+                        <button class="segment-btn" data-action="set-trash-retention" data-value="365">1 год</button>
+                    </div>
+                </div>
+                <div class="setting-item" data-modal-target="achievements-modal" style="cursor: pointer;">
+                    <div class="setting-left"><span class="setting-icon">🏆</span><span class="setting-label">Достижения</span></div>
+                    <div class="setting-right"><span class="setting-arrow">›</span></div>
+                </div>
+                <div class="setting-item" data-action="reset-onboarding" style="cursor: pointer;">
+                    <div class="setting-left"><span class="setting-icon">🎓</span><span class="setting-label">Повторить обучение</span></div>
+                </div>
+                <div class="setting-item" data-action="export-data" style="cursor: pointer;">
+                    <div class="setting-left"><span class="setting-icon">💾</span><span class="setting-label">Экспорт данных</span></div>
+                </div>
+                <div class="setting-item" onclick="document.getElementById('import-file').click()" style="cursor: pointer;">
+                    <div class="setting-left"><span class="setting-icon">📂</span><span class="setting-label">Импорт данных</span></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Account Actions -->
+        <div class="settings-section">
+            <div class="settings-section-title">Аккаунт</div>
+            <div class="settings-list">
+                <div class="setting-item" style="flex-direction: column; align-items: stretch; gap: 10px;">
+                    <label for="new-password" class="setting-left"><span class="setting-icon">🔐</span><span class="setting-label">Смена пароля</span></label>
+                    <form onsubmit="return false;" style="display: flex; gap: 10px; width: 100%;">
+                        <div style="position: relative; flex: 1;">
+                            <input type="password" id="new-password" name="new-password" class="search-box" placeholder="Новый пароль" autocomplete="new-password" style="padding-right: 35px;">
+                            <button type="button" data-action="toggle-password" data-value="new-password" class="password-toggle">👁️</button>
+                        </div>
+                        <button class="btn" data-action="change-password" style="padding: 8px 12px;">OK</button>
+                    </form>
+                    <div class="password-strength" id="new-strength-container" style="margin-top: 0;"><div id="new-strength-bar"></div></div>
+                </div>
+                <div class="setting-item" data-action="clear-data" style="cursor: pointer;">
+                    <div class="setting-left"><span class="setting-icon">🗑</span><span class="setting-label" style="color: var(--danger);">Сброс прогресса</span></div>
+                </div>
+                <div class="setting-item" data-action="logout" style="cursor: pointer;">
+                    <div class="setting-left"><span class="setting-icon">🚪</span><span class="setting-label" style="color: var(--danger);">Выйти из аккаунта</span></div>
+                </div>
+            </div>
+        </div>
+
+        <div id="app-version" style="text-align: center; font-size: 11px; color: var(--text-sub); margin-top: 20px; opacity: 0.5;"></div>
+      </div>
+    </div>
+  </div>
+</div>

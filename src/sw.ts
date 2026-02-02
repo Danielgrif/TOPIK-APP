@@ -1,8 +1,13 @@
 /// <reference lib="webworker" />
+/* eslint-disable no-console */
 import { precacheAndRoute, cleanupOutdatedCaches } from "workbox-precaching";
 import { clientsClaim } from "workbox-core";
 import { registerRoute } from "workbox-routing";
-import { NetworkOnly, CacheFirst, StaleWhileRevalidate } from "workbox-strategies";
+import {
+  NetworkOnly,
+  CacheFirst,
+  StaleWhileRevalidate,
+} from "workbox-strategies";
 import { BackgroundSyncPlugin } from "workbox-background-sync";
 import { ExpirationPlugin } from "workbox-expiration";
 import { CacheableResponsePlugin } from "workbox-cacheable-response";
@@ -23,7 +28,7 @@ const IMAGE_CACHE_NAME = "topik-images-v1";
 
 // Кэширование шрифтов с CDN
 registerRoute(
-  ({ url }) => url.hostname === 'cdn.jsdelivr.net',
+  ({ url }) => url.hostname === "cdn.jsdelivr.net",
   new CacheFirst({
     cacheName: FONT_CACHE_NAME,
     plugins: [
@@ -35,12 +40,14 @@ registerRoute(
         maxEntries: 30,
       }),
     ],
-  })
+  }),
 );
 
 // Кэширование изображений из Supabase Storage
 registerRoute(
-  ({ url }) => url.hostname.includes("supabase.co") && url.pathname.includes("/storage/v1/object/public/image-files/"),
+  ({ url }) =>
+    url.hostname.includes("supabase.co") &&
+    url.pathname.includes("/storage/v1/object/public/image-files/"),
   new CacheFirst({
     cacheName: IMAGE_CACHE_NAME,
     plugins: [
@@ -52,13 +59,15 @@ registerRoute(
         maxEntries: 100,
       }),
     ],
-  })
+  }),
 );
 
 // Кэширование данных словаря (API Supabase)
 // Используем StaleWhileRevalidate: отдаем кэш сразу, а в фоне обновляем его
 registerRoute(
-  ({ url }) => url.hostname.includes("supabase.co") && url.pathname.includes("/vocabulary"),
+  ({ url }) =>
+    url.hostname.includes("supabase.co") &&
+    url.pathname.includes("/vocabulary"),
   new StaleWhileRevalidate({
     cacheName: "api-vocabulary-cache",
     plugins: [
@@ -70,20 +79,21 @@ registerRoute(
         maxAgeSeconds: 60 * 60 * 24 * 14, // Хранить 2 недели
       }),
     ],
-  })
+  }),
 );
 
 // Настройка Background Sync
-const bgSyncPlugin = new BackgroundSyncPlugin('supabase-queue', {
-  maxRetentionTime: 24 * 60 // Повторять попытки в течение 24 часов (в минутах)
+const bgSyncPlugin = new BackgroundSyncPlugin("supabase-queue", {
+  maxRetentionTime: 24 * 60, // Повторять попытки в течение 24 часов (в минутах)
 });
 
 // Перехватываем запросы на изменение данных в Supabase (POST, PUT, PATCH, DELETE)
 registerRoute(
-  ({ url, request }) => url.hostname.includes("supabase.co") && request.method !== 'GET',
+  ({ url, request }) =>
+    url.hostname.includes("supabase.co") && request.method !== "GET",
   new NetworkOnly({
-    plugins: [bgSyncPlugin]
-  })
+    plugins: [bgSyncPlugin],
+  }),
 );
 
 // --- Очередь отложенных загрузок (IndexedDB) ---
@@ -119,17 +129,17 @@ async function processDownloadQueue() {
     const tx = db.transaction(QUEUE_STORE, "readwrite");
     const store = tx.objectStore(QUEUE_STORE);
     const req = store.getAll();
-    
+
     req.onsuccess = async () => {
       const items = req.result as { url: string }[];
       if (items.length === 0) return;
-      
+
       // Очищаем очередь перед началом, чтобы избежать зацикливания
       const clearTx = db.transaction(QUEUE_STORE, "readwrite");
       clearTx.objectStore(QUEUE_STORE).clear();
 
       const cache = await caches.open(AUDIO_CACHE_NAME);
-      
+
       // Скачиваем файлы последовательно
       for (const item of items) {
         try {
@@ -142,10 +152,15 @@ async function processDownloadQueue() {
           console.error(`[SW] Retry failed for ${item.url}`, e);
         }
       }
-      
+
       // Сообщаем клиентам, что загрузка завершена (опционально)
       const clients = await self.clients.matchAll();
-      clients.forEach(client => client.postMessage({ type: 'DOWNLOAD_QUEUE_COMPLETED', count: items.length }));
+      clients.forEach((client) =>
+        client.postMessage({
+          type: "DOWNLOAD_QUEUE_COMPLETED",
+          count: items.length,
+        }),
+      );
     };
   } catch (e) {
     console.error("[SW] Queue process failed", e);
@@ -190,9 +205,15 @@ self.addEventListener("fetch", (e: FetchEvent) => {
             // 🐌 Проверка скорости сети: пропускаем загрузку тяжелых файлов на медленном интернете
             // @ts-ignore
             const conn = navigator.connection;
-            if (conn && (conn.saveData || ['slow-2g', '2g'].includes(conn.effectiveType))) {
-                addToQueue(e.request.url); // Добавляем в очередь на будущее
-                return new Response(null, { status: 503, statusText: "Skipped due to slow connection" });
+            if (
+              conn &&
+              (conn.saveData || ["slow-2g", "2g"].includes(conn.effectiveType))
+            ) {
+              addToQueue(e.request.url); // Добавляем в очередь на будущее
+              return new Response(null, {
+                status: 503,
+                statusText: "Skipped due to slow connection",
+              });
             }
 
             return fetch(e.request).then((networkResponse) => {

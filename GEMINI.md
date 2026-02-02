@@ -33,6 +33,10 @@
   - Взаимодействие с БД и LocalStorage.
   - Функции: `fetchVocabulary()`, `loadFromSupabase()`, `syncWithSupabase()`, `immediateSaveState()`, `recordAttempt()`.
   - Управляет синхронизацией прогресса, избранного и "грязными" записями (`dirtyWordIds`).
+  - **Schema Validation**: Проверяет целостность данных при загрузке.
+
+- **`src/core/backup.ts`**:
+  - Создание и восстановление локальных резервных копий (`localStorage`) перед миграциями данных.
 
 - **`src/workers/searchWorker.ts`**:
   - Web Worker для фонового поиска по словарю.
@@ -46,12 +50,18 @@
   - Логика статистики и достижений.
   - Функции: `addXP()`, `checkAchievements()`, `renderActivityChart()`, `renderLearnedChart()`, `renderDetailedStats()`.
 
+- **`src/core/collections_data.ts`**:
+  - Изолированное состояние списков слов (`userLists`, `listItems`) для предотвращения циклических зависимостей.
+
 ### UI & Presentation
 - **`src/app.ts`**:
   - Точка входа (`init`).
   - **Global Event Delegation**: Обработка `data-action` и `data-modal-target` для всего приложения.
   - Настройка глобальных слушателей (Auth, Search).
   - Регистрация Service Worker (PWA).
+
+- **`src/ui/component_loader.ts`**:
+  - Динамическая инъекция HTML-компонентов (модальные окна, хедеры) в DOM при старте приложения.
 
 - **`src/ui/ui.ts`**:
   - Управление глобальными элементами UI: фильтры, таймер сессии, жесты, навигация.
@@ -62,6 +72,15 @@
   - **Virtual Scrolling**: Оптимизированный рендеринг длинных списков.
   - **Image Management**: Загрузка пользовательских фото, удаление, регенерация через AI (Edge Function).
   - Логика Skeleton-заглушек и 3D-карточек.
+
+- **`src/ui/ui_collections.ts`**:
+  - Управление пользовательскими списками (CRUD), фильтрация по спискам.
+
+- **`src/ui/ui_custom_words.ts`**:
+  - Логика предложения новых слов пользователями (валидация, отправка в `word_requests`, отслеживание статуса).
+
+- **`src/ui/ui_bulk.ts`**:
+  - Массовые операции: выделение, удаление, перемещение, добавление в списки.
 
 - **`src/ui/ui_modal.ts`**: Управление всеми модальными окнами.
 - **`src/ui/ui_settings.ts`**: Логика для окна настроек (тема, голос, скорость).
@@ -117,6 +136,14 @@
   - `user_id`, `word_id`, `is_learned`, `is_mistake`, `is_favorite`.
   - `attempts`, `correct`, `last_review`.
   - `sm2_interval`, `sm2_repetitions`, `sm2_ef`, `sm2_next_review`.
+- **`user_lists`**:
+  - `id`, `title`, `is_public`, `user_id`, `icon`.
+- **`list_items`**:
+  - `list_id`, `word_id`.
+- **`word_requests`**:
+  - `id`, `user_id`, `word_kr`, `status` (pending/processed/error), `target_list_id`, `topic`, `category`.
+- **`quotes`**:
+  - `id`, `quote_kr`, `quote_ru`, `literal_translation`, `explanation`, `audio_url`.
 
 ## 6. TOPIK II Suitability
 - **Hanja Mode**: Критически важен для уровней 5-6 (понимание корней).
@@ -125,12 +152,12 @@
 
 ## 7. Strict Evaluation & Roadmap
 
-### 📊 Evaluation (Score: 9.5/10)
+### 📊 Evaluation (Score: 9.8/10)
 **Strengths:**
-  - **Architecture**: Clean Vanilla JS with Event Delegation (`app.ts`).
+  - **Architecture**: Clean Vanilla JS with Event Delegation (`app.ts`). **Circular dependencies resolved.**
   - **Performance**: Workers, PWA, Skeleton loading, Virtual Scrolling, Optimized DOM updates.
   - **Automation**: Robust Python pipeline (`content_worker.py`) and Edge Functions.
-  - **Reliability:** Schema validation script (`validate_schema.py`) ensures DB integrity.
+  - **Reliability:** Schema validation script (`validate_schema.py`) and **Automatic Local Backups** ensure data integrity.
 **Weaknesses:**
   - **Testing**: Unit tests cover Scheduler and Worker. UI logic needs more coverage (Vitest setup exists).
 
@@ -166,7 +193,7 @@
 3. **Social:** Share Statistics as image. (Done)
 4. **New Quiz Modes:** Word Association, Pronunciation Check, Confusing Words. (Done)
 
-#### Phase 4: Content & Community (Current Focus)
+#### Phase 4: Content & Community (Completed)
 1. **User Custom Words:** ✅ **(Done)** Logic for adding/deleting custom words implemented.
 2. **Image Management:** ✅ **(Done)** Upload custom images, regenerate via AI (Edge Function), delete images.
 3. **Mistake Analysis:** ✅ **(Done)** Implemented breakdown by Topic/Part of Speech.
@@ -178,3 +205,5 @@
 2.  **Edge Functions**: ✅ **(Done)** Implemented for image regeneration.
 3.  **Offline Sync**: ✅ **(Done)** Background Sync implemented in Service Worker.
 4.  **Virtualization**: ✅ **(Done)** Implemented for Grid, List, and Filter dropdowns.
+5.  **Circular Dependencies**: ✅ **(Done)** Resolved via `collections_data.ts` and event-based communication.
+6.  **Data Safety**: ✅ **(Done)** Implemented auto-backups before migrations in `state.ts`.

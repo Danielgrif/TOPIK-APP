@@ -21,10 +21,15 @@ export function openHanjaModal(char: string) {
     relatedWords.forEach((w: Word) => {
       const el = document.createElement("div");
       el.className = "hanja-word-card";
-      
+
       // Подсветка текущего иероглифа в слове
-      const hanjaHtml = w.word_hanja 
-        ? w.word_hanja.split('').map(c => c === char ? `<span class="highlight">${c}</span>` : c).join('')
+      const hanjaHtml = w.word_hanja
+        ? w.word_hanja
+            .split("")
+            .map((c) =>
+              c === char ? `<span class="highlight">${c}</span>` : c,
+            )
+            .join("")
         : "";
 
       el.innerHTML = `

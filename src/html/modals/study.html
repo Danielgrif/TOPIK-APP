@@ -1,0 +1,21 @@
+<!-- Study Goal Modal -->
+<div id="study-goal-modal" class="modal">
+  <div class="modal-content modal-centered">
+    <div class="modal-header">
+      <h3>🎯 Учебная цель</h3>
+      <button class="btn-icon close-modal-btn" data-close-modal="study-goal-modal">✕</button>
+    </div>
+    <div class="modal-body">
+      <p style="text-align: center; margin-bottom: 20px; color: var(--text-sub);">Установите ежедневную цель, чтобы поддерживать мотивацию.</p>
+      <div class="segment-control" id="study-goal-type">
+        <button class="segment-btn" data-value="words">Слова</button>
+        <button class="segment-btn" data-value="minutes">Минуты</button>
+      </div>
+      <div style="margin: 20px 0;">
+        <input type="range" id="study-goal-slider" min="5" max="100" step="5" value="10" style="width: 100%;">
+        <div id="study-goal-value" style="text-align: center; font-size: 24px; font-weight: 800; margin-top: 10px;">10 слов</div>
+      </div>
+      <button id="save-study-goal-btn" class="btn btn-primary" style="width: 100%;">Сохранить</button>
+    </div>
+  </div>
+</div>

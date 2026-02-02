@@ -1,9 +1,11 @@
+/* eslint-disable no-console, @typescript-eslint/no-explicit-any */
 import { client } from "./supabaseClient.ts";
 import { state } from "./state.ts";
 import { loadFromSupabase } from "./db.ts";
 import { showToast } from "../utils/utils.ts";
 import { saveAndRender } from "../ui/ui.ts";
 import { openModal, closeModal, openConfirm } from "../ui/ui_modal.ts";
+import { applyTheme, updateVoiceUI } from "../ui/ui_settings.ts";
 
 export function updateAuthUI(user: any) {
   const profileBtn = document.getElementById("profile-button");
@@ -13,7 +15,8 @@ export function updateAuthUI(user: any) {
 
   if (user) {
     const email = user.email || "";
-    const displayName = user.user_metadata?.full_name || email.split("@")[0] || "Гость";
+    const displayName =
+      user.user_metadata?.full_name || email.split("@")[0] || "Гость";
     avatar.textContent = email.charAt(0).toUpperCase();
     name.textContent = displayName;
     profileBtn.title = `Вошли как ${email}`;
@@ -78,10 +81,15 @@ export function openProfileModal() {
         const session = data?.session;
         if (session && session.user) {
           const user = session.user;
-          const displayName = user.user_metadata?.full_name || user.email?.split("@")[0] || "Гость";
+          const displayName =
+            user.user_metadata?.full_name ||
+            user.email?.split("@")[0] ||
+            "Гость";
 
           const nameDisplay = document.getElementById("profile-name-display");
-          const nameInput = document.getElementById("profile-name-input") as HTMLInputElement;
+          const nameInput = document.getElementById(
+            "profile-name-input",
+          ) as HTMLInputElement;
           const editBtn = document.getElementById("edit-profile-name-btn");
 
           if (nameDisplay) nameDisplay.textContent = displayName;
@@ -103,11 +111,19 @@ export function openProfileModal() {
             const saveName = async () => {
               const newName = nameInput.value.trim();
               if (newName && newName !== displayName) {
-                const { error } = await client.auth.updateUser({ data: { full_name: newName } });
+                const { error } = await client.auth.updateUser({
+                  data: { full_name: newName },
+                });
                 if (!error) {
                   nameDisplay.textContent = newName;
                   showToast("Имя обновлено");
-                  updateAuthUI({ ...user, user_metadata: { ...user.user_metadata, full_name: newName } });
+                  updateAuthUI({
+                    ...user,
+                    user_metadata: {
+                      ...user.user_metadata,
+                      full_name: newName,
+                    },
+                  });
                 } else {
                   showToast("Ошибка обновления: " + error.message);
                 }
@@ -280,6 +296,8 @@ async function finalizeAuth(user: any) {
   showToast("✅ Успешно!");
   updateAuthUI(user);
   await loadFromSupabase(user);
+  applyTheme();
+  updateVoiceUI();
   saveAndRender();
   closeModal("login-modal");
 }
@@ -291,7 +309,9 @@ function showAuthError(msg: string) {
     errEl.style.display = "block";
   }
 
-  const passwordInput = document.getElementById("auth-password") as HTMLInputElement | null;
+  const passwordInput = document.getElementById(
+    "auth-password",
+  ) as HTMLInputElement | null;
   // Очищаем и фокусим только если поле видимо (не в режиме сброса пароля)
   if (passwordInput && passwordInput.offsetParent !== null) {
     passwordInput.value = "";

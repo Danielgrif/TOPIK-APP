@@ -1,0 +1,43 @@
+<!-- Stats Modal -->
+<div id="stats-modal" class="modal">
+  <div class="modal-content">
+    <div class="modal-header">
+      <h3>📊 Статистика</h3>
+      <button class="btn-icon close-modal-btn" data-close-modal="stats-modal">✕</button>
+    </div>
+    <div class="modal-body">
+      
+      <!-- Summary Strip -->
+      <div id="stats-strip" class="stats-strip">
+        <!-- Injected by stats.ts -->
+      </div>
+
+      <!-- Charts & Details -->
+      <div id="stats-details" style="margin-bottom: 25px;">
+        <!-- Injected by stats.ts -->
+      </div>
+
+      <!-- Topic Mastery -->
+      <div class="settings-section">
+        <div class="settings-section-title">Мастерство тем</div>
+        <div id="topic-mastery-list" class="topic-mastery-list"></div>
+      </div>
+
+      <!-- Theme Picker for Share -->
+      <div class="settings-section">
+        <div class="settings-section-title">Поделиться</div>
+        <div style="background: var(--surface-2); padding: 15px; border-radius: 16px; display: flex; align-items: center; justify-content: space-between;">
+            <div id="stats-theme-picker" style="display: flex; gap: 8px;">
+                <button class="stats-color-btn active" data-value="purple"></button>
+                <button class="stats-color-btn" data-value="blue"></button>
+                <button class="stats-color-btn" data-value="green"></button>
+                <button class="stats-color-btn" data-value="orange"></button>
+                <button class="stats-color-btn" data-value="pink"></button>
+            </div>
+            <button class="btn btn-quiz" data-action="share-stats">📤 Образ</button>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>

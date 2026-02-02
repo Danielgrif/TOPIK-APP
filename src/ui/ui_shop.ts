@@ -120,25 +120,32 @@ export function buyItem(id: string, btn?: HTMLElement) {
 
     if (id === "streak_freeze") {
       state.userStats.streakFreeze++;
-      const inventoryTab = document.querySelector(".shop-tab[onclick*='inventory']") as HTMLElement;
-      if (btn && inventoryTab) animateItemToTarget(btn, inventoryTab, item.icon);
+      const inventoryTab = document.querySelector(
+        ".shop-tab[onclick*='inventory']",
+      ) as HTMLElement;
+      if (btn && inventoryTab)
+        animateItemToTarget(btn, inventoryTab, item.icon);
     }
     if (id === "xp_scroll") {
-      import("../core/stats.ts").then(m => m.addXP(500));
+      import("../core/stats.ts").then((m) => m.addXP(500));
       const xpWidget = document.getElementById("xp-level-widget");
       if (btn && xpWidget) animateItemToTarget(btn, xpWidget, item.icon);
     }
     if (id === "survival_heart") {
-      state.userStats.survivalHealth = (state.userStats.survivalHealth || 0) + 1;
-      const inventoryTab = document.querySelector(".shop-tab[onclick*='inventory']") as HTMLElement;
-      if (btn && inventoryTab) animateItemToTarget(btn, inventoryTab, item.icon);
+      state.userStats.survivalHealth =
+        (state.userStats.survivalHealth || 0) + 1;
+      const inventoryTab = document.querySelector(
+        ".shop-tab[onclick*='inventory']",
+      ) as HTMLElement;
+      if (btn && inventoryTab)
+        animateItemToTarget(btn, inventoryTab, item.icon);
     }
 
     playTone("success");
     showToast(`Куплено: ${item.name}`);
     scheduleSaveState();
     renderShop();
-    import("../core/stats.ts").then(m => m.updateStats());
+    import("../core/stats.ts").then((m) => m.updateStats());
   } else {
     playTone("failure");
     showToast("Недостаточно монет или лимит исчерпан");
@@ -211,7 +218,11 @@ function animateCoins(fromEl: HTMLElement, toEl: HTMLElement) {
   }
 }
 
-function animateItemToTarget(startEl: HTMLElement, targetEl: HTMLElement, icon: string) {
+function animateItemToTarget(
+  startEl: HTMLElement,
+  targetEl: HTMLElement,
+  icon: string,
+) {
   const startRect = startEl.getBoundingClientRect();
   const endRect = targetEl.getBoundingClientRect();
 

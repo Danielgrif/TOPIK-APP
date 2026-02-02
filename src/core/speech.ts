@@ -63,8 +63,8 @@ export function checkPronunciation(
   }
 
   let mediaRecorder: MediaRecorder | null = null;
-  let audioChunks: Blob[] = [];
-  
+  const audioChunks: Blob[] = [];
+
   // Visualization state
   let audioContext: AudioContext | null = null;
   let analyser: AnalyserNode | null = null;
@@ -72,44 +72,60 @@ export function checkPronunciation(
   let stream: MediaStream | null = null;
 
   const startRecording = async () => {
-    if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia && typeof MediaRecorder !== 'undefined') {
+    if (
+      navigator.mediaDevices &&
+      navigator.mediaDevices.getUserMedia &&
+      typeof MediaRecorder !== "undefined"
+    ) {
       try {
         stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        
+
         // Setup Visualizer
         if (visualizerCanvas && stream) {
           try {
-            audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+            audioContext =
+              new // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              (window.AudioContext || (window as any).webkitAudioContext)();
             const source = audioContext.createMediaStreamSource(stream);
             analyser = audioContext.createAnalyser();
             analyser.fftSize = 2048;
             source.connect(analyser);
-            
+
             const bufferLength = analyser.frequencyBinCount;
             const dataArray = new Uint8Array(bufferLength);
             const canvasCtx = visualizerCanvas.getContext("2d");
-            
+
             if (canvasCtx) {
               const draw = () => {
                 if (!analyser) return;
                 animationId = requestAnimationFrame(draw);
                 analyser.getByteTimeDomainData(dataArray);
-                
-                canvasCtx.clearRect(0, 0, visualizerCanvas.width, visualizerCanvas.height);
+
+                canvasCtx.clearRect(
+                  0,
+                  0,
+                  visualizerCanvas.width,
+                  visualizerCanvas.height,
+                );
                 canvasCtx.lineWidth = 2;
                 const style = getComputedStyle(document.body);
-                canvasCtx.strokeStyle = style.getPropertyValue('--primary') || '#7c3aed';
+                canvasCtx.strokeStyle =
+                  style.getPropertyValue("--primary") || "#7c3aed";
                 canvasCtx.beginPath();
-                const sliceWidth = visualizerCanvas.width * 1.0 / bufferLength;
+                const sliceWidth =
+                  (visualizerCanvas.width * 1.0) / bufferLength;
                 let x = 0;
-                for(let i = 0; i < bufferLength; i++) {
+                for (let i = 0; i < bufferLength; i++) {
                   const v = dataArray[i] / 128.0;
-                  const y = v * visualizerCanvas.height / 2;
-                  if(i === 0) canvasCtx.moveTo(x, y);
+                  const y = (v * visualizerCanvas.height) / 2;
+                  if (i === 0) canvasCtx.moveTo(x, y);
                   else canvasCtx.lineTo(x, y);
                   x += sliceWidth;
                 }
-                canvasCtx.lineTo(visualizerCanvas.width, visualizerCanvas.height / 2);
+                canvasCtx.lineTo(
+                  visualizerCanvas.width,
+                  visualizerCanvas.height / 2,
+                );
                 canvasCtx.stroke();
               };
               draw();
@@ -147,7 +163,8 @@ export function checkPronunciation(
     }
     if (visualizerCanvas) {
       const ctx = visualizerCanvas.getContext("2d");
-      if (ctx) ctx.clearRect(0, 0, visualizerCanvas.width, visualizerCanvas.height);
+      if (ctx)
+        ctx.clearRect(0, 0, visualizerCanvas.width, visualizerCanvas.height);
     }
 
     if (mediaRecorder && mediaRecorder.state !== "inactive") {

@@ -1,0 +1,48 @@
+<!-- Level Up Overlay -->
+<div id="level-up-overlay" class="level-up-overlay">
+  <div class="level-up-content">
+    <div class="level-up-icon">🎉</div>
+    <h2 class="level-up-title">Новый уровень!</h2>
+    <p class="level-up-text">Вы достигли <strong id="new-level-val">2</strong> уровня!</p>
+    <button class="btn" data-action="close-level-up">Продолжить</button>
+  </div>
+</div>
+
+<!-- Welcome Overlay -->
+<div id="welcome-overlay" class="level-up-overlay">
+  <div class="level-up-content">
+    <h2 class="level-up-title">С возвращением!</h2>
+    <p class="level-up-text">Рады видеть вас, <strong id="welcome-username">Гость</strong>!</p>
+    <div id="welcome-quote" class="welcome-quote-container"></div>
+    <button class="btn" data-action="close-welcome">Начать</button>
+  </div>
+</div>
+
+<!-- Onboarding Overlay -->
+<div id="onboarding-overlay">
+  <!-- Content is injected by ui_onboarding.ts -->
+</div>
+
+<!-- PWA Install Banner -->
+<div id="install-banner">
+  <img src="/app-logo.svg" alt="App Logo" class="install-banner-logo">
+  <div class="install-banner-text">
+    <strong>Установить приложение</strong>
+    <span>Для быстрого доступа и работы офлайн</span>
+  </div>
+  <div class="install-banner-actions">
+    <button class="btn btn-primary" data-action="install-app">Установить</button>
+    <button class="btn-icon" data-action="dismiss-banner" title="Закрыть">✕</button>
+  </div>
+</div>
+
+<!-- Bulk Actions Bar -->
+<div id="bulk-bar" class="bulk-bar">
+    <div class="bulk-count">Выбрано: <span id="bulk-count-val">0</span></div>
+    <div class="bulk-actions">
+        <button class="btn-icon" title="Добавить в список" data-action="bulk-list">📂</button>
+        <button class="btn-icon" title="Переместить" data-action="bulk-move">🏷️</button>
+        <button class="btn-icon" title="Удалить" data-action="bulk-delete" style="color: var(--danger);">🗑️</button>
+        <button class="btn-icon" title="Выбрать все" data-action="bulk-select-all">✅</button>
+    </div>
+</div>

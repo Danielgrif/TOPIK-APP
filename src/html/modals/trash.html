@@ -1,0 +1,24 @@
+<!-- Trash Modal -->
+<div id="trash-modal" class="modal">
+  <div class="modal-content">
+    <div class="modal-header">
+      <h3>🗑️ Корзина</h3>
+      <div class="header-actions">
+        <button class="btn-icon close-modal-btn" data-close-modal="trash-modal">✕</button>
+      </div>
+    </div>
+    <div class="modal-body">
+      <div id="trash-select-all-container" style="display: none; padding: 10px; border-bottom: 1px solid var(--border-color); margin-bottom: 10px; align-items: center;">
+        <input type="checkbox" id="trash-select-all-checkbox" style="margin-right: 10px;">
+        <label for="trash-select-all-checkbox" style="font-size: 14px; font-weight: 600;">Выбрать все</label>
+      </div>
+      <div id="trash-list" class="trash-list-container">
+        <!-- Injected by ui_trash.ts -->
+      </div>
+      <div class="trash-actions" style="margin-top: 20px; display: flex; gap: 10px;">
+        <button id="restore-all-btn" class="btn" style="flex: 1; display: none;">Восстановить все</button>
+        <button id="empty-trash-btn" class="btn btn-danger" style="flex: 1; display: none;">Очистить корзину</button>
+      </div>
+    </div>
+  </div>
+</div>

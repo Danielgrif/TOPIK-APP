@@ -1,0 +1,89 @@
+<!-- Edit Word Modal -->
+<div id="edit-word-modal" class="modal">
+  <div class="modal-content">
+    <div class="modal-header">
+      <h3>✏️ Редактировать слово</h3>
+      <button class="btn-icon close-modal-btn" data-close-modal="edit-word-modal">✕</button>
+    </div>
+    <div class="modal-body">
+      <form id="edit-word-form" onsubmit="return false;">
+        <input type="hidden" id="edit-word-id">
+        <div class="input-group">
+          <label for="edit-word-kr">Слово (KR)</label>
+          <input type="text" id="edit-word-kr" class="input">
+        </div>
+        <div class="input-group">
+          <label for="edit-word-ru">Перевод (RU)</label>
+          <input type="text" id="edit-word-ru" class="input">
+        </div>
+        <div class="input-group">
+          <label for="edit-word-hanja">Hanja (необязательно)</label>
+          <input type="text" id="edit-word-hanja" class="input">
+        </div>
+        <div class="input-group">
+          <label for="edit-word-topic">Тема</label>
+          <input type="text" id="edit-word-topic" class="input">
+        </div>
+        <div class="input-group">
+          <label for="edit-word-category">Категория</label>
+          <input type="text" id="edit-word-category" class="input">
+        </div>
+        <div class="input-group">
+          <label for="edit-word-notes">Заметки</label>
+          <textarea id="edit-word-notes" class="input" rows="3"></textarea>
+        </div>
+        <div class="form-actions" style="display: flex; gap: 10px; margin-top: 20px;">
+          <button class="btn btn-danger" data-action="delete-word" style="margin-right: auto;">🗑️ Удалить</button>
+          <button class="btn" data-close-modal="edit-word-modal">Отмена</button>
+          <button class="btn btn-primary" data-action="save-word-changes">Сохранить</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- Add Word Modal -->
+<div id="add-word-modal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3>➕ Добавить слова</h3>
+            <button class="btn-icon close-modal-btn" data-close-modal="add-word-modal">✕</button>
+        </div>
+        <div class="modal-body">
+            <div id="add-word-form-view">
+                <p style="font-size: 14px; color: var(--text-sub); margin-bottom: 15px;">
+                    Вставьте одно или несколько слов (каждое с новой строки или через запятую).
+                    AI автоматически найдет перевод, примеры и аудио.
+                </p>
+                <div class="input-group">
+                    <label for="new-word-input" class="visually-hidden">Слова для добавления</label>
+                    <textarea id="new-word-input" class="input" rows="4" placeholder="Пример: 안녕하세요, 감사합니다, 사랑해요"></textarea>
+                </div>
+                <div class="input-group">
+                    <label for="new-word-target-list">Добавить в список</label>
+                    <select id="new-word-target-list" class="input"></select>
+                </div>
+                <div style="display: flex; gap: 10px; margin-top: 10px;">
+                    <div class="input-group" style="flex: 1;">
+                        <label for="new-word-topic">Тема (необязательно)</label>
+                        <input type="text" id="new-word-topic" class="input" placeholder="Мои слова">
+                    </div>
+                    <div class="input-group" style="flex: 1;">
+                        <label for="new-word-category">Категория (необязательно)</label>
+                        <input type="text" id="new-word-category" class="input" placeholder="Урок 1">
+                    </div>
+                </div>
+                <button class="btn btn-primary" data-action="submit-word-request" style="width: 100%; margin-top: 20px;">Отправить заявку</button>
+            </div>
+            <div id="add-word-progress-view" style="display: none; text-align: center; padding: 20px 0;">
+                <div class="spinner-wrapper" style="width: 100px; height: 100px; margin: 0 auto 20px;"><div class="loader-circle"></div></div>
+                <h4 style="margin-bottom: 10px;">🤖 AI обрабатывает ваш запрос...</h4>
+                <p id="word-request-status-text" style="color: var(--text-sub); margin-bottom: 15px;">Обработано: 0 из 0</p>
+                <div class="xp-bar-container" style="max-width: 200px; margin: 0 auto 20px;">
+                    <div id="word-request-progress-bar" class="xp-bar-fill"></div>
+                </div>
+                <button id="cancel-word-request-btn" class="btn">Отменить</button>
+            </div>
+        </div>
+    </div>
+</div>

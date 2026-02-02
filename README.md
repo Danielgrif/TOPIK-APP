@@ -51,6 +51,8 @@ A comprehensive Progressive Web App (PWA) designed to help students prepare for 
 │   └── validate_ts.py      # TypeScript validation utility
 ├── src/
 │   ├── core/           # Core business logic
+│   │   ├── backup.ts   # Local backup utilities
+│   │   ├── collections_data.ts # Collections state
 │   │   ├── db.ts       # Database interactions & Sync
 │   │   ├── scheduler.ts # SM-2 Spaced Repetition Algorithm
 │   │   ├── state.ts    # Global App State
@@ -58,8 +60,12 @@ A comprehensive Progressive Web App (PWA) designed to help students prepare for 
 │   ├── css/            # Modular CSS files
 │   ├── types/          # TypeScript interfaces
 │   ├── ui/             # UI Controllers & Components
+│   │   ├── component_loader.ts # HTML Injection
 │   │   ├── quiz.ts     # Quiz logic & orchestration
 │   │   ├── ui_card.ts  # Card rendering (Virtual Scroll)
+│   │   ├── ui_collections.ts # User Lists
+│   │   ├── ui_custom_words.ts # Word Requests
+│   │   ├── ui_bulk.ts  # Bulk Actions
 │   │   └── ...
 │   ├── utils/          # Helper functions
 │   ├── workers/        # Web Workers (Search offloading)

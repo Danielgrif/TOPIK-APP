@@ -1,9 +1,13 @@
 import { state } from "../core/state.ts";
-import { levenshtein, generateDiffHtml, speak, playTone } from "../utils/utils.ts";
+import {
+  levenshtein,
+  generateDiffHtml,
+  speak,
+  playTone,
+} from "../utils/utils.ts";
 import { enableQuizKeyboard } from "./ui.ts";
 import { findAssociations } from "../core/associations.ts";
 import { checkPronunciation } from "../core/speech.ts";
-import { quitQuiz } from "./quiz.ts";
 import { findConfusingWords } from "../core/confusing_words.ts";
 import { Word } from "../types/index.ts";
 
@@ -102,9 +106,9 @@ export const QuizStrategies: Record<string, Strategy> = {
       btn.textContent = "Показать ответ";
       btn.onclick = () => {
         playTone("flip");
-        const flipper = qEl.querySelector('.quiz-question-flipper');
+        const flipper = qEl.querySelector(".quiz-question-flipper");
         if (flipper) {
-            (flipper as HTMLElement).classList.add('is-flipped');
+          (flipper as HTMLElement).classList.add("is-flipped");
         }
         container.innerHTML = "";
         container.classList.add("grid-2"); // Отображаем кнопки в 2 колонки
@@ -118,7 +122,7 @@ export const QuizStrategies: Record<string, Strategy> = {
         no.onclick = () => onAnswer(false);
         container.appendChild(no); // Сначала "Забыл"
         container.appendChild(ok);
-        
+
         // Custom keyboard handler for flashcards
         const keyHandler = (e: KeyboardEvent) => {
           if (e.key === "ArrowLeft") {
@@ -129,10 +133,11 @@ export const QuizStrategies: Record<string, Strategy> = {
             ok.click();
           }
         };
-        
+
         document.addEventListener("keydown", keyHandler, { once: true });
         // Cleanup if user clicks manually or quits
-        const cleanup = () => document.removeEventListener("keydown", keyHandler);
+        const cleanup = () =>
+          document.removeEventListener("keydown", keyHandler);
         ok.addEventListener("click", cleanup);
         no.addEventListener("click", cleanup);
       };
@@ -146,7 +151,9 @@ export const QuizStrategies: Record<string, Strategy> = {
       let html = `<div class="quiz-question-text">${word.translation}</div><div class="quiz-question-sub">Выберите корейское слово</div>`;
       if (word.my_notes) {
         const maskHtml = `<span class="skeleton-pulse" style="display: inline-block; width: 2.5em; height: 0.8em; background: var(--surface-3); border-radius: 4px; vertical-align: middle; margin: 0 2px;"></span>`;
-        const maskedNotes = word.word_kr ? word.my_notes.replace(new RegExp(word.word_kr, 'gi'), maskHtml) : word.my_notes;
+        const maskedNotes = word.word_kr
+          ? word.my_notes.replace(new RegExp(word.word_kr, "gi"), maskHtml)
+          : word.my_notes;
         html += `<div style="font-size:14px; color:var(--text-sub); margin-top:5px;">(${maskedNotes})</div>`;
       }
       qEl.innerHTML = html;
@@ -175,7 +182,7 @@ export const QuizStrategies: Record<string, Strategy> = {
         : "";
 
       qEl.innerHTML = `<div class="quiz-question-text small">"${display}"</div><div class="quiz-question-sub">Вставьте пропущенное слово</div>`;
-      if (word.example_audio) qEl.insertAdjacentHTML('beforeend', audioBtn);
+      if (word.example_audio) qEl.insertAdjacentHTML("beforeend", audioBtn);
 
       container.innerHTML = "";
       getOptions(word).forEach((opt) => {
@@ -198,12 +205,12 @@ export const QuizStrategies: Record<string, Strategy> = {
         html += `<img src="${word.image}" class="quiz-image">`;
       }
       html += `<div class="quiz-question-text">${word.translation}</div><div class="quiz-question-sub">Напишите на корейском</div>`;
-      
+
       if (word.my_notes) {
         const maskHtml = `<span class="skeleton-pulse" style="display: inline-block; width: 2.5em; height: 0.8em; background: var(--surface-3); border-radius: 4px; vertical-align: middle; margin: 0 2px;"></span>`;
         let notes = word.my_notes.replace(/</g, "&lt;");
         if (word.word_kr) {
-            notes = notes.replace(new RegExp(word.word_kr, 'gi'), maskHtml);
+          notes = notes.replace(new RegExp(word.word_kr, "gi"), maskHtml);
         }
         html += `<div style="font-size:14px; color:var(--text-sub); margin-top:5px;">(${notes})</div>`;
       }
@@ -342,7 +349,7 @@ export const QuizStrategies: Record<string, Strategy> = {
           : word.audio_url;
 
       qEl.innerHTML = `<div style="margin-bottom:15px;"><button class="audio-btn-lg" id="dictation-play-btn">🔊</button></div><div class="quiz-question-sub">Напишите услышанное</div>`;
-      
+
       const btn = qEl.querySelector("#dictation-play-btn") as HTMLElement;
       if (btn) {
         btn.onclick = () => speak(word.word_kr, url || null);
@@ -439,7 +446,7 @@ export const QuizStrategies: Record<string, Strategy> = {
         "_______",
       );
 
-      qEl.innerHTML = /*html*/`<div style="text-align:center; margin-bottom:20px;">
+      qEl.innerHTML = /*html*/ `<div style="text-align:center; margin-bottom:20px;">
                 <button class="audio-btn-lg" id="dialogue-play-btn">▶️</button>
                 <div id="dialogue-text" style="margin-top:15px; font-size:18px; line-height:1.5; white-space: pre-line;"></div>
                 <div style="margin-top:10px; color:var(--text-sub); font-size:14px;">Какое слово пропущено?</div>
@@ -449,17 +456,18 @@ export const QuizStrategies: Record<string, Strategy> = {
 
       const playBtn = qEl.querySelector("#dialogue-play-btn") as HTMLElement;
       const play = () => speak("", word.example_audio || null);
-      if(playBtn) playBtn.onclick = play;
+      if (playBtn) playBtn.onclick = play;
 
       setTimeout(play, 400);
-      
+
       // Logic from multiple-choice, adapted for this mode
       getOptions(word).forEach((opt) => {
         const btn = document.createElement("button");
         btn.className = "quiz-option";
         btn.textContent = opt.word_kr; // Show Korean words as options
         if (opt.id === word.id) btn.dataset.correct = "true";
-        btn.onclick = () => handleChoiceClick(opt.id === word.id, btn, onAnswer);
+        btn.onclick = () =>
+          handleChoiceClick(opt.id === word.id, btn, onAnswer);
         container.appendChild(btn);
       });
       enableQuizKeyboard(container);
@@ -486,7 +494,8 @@ export const QuizStrategies: Record<string, Strategy> = {
 
       const resetBtn = document.createElement("button");
       resetBtn.className = "btn";
-      resetBtn.style.cssText = "margin-bottom: 15px; padding: 8px 16px; font-size: 14px; display: none; background: var(--surface-3); color: var(--text-main);";
+      resetBtn.style.cssText =
+        "margin-bottom: 15px; padding: 8px 16px; font-size: 14px; display: none; background: var(--surface-3); color: var(--text-main);";
       resetBtn.innerHTML = "↺ Сброс";
       resetBtn.onclick = () => {
         currentAnswer.length = 0;
@@ -503,7 +512,8 @@ export const QuizStrategies: Record<string, Strategy> = {
       const renderChips = () => {
         if (sourceEl) sourceEl.innerHTML = "";
         if (targetEl) targetEl.innerHTML = "";
-        resetBtn.style.display = currentAnswer.length > 0 ? "inline-block" : "none";
+        resetBtn.style.display =
+          currentAnswer.length > 0 ? "inline-block" : "none";
         currentAnswer.forEach((item, idx) => {
           const chip = document.createElement("div");
           chip.className = "scramble-chip";
@@ -546,7 +556,7 @@ export const QuizStrategies: Record<string, Strategy> = {
                 container.appendChild(feedback);
               }
               onAnswer(isCorrect, false);
-              
+
               const nextBtn = document.createElement("button");
               nextBtn.className = "btn btn-quiz";
               nextBtn.style.marginTop = "15px";
@@ -685,7 +695,7 @@ export const QuizStrategies: Record<string, Strategy> = {
       const pairs = findAssociations();
       if (pairs.length < 5) {
         qEl.innerText = "Недостаточно слов для этого режима.";
-        setTimeout(() => quitQuiz(), 1500);
+        setTimeout(() => window.quitQuiz(), 1500);
         return;
       }
 
@@ -716,12 +726,16 @@ export const QuizStrategies: Record<string, Strategy> = {
               btn.dataset.wordId = String(w.id);
             } else {
               if (!selectedLeft) return;
-              
+
               const leftId = selectedLeft.dataset.wordId;
               const rightId = String(w.id);
-              
+
               // Check if this specific pair exists in the generated pairs
-              const isMatch = pairs.some(p => String(p.left.id) === leftId && String(p.right.id) === rightId);
+              const isMatch = pairs.some(
+                (p) =>
+                  String(p.left.id) === leftId &&
+                  String(p.right.id) === rightId,
+              );
 
               if (isMatch) {
                 if (selectedLeft) {
@@ -738,10 +752,12 @@ export const QuizStrategies: Record<string, Strategy> = {
                 } else {
                   playTone("success", 100);
                 }
-                
+
                 // Record attempt for the word on the left (the "question" word)
                 if (leftId) {
-                  import("../core/db.ts").then(m => m.recordAttempt(leftId, true));
+                  import("../core/db.ts").then((m) =>
+                    m.recordAttempt(leftId, true),
+                  );
                 }
               } else {
                 playTone("failure", 100);
@@ -817,7 +833,7 @@ export const QuizStrategies: Record<string, Strategy> = {
         hint.style.color = "var(--primary)";
         btn.style.backgroundColor = "var(--danger)";
         btn.classList.add("pulse-red-effect"); // Используем существующую анимацию или стиль
-        
+
         canvas.style.display = "block";
 
         checkPronunciation(
@@ -828,10 +844,10 @@ export const QuizStrategies: Record<string, Strategy> = {
             btn.classList.remove("pulse-red-effect");
             hint.style.display = "none";
             canvas.style.display = "none";
-            
+
             const isPass = similarity >= 60;
             feedback.style.display = "block";
-            
+
             const color = isPass ? "var(--success)" : "var(--danger)";
             const icon = isPass ? "✅" : "❌";
             const title = isPass ? "Отлично!" : "Попробуйте еще раз";
@@ -852,7 +868,8 @@ export const QuizStrategies: Record<string, Strategy> = {
             if (audioUrl) {
               const playBtn = document.createElement("button");
               playBtn.className = "btn";
-              playBtn.style.cssText = "width: 100%; margin-bottom: 10px; background: var(--surface-3); color: var(--text-main);";
+              playBtn.style.cssText =
+                "width: 100%; margin-bottom: 10px; background: var(--surface-3); color: var(--text-main);";
               playBtn.textContent = "▶️ Моя запись";
               const audio = new Audio(audioUrl);
               playBtn.onclick = () => {
@@ -873,7 +890,7 @@ export const QuizStrategies: Record<string, Strategy> = {
 
             onAnswer(isPass, false);
           },
-          canvas
+          canvas,
         );
       };
     },

@@ -1,10 +1,10 @@
+/* eslint-disable no-console, @typescript-eslint/no-explicit-any */
 import { client } from "./supabaseClient.ts";
 import { state, Session, CURRENT_DB_VERSION } from "./state.ts";
-import { showToast, parseBilingualString, compress } from "../utils/utils.ts";
+import { showToast, parseBilingualString } from "../utils/utils.ts";
 import { syncGlobalStats } from "./sync.ts";
 import { Scheduler } from "./scheduler.ts";
 import { Word } from "../types/index.ts";
-import { applyTheme, updateVoiceUI } from "../ui/ui_settings.ts";
 
 let _saveTimer: number | null = null;
 const VOCABULARY_CACHE_VERSION = "v1.1"; // Increment this when DB schema changes
@@ -24,6 +24,11 @@ interface UserProgressRow {
   learned_date?: string | number | null;
 }
 
+/**
+ * Validates that the vocabulary data has the required columns.
+ * Logs a critical error if the schema is invalid.
+ * @param data The array of vocabulary words to validate.
+ */
 function validateSchema(data: Word[]) {
   if (!data || data.length === 0) return;
   const sample = data[0];
@@ -39,18 +44,34 @@ function validateSchema(data: Word[]) {
   }
 }
 
-// Простая валидация схемы для критически важных данных
+/**
+ * Validates the structure of the user stats object to prevent corruption.
+ * @param stats The user stats object to validate.
+ * @returns True if valid, false otherwise.
+ */
 function validateUserStats(stats: any): boolean {
-  if (!stats || typeof stats !== 'object') return false;
-  
+  if (!stats || typeof stats !== "object") return false;
+
   // Проверяем, что числовые поля действительно числа и не NaN
-  const numericFields = ['xp', 'level', 'coins', 'sprintRecord', 'survivalRecord'];
-  const isValid = numericFields.every(field => typeof stats[field] === 'number' && !isNaN(stats[field]));
+  const numericFields = [
+    "xp",
+    "level",
+    "coins",
+    "sprintRecord",
+    "survivalRecord",
+  ];
+  const isValid = numericFields.every(
+    (field) => typeof stats[field] === "number" && !isNaN(stats[field]),
+  );
 
   if (!isValid) console.error("❌ Validation failed for UserStats:", stats);
   return isValid;
 }
 
+/**
+ * Schedules a save of the application state to localStorage and Supabase (debounced).
+ * @param delay The delay in milliseconds before saving (default: 300ms).
+ */
 export function scheduleSaveState(delay: number = 300) {
   if (_saveTimer) clearTimeout(_saveTimer);
   _saveTimer = window.setTimeout(() => {
@@ -60,11 +81,17 @@ export function scheduleSaveState(delay: number = 300) {
   }, delay);
 }
 
+/**
+ * Immediately saves the current application state to localStorage.
+ * Also performs validation before saving.
+ */
 export function immediateSaveState() {
   try {
     // Валидация перед сохранением, чтобы не записать мусор
     if (!validateUserStats(state.userStats)) {
-      console.warn("⚠️ State validation failed. Aborting save to protect localStorage.");
+      console.warn(
+        "⚠️ State validation failed. Aborting save to protect localStorage.",
+      );
       return;
     }
 
@@ -82,10 +109,19 @@ export function immediateSaveState() {
       JSON.stringify([...state.dirtyWordIds]),
     );
     localStorage.setItem("custom_words_v1", JSON.stringify(state.customWords));
-    localStorage.setItem("favorite_quotes_v1", JSON.stringify(state.favoriteQuotes));
-    localStorage.setItem("trash_retention_v1", String(state.trashRetentionDays));
-    // Сжимаем кэш словаря, так как он самый большой
-    localStorage.setItem("vocabulary_cache_v1", compress(JSON.stringify(state.dataStore)));
+    localStorage.setItem(
+      "favorite_quotes_v1",
+      JSON.stringify(state.favoriteQuotes),
+    );
+    localStorage.setItem(
+      "trash_retention_v1",
+      String(state.trashRetentionDays),
+    );
+    // Не сжимаем, чтобы избежать ошибок с Unicode
+    localStorage.setItem(
+      "vocabulary_cache_v1",
+      JSON.stringify(state.dataStore),
+    );
     localStorage.setItem("tts_volume_v1", String(state.ttsVolume));
     localStorage.setItem("vocabulary_version", VOCABULARY_CACHE_VERSION);
   } catch (e) {
@@ -93,6 +129,9 @@ export function immediateSaveState() {
   }
 }
 
+/**
+ * Removes IDs from state sets (learned, mistakes, favorites) that no longer exist in the data store.
+ */
 function cleanupInvalidStateIds() {
   if (!state.dataStore || state.dataStore.length === 0) return;
 
@@ -119,6 +158,10 @@ function cleanupInvalidStateIds() {
   }
 }
 
+/**
+ * Updates the user's daily streak based on the last activity date.
+ * Handles streak freezing logic if applicable.
+ */
 export function updateStreak() {
   const today = new Date().toLocaleDateString("en-CA");
   if (state.streak.lastDate !== today) {
@@ -141,6 +184,12 @@ export function updateStreak() {
   }
 }
 
+/**
+ * Records a quiz attempt for a specific word.
+ * Updates SM-2 scheduling parameters if the answer was incorrect.
+ * @param id The ID of the word.
+ * @param isCorrect Whether the answer was correct.
+ */
 export function recordAttempt(id: number | string, isCorrect: boolean) {
   if (!state.wordHistory[id])
     state.wordHistory[id] = { attempts: 0, correct: 0, lastReview: null };
@@ -162,6 +211,11 @@ export function recordAttempt(id: number | string, isCorrect: boolean) {
   scheduleSaveState();
 }
 
+/**
+ * Processes raw vocabulary data from the server.
+ * Merges with custom words, removes duplicates, sorts, and updates the local cache.
+ * @param serverData The array of words fetched from the server.
+ */
 function processVocabularyData(serverData: Word[]) {
   const serverWordsSet = new Set(serverData.map((w) => w.word_kr));
   state.customWords = state.customWords.filter(
@@ -193,8 +247,19 @@ function processVocabularyData(serverData: Word[]) {
   state.dataStore.forEach((w) => {
     if (!w.type) w.type = "word";
     w._parsedTopic = parseBilingualString(w.topic || w.topic_ru || w.topic_kr);
-    w._parsedCategory = parseBilingualString(w.category || w.category_ru || w.category_kr);
-    w._searchStr = [w.word_kr, w.translation, w.word_hanja, w.synonyms, w.my_notes].filter(Boolean).join(" ").toLowerCase();
+    w._parsedCategory = parseBilingualString(
+      w.category || w.category_ru || w.category_kr,
+    );
+    w._searchStr = [
+      w.word_kr,
+      w.translation,
+      w.word_hanja,
+      w.synonyms,
+      w.my_notes,
+    ]
+      .filter(Boolean)
+      .join(" ")
+      .toLowerCase();
   });
 
   validateSchema(state.dataStore);
@@ -202,6 +267,10 @@ function processVocabularyData(serverData: Word[]) {
   immediateSaveState();
 }
 
+/**
+ * Fetches the latest vocabulary data from Supabase.
+ * Handles caching, offline mode, and slow connections.
+ */
 export async function fetchVocabulary() {
   try {
     const cachedVersion = localStorage.getItem("vocabulary_version");
@@ -210,7 +279,10 @@ export async function fetchVocabulary() {
     // 🐌 Проверка скорости: если есть кэш и интернет медленный, пропускаем обновление
     // @ts-ignore
     const conn = navigator.connection;
-    if (conn && (conn.saveData || ['slow-2g', '2g'].includes(conn.effectiveType))) {
+    if (
+      conn &&
+      (conn.saveData || ["slow-2g", "2g"].includes(conn.effectiveType))
+    ) {
       if (state.dataStore.length > 0) {
         showToast("🐌 Медленный интернет: обновление словаря отложено");
         return;
@@ -225,12 +297,16 @@ export async function fetchVocabulary() {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 30000);
 
-    const { data, error } = await client.from("vocabulary").select("*").is('deleted_at', null).abortSignal(controller.signal);
+    const { data, error } = await client
+      .from("vocabulary")
+      .select("*")
+      .is("deleted_at", null)
+      .abortSignal(controller.signal);
     clearTimeout(timeoutId);
 
     if (error) throw error;
 
-    let serverData: Word[] = data || [];
+    const serverData: Word[] = data || [];
 
     if (serverData.length === 0 || (!navigator.onLine && isCacheValid)) {
       if (state.dataStore.length > 0) {
@@ -242,15 +318,17 @@ export async function fetchVocabulary() {
     processVocabularyData(serverData);
   } catch (e) {
     console.error("Vocabulary fetch failed:", e);
-    
+
     // Check for AbortError specifically
-    if (e instanceof Error && e.name === 'AbortError') {
-       console.warn("Request aborted. This might be due to a timeout or navigation.");
+    if (e instanceof Error && e.name === "AbortError") {
+      console.warn(
+        "Request aborted. This might be due to a timeout or navigation.",
+      );
     } else if (typeof e === "object" && e !== null) {
-       // @ts-ignore
-       if ("message" in e) console.error("Error Message:", e.message);
-       // @ts-ignore
-       if ("details" in e) console.error("Error Details:", e.details);
+      // @ts-ignore
+      if ("message" in e) console.error("Error Message:", e.message);
+      // @ts-ignore
+      if ("details" in e) console.error("Error Details:", e.details);
     }
     if (state.dataStore.length > 0) {
       showToast("⚠️ Ошибка сети. Используются кэшированные данные.");
@@ -260,6 +338,11 @@ export async function fetchVocabulary() {
   }
 }
 
+/**
+ * Loads user progress and settings from Supabase.
+ * Merges remote data with local state.
+ * @param user The authenticated user object containing the ID.
+ */
 export async function loadFromSupabase(user: { id: string }) {
   if (!navigator.onLine) return;
   try {
@@ -267,8 +350,9 @@ export async function loadFromSupabase(user: { id: string }) {
 
     const { error: rpcError } = await client.rpc("cleanup_user_progress");
     if (rpcError) {
-        // Ignore AbortError for cleanup, it's not critical
-        if (rpcError.message && !rpcError.message.includes("AbortError")) console.warn("Server cleanup skipped:", rpcError.message);
+      // Ignore AbortError for cleanup, it's not critical
+      if (rpcError.message && !rpcError.message.includes("AbortError"))
+        console.warn("Server cleanup skipped:", rpcError.message);
     }
 
     const { data: globalData } = await client
@@ -277,15 +361,35 @@ export async function loadFromSupabase(user: { id: string }) {
       .eq("user_id", user.id)
       .single();
     if (globalData) {
-      state.userStats.xp = globalData.xp ?? state.userStats.xp;
-      state.userStats.level = globalData.level ?? state.userStats.level;
-      state.userStats.sprintRecord =
-        globalData.sprint_record ?? state.userStats.sprintRecord;
-      state.userStats.survivalRecord =
-        globalData.survival_record ?? state.userStats.survivalRecord;
-      state.userStats.coins = globalData.coins ?? state.userStats.coins;
-      state.userStats.streakFreeze =
-        globalData.streak_freeze ?? state.userStats.streakFreeze;
+      // Умное слияние, чтобы избежать потери данных из-за устаревшего облака
+      if ((globalData.level || 0) > state.userStats.level) {
+        // Если в облаке уровень выше, полностью доверяем облаку
+        state.userStats.level = globalData.level;
+        state.userStats.xp = globalData.xp ?? 0;
+      } else if ((globalData.level || 0) === state.userStats.level) {
+        // Если уровни одинаковые, берем больший XP
+        state.userStats.xp = Math.max(state.userStats.xp, globalData.xp ?? 0);
+      }
+      // Если локальный уровень выше, мы ничего не делаем,
+      // и локальные данные будут синхронизированы в облако позже.
+
+      // Для остальных показателей просто берем максимальное значение
+      state.userStats.sprintRecord = Math.max(
+        state.userStats.sprintRecord,
+        globalData.sprint_record ?? 0,
+      );
+      state.userStats.survivalRecord = Math.max(
+        state.userStats.survivalRecord,
+        globalData.survival_record ?? 0,
+      );
+      state.userStats.coins = Math.max(
+        state.userStats.coins,
+        globalData.coins ?? 0,
+      );
+      state.userStats.streakFreeze = Math.max(
+        state.userStats.streakFreeze,
+        globalData.streak_freeze ?? 0,
+      );
 
       if (globalData.achievements && Array.isArray(globalData.achievements)) {
         const localIds = new Set(state.achievements.map((a) => a.id));
@@ -323,7 +427,10 @@ export async function loadFromSupabase(user: { id: string }) {
         }
         if (s.studyGoal !== undefined) {
           state.studyGoal = s.studyGoal;
-          localStorage.setItem("study_goal_v1", JSON.stringify(state.studyGoal));
+          localStorage.setItem(
+            "study_goal_v1",
+            JSON.stringify(state.studyGoal),
+          );
         }
         if (s.lastDailyReward !== undefined)
           state.userStats.lastDailyReward = s.lastDailyReward;
@@ -333,11 +440,17 @@ export async function loadFromSupabase(user: { id: string }) {
         }
         if (s.backgroundMusicEnabled !== undefined) {
           state.backgroundMusicEnabled = s.backgroundMusicEnabled;
-          localStorage.setItem("background_music_enabled_v1", String(state.backgroundMusicEnabled));
+          localStorage.setItem(
+            "background_music_enabled_v1",
+            String(state.backgroundMusicEnabled),
+          );
         }
         if (s.backgroundMusicVolume !== undefined) {
           state.backgroundMusicVolume = s.backgroundMusicVolume;
-          localStorage.setItem("background_music_volume_v1", String(state.backgroundMusicVolume));
+          localStorage.setItem(
+            "background_music_volume_v1",
+            String(state.backgroundMusicVolume),
+          );
         }
         if (s.ttsVolume !== undefined) {
           state.ttsVolume = s.ttsVolume;
@@ -345,15 +458,15 @@ export async function loadFromSupabase(user: { id: string }) {
         }
         if (s.trashRetentionDays !== undefined) {
           state.trashRetentionDays = s.trashRetentionDays;
-          localStorage.setItem("trash_retention_v1", String(state.trashRetentionDays));
+          localStorage.setItem(
+            "trash_retention_v1",
+            String(state.trashRetentionDays),
+          );
         }
         if (s.streakLastDate !== undefined)
           state.streak.lastDate = s.streakLastDate;
         if (s.survivalHealth !== undefined)
           state.userStats.survivalHealth = s.survivalHealth;
-
-        applyTheme();
-        updateVoiceUI();
       }
 
       if (globalData.sessions && Array.isArray(globalData.sessions)) {
@@ -393,14 +506,16 @@ export async function loadFromSupabase(user: { id: string }) {
             ? new Date(Number(row.last_review) || row.last_review).getTime()
             : null,
           learnedDate: row.learned_date
-            ? new Date(Number(row.learned_date) || row.learned_date).getTime() 
+            ? new Date(Number(row.learned_date) || row.learned_date).getTime()
             : undefined,
           sm2: {
             interval: row.sm2_interval ?? 0,
             repetitions: row.sm2_repetitions ?? 0,
             ef: row.sm2_ef ?? 2.5,
             nextReview: row.sm2_next_review
-              ? new Date(Number(row.sm2_next_review) || row.sm2_next_review).getTime()
+              ? new Date(
+                  Number(row.sm2_next_review) || row.sm2_next_review,
+                ).getTime()
               : undefined,
           },
         };
@@ -421,6 +536,10 @@ export async function loadFromSupabase(user: { id: string }) {
   }
 }
 
+/**
+ * Fetches a random quote from the database.
+ * @returns A quote object or null if fetch fails.
+ */
 export async function fetchRandomQuote() {
   try {
     // 1. Узнаем общее количество цитат
@@ -445,64 +564,5 @@ export async function fetchRandomQuote() {
   } catch (e) {
     console.warn("Quote fetch error:", e);
     return null;
-  }
-}
-
-export function createLocalBackup() {
-  try {
-    const keys = [
-      "user_stats_v5",
-      "learned_v5",
-      "mistakes_v5",
-      "favorites_v5",
-      "word_history_v5",
-      "streak_v5",
-      "sessions_v5",
-      "achievements_v5",
-      "daily_challenge_v1",
-      "custom_words_v1",
-      "favorite_quotes_v1",
-      "dirty_ids_v1"
-    ];
-    
-    const backup: Record<string, string> = {};
-    let size = 0;
-
-    keys.forEach(key => {
-      const val = localStorage.getItem(key);
-      if (val) {
-        backup[key] = val;
-        size += val.length;
-      }
-    });
-
-    // Предотвращаем ошибку квоты, если данных слишком много (> 3MB)
-    if (size > 3 * 1024 * 1024) {
-        console.warn("⚠️ Backup skipped: Data too large for localStorage duplication.");
-        return;
-    }
-
-    localStorage.setItem("safety_backup_v1", JSON.stringify(backup));
-    console.log("🛡️ Safety backup created");
-  } catch (e) {
-    console.warn("⚠️ Backup failed:", e);
-  }
-}
-
-export function restoreLocalBackup(): boolean {
-  try {
-    const raw = localStorage.getItem("safety_backup_v1");
-    if (!raw) return false;
-    
-    const backup = JSON.parse(raw);
-    Object.entries(backup).forEach(([key, val]) => {
-      if (typeof val === 'string') localStorage.setItem(key, val);
-    });
-    
-    location.reload();
-    return true;
-  } catch (e) {
-    console.error("Restore failed:", e);
-    return false;
   }
 }

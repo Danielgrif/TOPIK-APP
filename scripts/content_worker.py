@@ -60,7 +60,6 @@ if not os.getenv("SUPABASE_URL"):
 # 1. Настройки
 SUPABASE_URL = os.getenv("SUPABASE_URL") or os.getenv("VITE_SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_SERVICE_KEY") or os.getenv("SUPABASE_KEY") or os.getenv("VITE_SUPABASE_KEY") # Нужен ключ с правами записи!
-PIXABAY_API_KEY = os.getenv("PIXABAY_API_KEY")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 BUCKET_NAME = "audio-files"
 IMAGE_BUCKET_NAME = "image-files"
@@ -69,7 +68,6 @@ MIN_FILE_SIZE = 500 # Минимальный размер файла в байт
 # Очистка ключей от кавычек, если они есть (частая проблема .env)
 if SUPABASE_URL: SUPABASE_URL = SUPABASE_URL.replace('"', '').replace("'", "")
 if SUPABASE_KEY: SUPABASE_KEY = SUPABASE_KEY.replace('"', '').replace("'", "")
-if PIXABAY_API_KEY: PIXABAY_API_KEY = PIXABAY_API_KEY.replace('"', '').replace("'", "")
 if GEMINI_API_KEY: GEMINI_API_KEY = GEMINI_API_KEY.replace('"', '').replace("'", "")
 
 # Проверка на дефолтное значение
@@ -521,59 +519,51 @@ async def handle_example_audio(row, example, force_audio=False):
     return {}
 
 async def handle_image(session, row, translation, word_hash, force_images):
-    """Обработка изображения (Pixabay)"""
+    """Обработка изображения через Edge Function (Auto Mode)"""
     current_image = row.get('image')
     image_source = row.get('image_source')
 
     if current_image:
         # Если источник НЕ 'pixabay' (значит пользовательская) — пропускаем всегда
-        if image_source != 'pixabay':
+        if image_source not in ['pixabay', 'unsplash', 'pexels'] and not force_images:
             return {}
         # Если источник 'pixabay', но не включен force — тоже пропускаем
         if not force_images:
             return {}
 
-    # 2. Если дошли сюда: либо картинки нет, либо это Pixabay + force
-    if not translation or not isinstance(translation, str) or not PIXABAY_API_KEY: return {}
-    
-    updates = {}
-    q = clean_query_for_pixabay(translation)
-    
-    if not q: return {} # Не тратим квоту на пустые запросы
+    # 2. Если дошли сюда: либо картинки нет, либо это авто-картинка + force
+    if not translation: return {}
     
     try:
-        # Запрашиваем больше картинок, чтобы был выбор
-        params = {"key": PIXABAY_API_KEY, "q": q, "lang": "ru", "image_type": "photo", "per_page": 20, "safesearch": "true"}
-        async with session.get("https://pixabay.com/api/", params=params) as pix_res:
-            if pix_res.status == 200:
-                hits = (await pix_res.json()).get('hits')
-                if hits:
-                    # Выбираем случайную картинку из полученных
-                    selected_hit = random.choice(hits)
-                    p_url = selected_hit['webformatURL']
-                    async with session.get(p_url) as img_res:
-                        if img_res.status == 200:
-                            fname = f"{word_hash}_pix.jpg" # Уникальное имя файла
-                            img_data = await img_res.read()
-                            
-                            # Оптимизация (выполняем в отдельном потоке, чтобы не блокировать async)
-                            loop = asyncio.get_running_loop()
-                            optimized_data = await loop.run_in_executor(None, optimize_image_data, img_data)
-                            
-                            if len(optimized_data) < MIN_FILE_SIZE:
-                                logging.warning(f"⚠️ Изображение слишком мало: {translation}")
-                                return {}
+        function_url = f"{SUPABASE_URL}functions/v1/regenerate-image"
+        headers = {
+            "Authorization": f"Bearer {SUPABASE_KEY}",
+            "Content-Type": "application/json"
+        }
+        payload = {
+            "mode": "auto",
+            "id": row.get('id'),
+            "word": row.get('word_kr'),
+            "translation": row.get('translation')
+        }
+        
+        async with session.post(function_url, json=payload, headers=headers, timeout=aiohttp.ClientTimeout(total=30)) as resp:
+            if resp.status == 200:
+                data = await resp.json()
+                logging.info(f"✅ Image (Edge Auto): {translation} -> {data.get('source')}")
+                return {}
+            else:
+                if resp.status != 404:
+                    text = await resp.text()
+                    logging.warning(f"⚠️ Edge Function Error: {resp.status} - {text}")
+                return {}
 
-                            await upload_to_supabase(IMAGE_BUCKET_NAME, fname, optimized_data, "image/jpeg")
-                            
-                            public_url = supabase.storage.from_(IMAGE_BUCKET_NAME).get_public_url(fname)
-                            updates['image'] = public_url
-                            updates['image_source'] = 'pixabay'
-                            logging.info(f"✅ Image: {translation}")
+    except asyncio.TimeoutError:
+        logging.warning(f"⚠️ Timeout при вызове Edge Function для {translation}")
+        return {}
     except Exception as e:
-        logging.warning(f"⚠️ Pixabay error {translation}: {e}")
-    
-    return updates
+        logging.warning(f"⚠️ Ошибка вызова Edge Function для {translation}: {e}")
+        return {}
 
 async def _generate_content_for_word(session, row):
     """Генерация контента для слова (аудио, картинки)"""

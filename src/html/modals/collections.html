@@ -1,0 +1,63 @@
+<!-- Collections Management Modal -->
+<div id="collections-modal" class="modal">
+  <div class="modal-content">
+    <div class="modal-header">
+      <h2>📂 Мои списки</h2>
+      <button class="btn-icon close-modal-btn" data-close-modal="collections-modal">✕</button>
+    </div>
+    <div class="modal-body">
+      <!-- Create New List -->
+      <div class="create-list-section" style="background: var(--surface-2); padding: 15px; border-radius: 12px; margin-bottom: 20px;">
+        <div style="font-weight: bold; margin-bottom: 10px;">Создать новый список</div>
+        <div style="display: flex; gap: 10px; margin-bottom: 10px;">
+          <input type="text" id="new-list-icon" class="input" placeholder="Emoji" style="width: 60px; text-align: center;" maxlength="2">
+          <input type="text" id="new-list-title" class="input" placeholder="Название списка" style="flex: 1;">
+        </div>
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+          <label class="checkbox-label" style="font-size: 14px;">
+            <input type="checkbox" id="new-list-public"> 🌐 Публичный
+          </label>
+          <button class="btn btn-primary" data-action="create-list">➕ Создать</button>
+        </div>
+      </div>
+
+      <!-- Lists Container -->
+      <div id="collections-list" class="collections-list" style="display: flex; flex-direction: column; gap: 10px; max-height: 400px; overflow-y: auto;">
+        <!-- Lists will be injected here -->
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Edit List Modal -->
+<div id="edit-list-modal" class="modal">
+  <div class="modal-content">
+    <div class="modal-header">
+      <h2>✏️ Редактировать список</h2>
+      <button class="btn-icon close-modal-btn" data-close-modal="edit-list-modal">✕</button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="edit-list-id">
+      <div style="display: flex; gap: 10px; margin-bottom: 20px;">
+        <input type="text" id="edit-list-icon" class="input" placeholder="Emoji" style="width: 60px; text-align: center;" maxlength="2">
+        <input type="text" id="edit-list-title" class="input" placeholder="Название списка" style="flex: 1;">
+      </div>
+      <button class="btn btn-primary" style="width: 100%;" data-action="save-list-changes">Сохранить</button>
+    </div>
+  </div>
+</div>
+
+<!-- Add To List Modal (Used in ui_card.ts and ui_bulk.ts) -->
+<div id="add-to-list-modal" class="modal">
+  <div class="modal-content">
+    <div class="modal-header">
+      <h2>📂 Добавить в список</h2>
+      <button class="btn-icon close-modal-btn" data-close-modal="add-to-list-modal">✕</button>
+    </div>
+    <div class="modal-body">
+      <div id="add-to-list-content" style="display: flex; flex-direction: column; gap: 10px; max-height: 400px; overflow-y: auto;">
+        <!-- Checkboxes will be injected here -->
+      </div>
+    </div>
+  </div>
+</div>

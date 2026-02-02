@@ -1,12 +1,24 @@
+/* eslint-disable no-console, @typescript-eslint/no-explicit-any */
 import { state } from "../core/state.ts";
-import { speak, showToast, showUndoToast, playTone, getIconForValue } from "../utils/utils.ts";
+import {
+  speak,
+  showToast,
+  showUndoToast,
+  playTone,
+  getIconForValue,
+} from "../utils/utils.ts";
 import { scheduleSaveState, recordAttempt } from "../core/db.ts";
-import { addXP, checkAchievements } from "../core/stats.ts";
-import { ensureSessionStarted, saveAndRender } from "./ui.ts";
+import {
+  addXP,
+  checkAchievements,
+  updateSRSBadge,
+  updateStats,
+} from "../core/stats.ts";
+import { ensureSessionStarted } from "../core/session.ts";
 import { client } from "../core/supabaseClient.ts";
 import { Word } from "../types/index.ts";
-import { currentCollectionFilter, listItems, userLists } from "./ui_collections.ts";
-import { openModal, openConfirm } from "./ui_modal.ts";
+import { collectionsState } from "../core/collections_data.ts";
+import { openModal, openConfirm, closeModal } from "./ui_modal.ts";
 
 // --- Virtual Scroll Constants (for List View) ---
 const ITEM_HEIGHT_LIST = 82;
@@ -20,23 +32,54 @@ let scrollRafId: number | null = null;
 let currentFilteredData: Word[] = [];
 let resizeHandler: (() => void) | null = null;
 
+/**
+ * Wraps a promise with a timeout.
+ * @param promise The promise to wrap.
+ * @param ms The timeout in milliseconds.
+ * @param timeoutError The error to throw on timeout.
+ * @returns The result of the promise.
+ */
+export function promiseWithTimeout<T>(
+  promise: Promise<T>,
+  ms: number,
+  timeoutError = new Error("Promise timed out"),
+): Promise<T> {
+  const timeout = new Promise<never>((_, reject) => {
+    const id = setTimeout(() => {
+      clearTimeout(id);
+      reject(timeoutError);
+    }, ms);
+  });
+  return Promise.race([promise, timeout]);
+}
+
 let counterTimeout: number | null = null;
 
 function escapeRegExp(string: string) {
-  return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return string.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 export function updateGridCardHeight() {
   // FIX: Устанавливаем фиксированную высоту для карточек в сетке.
   // Динамический расчет (window.innerHeight) делал их слишком огромными.
   ITEM_HEIGHT_GRID = 480; // Увеличена высота
-  document.documentElement.style.setProperty("--card-height", `${ITEM_HEIGHT_GRID}px`);
+  document.documentElement.style.setProperty(
+    "--card-height",
+    `${ITEM_HEIGHT_GRID}px`,
+  );
+}
+
+function saveAndRender() {
+  scheduleSaveState();
+  updateSRSBadge();
+  updateStats();
+  render();
 }
 
 export function renderSkeletons() {
   const grid = document.getElementById("vocabulary-grid");
   if (!grid) return;
-  
+
   // FIX: Возвращаем класс grid для правильного отображения скелетонов
   grid.classList.remove("virtual-scroll-container", "list-view");
   grid.classList.add("grid");
@@ -123,22 +166,31 @@ function updateFilteredData() {
     const topics = Array.isArray(state.currentTopic)
       ? state.currentTopic
       : [state.currentTopic];
-    if (!topics.includes("all") && !topics.includes(wTopic)) 
-      return false;
+    if (!topics.includes("all") && !topics.includes(wTopic)) return false;
     const wCat = w.category || w.category_ru || w.category_kr || "";
-    const categories = Array.isArray(state.currentCategory) ? state.currentCategory : [state.currentCategory];
-    if (!categories.includes("all") && !categories.includes(wCat))
-      return false;
-    
+    const categories = Array.isArray(state.currentCategory)
+      ? state.currentCategory
+      : [state.currentCategory];
+    if (!categories.includes("all") && !categories.includes(wCat)) return false;
+
     // Фильтр по коллекции
-    if (currentCollectionFilter) {
-        if (currentCollectionFilter === 'uncategorized') {
-             // Проверяем, входит ли слово хоть в один список
-             const isInAnyList = Object.values(listItems).some(set => set.has(w.id as number));
-             if (isInAnyList) return false;
-        } else if (listItems[currentCollectionFilter]) {
-            if (!listItems[currentCollectionFilter].has(w.id as number)) return false;
-        }
+    if (collectionsState.currentCollectionFilter) {
+      if (collectionsState.currentCollectionFilter === "uncategorized") {
+        // Проверяем, входит ли слово хоть в один список
+        const isInAnyList = Object.values(collectionsState.listItems).some(
+          (set) => set.has(w.id as number),
+        );
+        if (isInAnyList) return false;
+      } else if (
+        collectionsState.listItems[collectionsState.currentCollectionFilter]
+      ) {
+        if (
+          !collectionsState.listItems[
+            collectionsState.currentCollectionFilter
+          ].has(w.id as number)
+        )
+          return false;
+      }
     }
 
     return true;
@@ -175,18 +227,27 @@ function onVirtualScroll(_e: Event) {
     if (grid && indicator && currentFilteredData.length > 0) {
       const scrollTop = grid.scrollTop;
       // Calculate approximate index based on scroll position
-      const itemHeight = state.viewMode === "list" ? ITEM_HEIGHT_LIST : (ITEM_HEIGHT_GRID + GRID_GAP);
+      const itemHeight =
+        state.viewMode === "list"
+          ? ITEM_HEIGHT_LIST
+          : ITEM_HEIGHT_GRID + GRID_GAP;
       // For grid, we need to know columns.
       const gridWidth = grid.clientWidth;
       const gap = GRID_GAP; // CSS gap
-      const colCount = state.viewMode === "list" ? 1 : Math.max(1, Math.floor((gridWidth + gap) / (MIN_COL_WIDTH + gap)));
-      
+      const colCount =
+        state.viewMode === "list"
+          ? 1
+          : Math.max(1, Math.floor((gridWidth + gap) / (MIN_COL_WIDTH + gap)));
+
       const currentRow = Math.floor((scrollTop + itemHeight / 2) / itemHeight);
-      const currentIndex = Math.min(currentFilteredData.length, Math.max(1, currentRow * colCount + 1));
-      
+      const currentIndex = Math.min(
+        currentFilteredData.length,
+        Math.max(1, currentRow * colCount + 1),
+      );
+
       indicator.textContent = `${currentIndex} / ${currentFilteredData.length}`;
       indicator.classList.add("visible");
-      
+
       if (counterTimeout) clearTimeout(counterTimeout);
       counterTimeout = window.setTimeout(() => {
         indicator.classList.remove("visible");
@@ -214,7 +275,9 @@ function initGridVirtualScroll(grid: HTMLElement) {
   content.style.left = "0";
   content.style.width = "100%";
   const isMobile = window.innerWidth < 600;
-  content.style.padding = isMobile ? "16px 16px 100px 16px" : "24px 24px 100px 24px";
+  content.style.padding = isMobile
+    ? "16px 16px 100px 16px"
+    : "24px 24px 100px 24px";
   content.style.boxSizing = "border-box";
   grid.appendChild(content);
 
@@ -233,7 +296,7 @@ function initGridVirtualScroll(grid: HTMLElement) {
 
   renderVisibleGridItems({
     target: grid,
-    sourceData
+    sourceData,
   });
 }
 
@@ -264,7 +327,8 @@ function renderVisibleGridItems(params: {
   content.style.gridTemplateColumns = `repeat(${colCount}, 1fr)`;
 
   const totalRows = Math.ceil(sourceData.length / colCount);
-  const totalHeight = totalRows > 0 ? totalRows * (ITEM_HEIGHT_GRID + gap) - gap : 0;
+  const totalHeight =
+    totalRows > 0 ? totalRows * (ITEM_HEIGHT_GRID + gap) - gap : 0;
 
   // Добавляем высоту паддингов (24px сверху + 100px снизу = 124px)
   (sizer as HTMLElement).style.height = `${totalHeight + 124}px`;
@@ -272,7 +336,10 @@ function renderVisibleGridItems(params: {
   const scrollTop = grid.scrollTop;
   const viewportHeight = grid.clientHeight;
 
-  const startRow = Math.max(0, Math.floor(scrollTop / (ITEM_HEIGHT_GRID + gap)));
+  const startRow = Math.max(
+    0,
+    Math.floor(scrollTop / (ITEM_HEIGHT_GRID + gap)),
+  );
   const visibleRows = Math.ceil(viewportHeight / (ITEM_HEIGHT_GRID + gap)) + 1;
 
   const startIndex = startRow * colCount;
@@ -283,7 +350,7 @@ function renderVisibleGridItems(params: {
 
   const topOffset = startRow * (ITEM_HEIGHT_GRID + gap);
   (content as HTMLElement).style.transform = `translateY(${topOffset}px)`;
-  
+
   content.innerHTML = "";
 
   const visibleData = sourceData.slice(startIndex, endIndex);
@@ -342,9 +409,15 @@ function renderVisibleListItems(params: {
   const scrollTop = grid.scrollTop;
   const viewportHeight = grid.clientHeight;
 
-  const startIndex = Math.max(0, Math.floor(scrollTop / ITEM_HEIGHT_LIST) - BUFFER_ITEMS);
+  const startIndex = Math.max(
+    0,
+    Math.floor(scrollTop / ITEM_HEIGHT_LIST) - BUFFER_ITEMS,
+  );
   const visibleItemsCount = Math.ceil(viewportHeight / ITEM_HEIGHT_LIST);
-  const endIndex = Math.min(sourceData.length, startIndex + visibleItemsCount + BUFFER_ITEMS * 2);
+  const endIndex = Math.min(
+    sourceData.length,
+    startIndex + visibleItemsCount + BUFFER_ITEMS * 2,
+  );
 
   const topOffset = startIndex * ITEM_HEIGHT_LIST;
   (content as HTMLElement).style.transform = `translateY(${topOffset}px)`;
@@ -372,7 +445,8 @@ function prefetchNextImages(currentIndex: number, count: number = 3) {
       if (nextItem && nextItem.image) {
         const img = new Image();
         img.src = nextItem.image;
-        if (import.meta.env.DEV) console.log(`🖼️ Prefetching: ${nextItem.word_kr}`);
+        if (import.meta.env.DEV)
+          console.log(`🖼️ Prefetching: ${nextItem.word_kr}`);
       }
     }
   }
@@ -386,13 +460,15 @@ function prefetchNextAudio(currentIndex: number, count: number = 3) {
     if (nextItemIndex < currentFilteredData.length) {
       const nextItem = currentFilteredData[nextItemIndex];
       let url = nextItem.audio_url;
-      if (state.currentVoice === "male" && nextItem.audio_male) url = nextItem.audio_male;
+      if (state.currentVoice === "male" && nextItem.audio_male)
+        url = nextItem.audio_male;
 
       if (url) {
         const audio = new Audio();
         audio.src = url;
         audio.preload = "auto";
-        if (import.meta.env.DEV) console.log(`🔊 Prefetching audio: ${nextItem.word_kr}`);
+        if (import.meta.env.DEV)
+          console.log(`🔊 Prefetching audio: ${nextItem.word_kr}`);
       }
     }
   }
@@ -404,7 +480,11 @@ function setupLongPress(el: HTMLElement, itemId: string | number) {
 
   const start = (e: Event) => {
     // Игнорируем, если уже в режиме выбора или клик был по кнопке/инпуту
-    if (state.selectMode || (e.target as HTMLElement).closest("button, input, textarea")) return;
+    if (
+      state.selectMode ||
+      (e.target as HTMLElement).closest("button, input, textarea")
+    )
+      return;
 
     timer = window.setTimeout(() => {
       import("./ui_bulk.ts").then((m) => {
@@ -439,10 +519,10 @@ function createCardElement(item: Word, index: number): HTMLElement {
   const el = document.createElement("div");
   el.className = "card";
   el.dataset.wordId = String(item.id);
-  
+
   if (state.selectMode) {
-      el.classList.add("select-mode");
-      if (state.selectedWords.has(item.id)) el.classList.add("selected");
+    el.classList.add("select-mode");
+    if (state.selectedWords.has(item.id)) el.classList.add("selected");
   }
 
   if (state.hanjaMode) el.classList.add("hanja-mode");
@@ -452,7 +532,7 @@ function createCardElement(item: Word, index: number): HTMLElement {
 
   const inner = document.createElement("div");
   inner.className = "card-inner";
-  
+
   // Checkbox overlay
   const checkbox = document.createElement("div");
   checkbox.className = "select-checkbox";
@@ -474,9 +554,9 @@ function createCardElement(item: Word, index: number): HTMLElement {
 
     // Logic for Select Mode
     if (state.selectMode) {
-        e.stopPropagation();
-        import("./ui_bulk.ts").then(m => m.toggleSelection(item.id));
-        return;
+      e.stopPropagation();
+      import("./ui_bulk.ts").then((m) => m.toggleSelection(item.id));
+      return;
     }
 
     // Не переворачивать, если клик был по кнопке
@@ -527,12 +607,15 @@ function createCardFront(item: Word, index: number): HTMLElement {
   const addListBtn = document.createElement("button");
   addListBtn.className = "icon-btn";
   addListBtn.textContent = "📁";
-  addListBtn.onclick = (e) => { e.stopPropagation(); openAddToListModal(item.id as number); };
+  addListBtn.onclick = (e) => {
+    e.stopPropagation();
+    openAddToListModal(item.id as number);
+  };
   // Вставляем перед сердечком
   topRow.appendChild(addListBtn);
 
   // Если активен фильтр по списку, добавляем кнопку удаления из этого списка
-  if (currentCollectionFilter) {
+  if (collectionsState.currentCollectionFilter) {
     const removeListBtn = document.createElement("button");
     removeListBtn.className = "icon-btn";
     removeListBtn.textContent = "➖";
@@ -541,28 +624,31 @@ function createCardFront(item: Word, index: number): HTMLElement {
     removeListBtn.onclick = (e) => {
       e.stopPropagation();
       // Удаляем без подтверждения, но с возможностью отмены (Undo)
-      const listId = currentCollectionFilter!;
-      
+      const listId = collectionsState.currentCollectionFilter!;
+
       // Оптимистичное удаление
-      listItems[listId]?.delete(item.id as number);
+      collectionsState.listItems[listId]?.delete(item.id as number);
       // Обновляем текущий вид
-      currentFilteredData = currentFilteredData.filter(w => w.id !== item.id);
+      currentFilteredData = currentFilteredData.filter((w) => w.id !== item.id);
       render();
 
       showUndoToast(
-          "Убрано из списка",
-          () => {
-              // Undo
-              listItems[listId]?.add(item.id as number);
-              // При отмене нужно сбросить кэш фильтрации, чтобы слово вернулось
-              // Проще всего вызвать render(), который перестроит список, но нужно вернуть слово в currentFilteredData
-              // Или просто сбросить currentFilteredData и вызвать render
-              render(); 
-          },
-          async () => {
-              // Commit
-              await client.from('list_items').delete().match({ list_id: listId, word_id: item.id });
-          }
+        "Убрано из списка",
+        () => {
+          // Undo
+          collectionsState.listItems[listId]?.add(item.id as number);
+          // При отмене нужно сбросить кэш фильтрации, чтобы слово вернулось
+          // Проще всего вызвать render(), который перестроит список, но нужно вернуть слово в currentFilteredData
+          // Или просто сбросить currentFilteredData и вызвать render
+          render();
+        },
+        async () => {
+          // Commit
+          await client
+            .from("list_items")
+            .delete()
+            .match({ list_id: listId, word_id: item.id });
+        },
       );
     };
     topRow.appendChild(removeListBtn);
@@ -586,7 +672,7 @@ function createCardFront(item: Word, index: number): HTMLElement {
   // --- Level Section ---
   const levelSection = document.createElement("div");
   levelSection.className = "front-section";
-  
+
   const levelBadge = document.createElement("div");
   levelBadge.className = "card-level-stars";
   levelBadge.textContent = item.level || "★☆☆";
@@ -596,7 +682,7 @@ function createCardFront(item: Word, index: number): HTMLElement {
   // --- Word Section ---
   const wordSection = document.createElement("div");
   wordSection.className = "front-section";
-  
+
   let statusIcon = "";
 
   if (state.learned.has(item.id)) {
@@ -604,7 +690,7 @@ function createCardFront(item: Word, index: number): HTMLElement {
   } else if (state.mistakes.has(item.id)) {
     statusIcon = "❌";
   }
-  
+
   const wordWrapper = document.createElement("div");
   wordWrapper.style.display = "flex";
   wordWrapper.style.alignItems = "center";
@@ -692,7 +778,10 @@ function createCardFront(item: Word, index: number): HTMLElement {
       : obj.kr || obj.ru;
 
   const topicIcon = getIconForValue(item.topic || item.topic_ru || "", "🏷");
-  const catIcon = getIconForValue(item.category || item.category_ru || "", "🔹");
+  const catIcon = getIconForValue(
+    item.category || item.category_ru || "",
+    "🔹",
+  );
 
   const tagsDiv = document.createElement("div");
   tagsDiv.className = "card-tags";
@@ -701,7 +790,7 @@ function createCardFront(item: Word, index: number): HTMLElement {
       <span class="tag-pill category">${catIcon} ${formatBi(catObj)}</span>
   `;
   if (item.isLocal) {
-      tagsDiv.innerHTML += `<span class="tag-pill ai">⏳ AI</span>`;
+    tagsDiv.innerHTML += `<span class="tag-pill ai">⏳ AI</span>`;
   }
   mainContent.appendChild(tagsDiv);
 
@@ -713,7 +802,7 @@ function createCardFront(item: Word, index: number): HTMLElement {
 function createCardBack(item: Word): HTMLElement {
   const back = document.createElement("div");
   back.className = "card-back";
-  
+
   // 1. Header (Translation) - Fixed at top
   const header = document.createElement("div");
   header.className = "card-back-header";
@@ -740,29 +829,33 @@ function createCardBack(item: Word): HTMLElement {
     const imgContainer = document.createElement("div");
     imgContainer.className = "back-image-container";
     imgContainer.style.display = "none";
-    
+
     const img = document.createElement("img");
     img.dataset.src = item.image;
     img.className = "card-image"; // Keep class for lazy loader
     img.style.objectFit = "cover";
     img.alt = item.word_kr;
     img.draggable = false;
-    
+
     const revealOverlay = document.createElement("div");
     revealOverlay.className = "back-image-overlay";
     revealOverlay.innerHTML = "<span>👁️ Скрыть</span>";
-    
+
     showImgBtn.onclick = (e) => {
-        e.stopPropagation();
-        showImgBtn.style.display = "none";
-        imgContainer.style.display = "block";
+      e.stopPropagation();
+      showImgBtn.style.display = "none";
+      imgContainer.style.display = "block";
     };
 
     imgContainer.onclick = (e) => {
       e.stopPropagation();
       // Если клик по кнопкам или инпуту — игнорируем
-      if ((e.target as HTMLElement).closest("button") || (e.target as HTMLElement).closest("input")) return;
-      
+      if (
+        (e.target as HTMLElement).closest("button") ||
+        (e.target as HTMLElement).closest("input")
+      )
+        return;
+
       imgContainer.style.display = "none";
       showImgBtn.style.display = "block";
     };
@@ -791,7 +884,7 @@ function createCardBack(item: Word): HTMLElement {
 
     urlBtn.onclick = async (e) => {
       e.stopPropagation();
-      
+
       openConfirm(
         "Вставьте URL изображения (прямую ссылку):",
         () => {}, // Основное действие выполняется в onValidate
@@ -804,20 +897,30 @@ function createCardBack(item: Word): HTMLElement {
             urlBtn.classList.add("rotating");
             try {
               const response = await fetch(imageUrl);
-              if (!response.ok) throw new Error(`Не удалось загрузить: ${response.statusText}`);
+              if (!response.ok)
+                throw new Error(`Не удалось загрузить: ${response.statusText}`);
               const imageBlob = await response.blob();
-              await uploadAndSaveImage(imageBlob, item, img, imgContainer, revealOverlay, deleteBtn);
+              await uploadAndSaveImage(
+                imageBlob,
+                item,
+                img,
+                imgContainer,
+                revealOverlay,
+                deleteBtn,
+              );
               showToast("✅ Картинка загружена!");
               return true;
             } catch (err: any) {
-              showToast("❌ Ошибка: " + (err.message || "Не удалось загрузить"));
+              showToast(
+                "❌ Ошибка: " + (err.message || "Не удалось загрузить"),
+              );
               return false; // Оставляем окно открытым, чтобы можно было исправить URL
             } finally {
               urlBtn.disabled = false;
               urlBtn.classList.remove("rotating");
             }
-          }
-        }
+          },
+        },
       );
     };
 
@@ -834,15 +937,19 @@ function createCardBack(item: Word): HTMLElement {
         deleteBtn.disabled = true;
         try {
           // Если картинка своя — удаляем файл из хранилища
-          if (item.image_source === 'custom' && item.image) {
-             const fileName = item.image.split('/').pop()?.split('?')[0];
-             if (fileName) await client.storage.from('image-files').remove([fileName]);
+          if (item.image_source === "custom" && item.image) {
+            const fileName = item.image.split("/").pop()?.split("?")[0];
+            if (fileName)
+              await client.storage.from("image-files").remove([fileName]);
           }
-  
+
           // Очищаем поле в БД
-          const { error } = await client.from('vocabulary').update({ image: null, image_source: null }).eq('id', item.id);
+          const { error } = await client
+            .from("vocabulary")
+            .update({ image: null, image_source: null })
+            .eq("id", item.id);
           if (error) throw error;
-  
+
           // Обновляем UI: скрываем картинку, показываем заглушку
           item.image = undefined;
           item.image_source = undefined;
@@ -860,59 +967,9 @@ function createCardBack(item: Word): HTMLElement {
     regenBtn.className = "card-image-regenerate-btn btn-icon";
     regenBtn.title = "Сгенерировать AI";
     regenBtn.innerHTML = "🔄";
-    regenBtn.onclick = async (e) => {
+    regenBtn.onclick = (e) => {
       e.stopPropagation();
-      const btn = e.currentTarget as HTMLButtonElement;
-      btn.disabled = true;
-      btn.classList.add('rotating');
-      
-      try {
-        const { data, error } = await client.functions.invoke('regenerate-image', {
-          body: { 
-            id: item.id, 
-            word: item.word_kr, 
-            translation: item.translation 
-          }
-        });
-
-        if (!error && data && data.imageUrl) {
-          img.src = data.imageUrl; // URL уже содержит timestamp из Edge Function
-          img.dataset.src = data.imageUrl;
-          item.image = data.imageUrl;
-          item.image_source = 'pixabay';
-          
-          showImgBtn.style.display = "none";
-          imgContainer.style.display = "block";
-          
-          // Восстанавливаем UI после возможного удаления
-          img.style.display = "";
-          imgContainer.style.backgroundColor = "";
-          revealOverlay.style.display = "";
-          deleteBtn.style.display = "flex";
-          deleteBtn.disabled = false;
-          
-          showToast("✅ Картинка обновлена!");
-        } else {
-        console.error("Regenerate Error:", error); // Log the full error object
-        let errorMsg = error.message || "Неизвестная ошибка";
-        // The `error.context` is the raw Response. We need to await its JSON body.
-        if (error.context && typeof error.context.json === 'function') {
-          try {
-            const errorBody = await error.context.json();
-            errorMsg = errorBody.error || errorMsg; // Use the message from our function
-          } catch {
-            // Ignore JSON parsing errors, use the default message
-          }
-        }
-        showToast(`❌ Ошибка: ${errorMsg}`);
-        }
-      } catch (err: any) {
-        console.error("Client Error:", err);
-        showToast(`❌ Сбой клиента: ${err.message || err}`);
-      } finally {
-        btn.classList.remove('rotating');
-        btn.disabled = false;
-      }
+      openImagePicker(item, e.currentTarget as HTMLButtonElement);
     };
 
     // --- Кнопка загрузки своей картинки ---
@@ -938,7 +995,8 @@ function createCardBack(item: Word): HTMLElement {
       if (!file) return;
 
       // Увеличиваем лимит, так как будем сжимать
-      if (file.size > 15 * 1024 * 1024) { // Увеличим до 15MB
+      if (file.size > 15 * 1024 * 1024) {
+        // Увеличим до 15MB
         showToast("❌ Файл слишком большой (макс 15MB)");
         return;
       }
@@ -946,7 +1004,14 @@ function createCardBack(item: Word): HTMLElement {
       uploadBtn.disabled = true;
       uploadBtn.classList.add("rotating");
       try {
-        await uploadAndSaveImage(file, item, img, imgContainer, revealOverlay, deleteBtn);
+        await uploadAndSaveImage(
+          file,
+          item,
+          img,
+          imgContainer,
+          revealOverlay,
+          deleteBtn,
+        );
         showToast("✅ Картинка загружена!");
       } catch (err: any) {
         showToast("❌ Ошибка: " + (err.message || "Не удалось загрузить"));
@@ -965,7 +1030,7 @@ function createCardBack(item: Word): HTMLElement {
     imgContainer.appendChild(deleteBtn);
     imgContainer.appendChild(uploadBtn);
     imgContainer.appendChild(fileInput);
-    
+
     imgWrapper.appendChild(showImgBtn);
     imgWrapper.appendChild(imgContainer);
     content.appendChild(imgWrapper);
@@ -982,8 +1047,8 @@ function createCardBack(item: Word): HTMLElement {
     exBox.style.borderRadius = "8px";
     // Highlight the word in the example
     const highlightedKr = item.example_kr.replace(
-        new RegExp(escapeRegExp(item.word_kr), 'gi'), 
-        `<span class="highlight">$&</span>`
+      new RegExp(escapeRegExp(item.word_kr), "gi"),
+      `<span class="highlight">$&</span>`,
     );
     exBox.innerHTML = `
         <div class="section-label" style="color: var(--section-info-border); font-weight: bold; margin-bottom: 4px;">💬 Пример</div>
@@ -1005,9 +1070,11 @@ function createCardBack(item: Word): HTMLElement {
     synBox.innerHTML = `
         <div class="section-label" style="color: var(--section-relation-border); font-weight: bold; margin-bottom: 8px;">🔗 Синонимы</div>
         <div class="relation-row">
-            <div class="rel-chips">${
-                item.synonyms.split(/[,;]/).filter(s => s.trim()).map(s => `<span class="rel-chip syn">${s.trim()}</span>`).join("")
-            }</div>
+            <div class="rel-chips">${item.synonyms
+              .split(/[,;]/)
+              .filter((s) => s.trim())
+              .map((s) => `<span class="rel-chip syn">${s.trim()}</span>`)
+              .join("")}</div>
         </div>
     `;
     content.appendChild(synBox);
@@ -1025,9 +1092,11 @@ function createCardBack(item: Word): HTMLElement {
     antBox.innerHTML = `
         <div class="section-label" style="color: var(--section-relation-border); font-weight: bold; margin-bottom: 8px;">≠ Антонимы</div>
         <div class="relation-row">
-            <div class="rel-chips">${
-                item.antonyms.split(/[,;]/).filter(s => s.trim()).map(s => `<span class="rel-chip ant">${s.trim()}</span>`).join("")
-            }</div>
+            <div class="rel-chips">${item.antonyms
+              .split(/[,;]/)
+              .filter((s) => s.trim())
+              .map((s) => `<span class="rel-chip ant">${s.trim()}</span>`)
+              .join("")}</div>
         </div>
     `;
     content.appendChild(antBox);
@@ -1035,56 +1104,62 @@ function createCardBack(item: Word): HTMLElement {
 
   // --- Collocations ---
   if (item.collocations && item.collocations.trim()) {
-      const colBox = document.createElement("div");
-      colBox.className = "back-section";
-      colBox.style.borderLeft = "3px solid var(--section-extra-border)";
-      colBox.style.backgroundColor = "var(--section-extra-bg)";
-      colBox.style.padding = "12px 12px 12px 16px";
-      colBox.style.marginBottom = "16px";
-      colBox.style.borderRadius = "8px";
-      const displayCollocations = item.word_kr 
-        ? item.collocations.replace(new RegExp(escapeRegExp(item.word_kr), 'gi'), `<span class="highlight">$&</span>`) 
-        : item.collocations;
-      colBox.innerHTML = `
+    const colBox = document.createElement("div");
+    colBox.className = "back-section";
+    colBox.style.borderLeft = "3px solid var(--section-extra-border)";
+    colBox.style.backgroundColor = "var(--section-extra-bg)";
+    colBox.style.padding = "12px 12px 12px 16px";
+    colBox.style.marginBottom = "16px";
+    colBox.style.borderRadius = "8px";
+    const displayCollocations = item.word_kr
+      ? item.collocations.replace(
+          new RegExp(escapeRegExp(item.word_kr), "gi"),
+          `<span class="highlight">$&</span>`,
+        )
+      : item.collocations;
+    colBox.innerHTML = `
           <div class="section-label" style="color: var(--section-extra-border); font-weight: bold; margin-bottom: 8px;">🔗 Коллокации</div>
           <div class="info-item">${displayCollocations}</div>
       `;
-      content.appendChild(colBox);
+    content.appendChild(colBox);
   }
 
   // --- Grammar ---
   if (item.grammar_info && item.grammar_info.trim()) {
-      const gramBox = document.createElement("div");
-      gramBox.className = "back-section";
-      gramBox.style.borderLeft = "3px solid var(--section-extra-border)";
-      gramBox.style.backgroundColor = "var(--section-extra-bg)";
-      gramBox.style.padding = "12px 12px 12px 16px";
-      gramBox.style.marginBottom = "16px";
-      gramBox.style.borderRadius = "8px";
-      gramBox.innerHTML = `
+    const gramBox = document.createElement("div");
+    gramBox.className = "back-section";
+    gramBox.style.borderLeft = "3px solid var(--section-extra-border)";
+    gramBox.style.backgroundColor = "var(--section-extra-bg)";
+    gramBox.style.padding = "12px 12px 12px 16px";
+    gramBox.style.marginBottom = "16px";
+    gramBox.style.borderRadius = "8px";
+    gramBox.innerHTML = `
           <div class="section-label" style="color: var(--section-extra-border); font-weight: bold; margin-bottom: 8px;">📘 Грамматика</div>
           <div class="info-item">${item.grammar_info}</div>
       `;
-      content.appendChild(gramBox);
+    content.appendChild(gramBox);
   }
 
   // --- Notes ---
   if (item.my_notes && item.my_notes.trim()) {
-      const noteBox = document.createElement("div");
-      noteBox.className = "back-section";
-      noteBox.style.borderLeft = "3px solid var(--section-extra-border)";
-      noteBox.style.backgroundColor = "var(--section-extra-bg)";
-      noteBox.style.padding = "12px 12px 12px 16px";
-      noteBox.style.marginBottom = "16px";
-      noteBox.style.borderRadius = "8px";
-      const displayNotes = item.word_kr 
-        ? item.my_notes.replace(new RegExp(escapeRegExp(item.word_kr), 'gi'), `<span class="highlight">$&</span>`) 
-        : item.my_notes;
-      noteBox.innerHTML = `
+    const noteBox = document.createElement("div");
+    noteBox.className = "back-section";
+    noteBox.style.borderLeft = "3px solid var(--section-extra-border)";
+    noteBox.style.backgroundColor = "var(--section-extra-bg)";
+    noteBox.style.padding = "12px 12px 12px 16px";
+    noteBox.style.marginBottom = "16px";
+    noteBox.style.borderRadius = "8px";
+    const displayNotes = item.word_kr
+      ? item.my_notes.replace(
+          new RegExp(escapeRegExp(item.word_kr), "gi"),
+          `<span class="highlight">$&</span>`,
+        )
+      : item.my_notes;
+    noteBox.innerHTML = `
           <div class="section-label" style="color: var(--section-extra-border); font-weight: bold; margin-bottom: 8px;">📝 Заметки</div>
           <div class="info-item">${displayNotes}</div>
       `;
-      content.appendChild(noteBox);
+    content.appendChild(noteBox);
   }
 
   back.appendChild(content);
@@ -1093,15 +1168,15 @@ function createCardBack(item: Word): HTMLElement {
   const actions = document.createElement("div");
   actions.className = "card-back-actions";
 
-    // Кнопка редактирования
-    const editBtn = document.createElement("button");
-    editBtn.className = "action-btn";
-    editBtn.textContent = "✏️ Изменить";
-    editBtn.onclick = (e) => {
-        e.stopPropagation();
-        window.openEditWordModal(String(item.id), render);
-    };
-    actions.appendChild(editBtn);
+  // Кнопка редактирования
+  const editBtn = document.createElement("button");
+  editBtn.className = "action-btn";
+  editBtn.textContent = "✏️ Изменить";
+  editBtn.onclick = (e) => {
+    e.stopPropagation();
+    window.openEditWordModal(String(item.id), render);
+  };
+  actions.appendChild(editBtn);
 
   if (item.isLocal) {
     const delBtn = document.createElement("button");
@@ -1110,16 +1185,18 @@ function createCardBack(item: Word): HTMLElement {
     delBtn.style.width = "100%";
     delBtn.onclick = (e) => {
       e.stopPropagation();
-      const cardEl = (e.target as HTMLElement).closest('.card') || (e.target as HTMLElement).closest('.list-item-wrapper');
-      
+      const cardEl =
+        (e.target as HTMLElement).closest(".card") ||
+        (e.target as HTMLElement).closest(".list-item-wrapper");
+
       openConfirm("Удалить заявку на это слово?", async () => {
-          if (cardEl) {
-            (cardEl as HTMLElement).style.transition = "all 0.3s ease";
-            (cardEl as HTMLElement).style.opacity = "0";
-            (cardEl as HTMLElement).style.transform = "scale(0.9)";
-            await new Promise(r => setTimeout(r, 300));
-          }
-          import("./ui_custom_words.ts").then((m) => m.deleteCustomWord(item.id));
+        if (cardEl) {
+          (cardEl as HTMLElement).style.transition = "all 0.3s ease";
+          (cardEl as HTMLElement).style.opacity = "0";
+          (cardEl as HTMLElement).style.transform = "scale(0.9)";
+          await new Promise((r) => setTimeout(r, 300));
+        }
+        import("./ui_custom_words.ts").then((m) => m.deleteCustomWord(item.id));
       });
     };
     actions.appendChild(delBtn);
@@ -1162,14 +1239,131 @@ function createCardBack(item: Word): HTMLElement {
   return back;
 }
 
+async function openImagePicker(item: Word, btn: HTMLButtonElement) {
+  btn.disabled = true;
+  btn.classList.add("rotating");
+
+  try {
+    const invokePromise = client.functions.invoke("regenerate-image", {
+      body: {
+        mode: "search",
+        id: item.id,
+        word: item.word_kr,
+        translation: item.translation,
+      },
+    });
+
+    const { data, error } = await promiseWithTimeout<{
+      data: { images: { url: string; source: string }[] } | null;
+      error: Error | null;
+    }>(invokePromise, 15000, new Error("Время ожидания от сервера истекло"));
+
+    if (error || !data || !data.images) {
+      throw new Error(error?.message || "Не удалось найти изображения");
+    }
+
+    const grid = document.getElementById("image-picker-grid");
+    const regenAgainBtn = document.getElementById("regenerate-again-btn");
+    if (!grid || !regenAgainBtn) return;
+
+    grid.innerHTML = ""; // Clear previous results
+
+    if (data.images.length === 0) {
+      grid.innerHTML = `<div style="text-align:center; color:var(--text-sub); padding: 20px;">Не найдено. Попробуйте еще раз.</div>`;
+    } else {
+      data.images.forEach((imgData: { url: string; source: string }) => {
+        const previewItem = document.createElement("div");
+        previewItem.className = "image-preview-item";
+        previewItem.innerHTML = `
+                    <img src="${imgData.url}" alt="Preview" loading="lazy">
+                    <span class="source-badge">${imgData.source}</span>
+                `;
+        previewItem.onclick = () => {
+          // Disable all other items
+          grid.querySelectorAll(".image-preview-item").forEach((el) => {
+            (el as HTMLElement).style.pointerEvents = "none";
+          });
+          previewItem.classList.add("loading");
+          finalizeImageSelection(item, imgData.url, imgData.source);
+        };
+        grid.appendChild(previewItem);
+      });
+    }
+
+    // Re-attach listener for regeneration
+    const newRegenBtn = regenAgainBtn.cloneNode(true);
+    regenAgainBtn.parentNode?.replaceChild(newRegenBtn, regenAgainBtn);
+    (newRegenBtn as HTMLElement).onclick = () => {
+      grid.innerHTML =
+        '<div class="spinner-wrapper" style="height: 200px;"><div class="loader-circle"></div></div>';
+      openImagePicker(item, btn); // Recursively call to search again
+    };
+
+    openModal("image-picker-modal");
+  } catch (err: any) {
+    showToast(`❌ Ошибка поиска: ${err.message}`);
+  } finally {
+    btn.disabled = false;
+    btn.classList.remove("rotating");
+  }
+}
+
+async function finalizeImageSelection(
+  item: Word,
+  selectedUrl: string,
+  source: string,
+) {
+  try {
+    const invokePromise = client.functions.invoke("regenerate-image", {
+      body: { mode: "finalize", id: item.id, selectedUrl, source },
+    });
+
+    const { data, error } = await promiseWithTimeout<{
+      data: { finalUrl: string } | null;
+      error: Error | null;
+    }>(invokePromise, 20000, new Error("Время ожидания сохранения истекло"));
+
+    if (error || !data || !data.finalUrl) {
+      throw new Error(error?.message || "Не удалось сохранить изображение");
+    }
+
+    const wordInStore = state.dataStore.find((w) => w.id === item.id);
+    if (wordInStore) {
+      wordInStore.image = data.finalUrl;
+      wordInStore.image_source = source;
+    }
+
+    const cardEl = document.querySelector(`.card[data-word-id="${item.id}"]`);
+    if (cardEl) {
+      const imgEl = cardEl.querySelector(".card-image") as HTMLImageElement;
+      if (imgEl) {
+        imgEl.src = data.finalUrl;
+        imgEl.dataset.src = data.finalUrl;
+      }
+    }
+
+    closeModal("image-picker-modal");
+    showToast("✅ Изображение обновлено!");
+  } catch (err: any) {
+    showToast(`❌ Ошибка сохранения: ${err.message}`);
+    const grid = document.getElementById("image-picker-grid");
+    if (grid) {
+      grid.querySelectorAll(".image-preview-item").forEach((el) => {
+        (el as HTMLElement).style.pointerEvents = "auto";
+        el.classList.remove("loading");
+      });
+    }
+  }
+}
+
 function createListItem(item: Word, index: number): HTMLElement {
   const container = document.createElement("div");
   container.className = "list-item-wrapper";
   container.dataset.wordId = String(item.id);
-  
+
   if (state.selectMode) {
-      container.classList.add("select-mode");
-      if (state.selectedWords.has(item.id)) container.classList.add("selected");
+    container.classList.add("select-mode");
+    if (state.selectedWords.has(item.id)) container.classList.add("selected");
   }
   // Убираем классы learned/mistake для контейнера, так как убираем полоску
 
@@ -1187,8 +1381,8 @@ function createListItem(item: Word, index: number): HTMLElement {
   if (state.selectedWords.has(item.id)) checkbox.innerHTML = "✓";
   el.appendChild(checkbox);
 
-  const hanjaHtml = item.word_hanja 
-    ? `<span class="list-hanja">${[...item.word_hanja].map(char => `<span class="list-hanja-char">${char}</span>`).join("")}</span>` 
+  const hanjaHtml = item.word_hanja
+    ? `<span class="list-hanja">${[...item.word_hanja].map((char) => `<span class="list-hanja-char">${char}</span>`).join("")}</span>`
     : "";
 
   const mainDiv = document.createElement("div");
@@ -1203,13 +1397,13 @@ function createListItem(item: Word, index: number): HTMLElement {
   `;
 
   if (item.word_hanja) {
-      mainDiv.querySelectorAll(".list-hanja-char").forEach(span => {
-          (span as HTMLElement).onclick = (e) => {
-              e.stopPropagation();
-              const char = span.textContent;
-              if (char) import("./ui_hanja.ts").then((m) => m.openHanjaModal(char));
-          };
-      });
+    mainDiv.querySelectorAll(".list-hanja-char").forEach((span) => {
+      (span as HTMLElement).onclick = (e) => {
+        e.stopPropagation();
+        const char = span.textContent;
+        if (char) import("./ui_hanja.ts").then((m) => m.openHanjaModal(char));
+      };
+    });
   }
 
   const metaDiv = document.createElement("div");
@@ -1246,13 +1440,16 @@ function createListItem(item: Word, index: number): HTMLElement {
   // --- Details Section (Accordion) ---
   const details = document.createElement("div");
   details.className = "list-item-details";
-  
+
   let detailsContent = "";
-  
+
   // Example
   if (item.example_kr && item.example_kr.trim()) {
-      const highlighted = item.example_kr.replace(new RegExp(escapeRegExp(item.word_kr), 'gi'), `<span class="highlight">$&</span>`);
-      detailsContent += `
+    const highlighted = item.example_kr.replace(
+      new RegExp(escapeRegExp(item.word_kr), "gi"),
+      `<span class="highlight">$&</span>`,
+    );
+    detailsContent += `
         <div class="list-detail-section" style="background: var(--section-info-bg); border-left-color: var(--section-info-border);">
             <div class="list-detail-label">💬 Пример</div>
             <div class="list-detail-text kr">${highlighted}</div>
@@ -1262,33 +1459,41 @@ function createListItem(item: Word, index: number): HTMLElement {
   }
 
   // Synonyms/Antonyms
-  if ((item.synonyms && item.synonyms.trim()) || (item.antonyms && item.antonyms.trim())) {
-      detailsContent += `<div class="list-detail-row">`;
-      if (item.synonyms && item.synonyms.trim()) {
-          detailsContent += `
+  if (
+    (item.synonyms && item.synonyms.trim()) ||
+    (item.antonyms && item.antonyms.trim())
+  ) {
+    detailsContent += `<div class="list-detail-row">`;
+    if (item.synonyms && item.synonyms.trim()) {
+      detailsContent += `
             <div class="list-detail-section" style="flex:1; background: var(--section-relation-bg); border-left-color: var(--section-relation-border);">
                 <div class="list-detail-label">🔗 Синонимы</div>
                 <div class="list-detail-text">${item.synonyms}</div>
             </div>`;
-      }
-      if (item.antonyms && item.antonyms.trim()) {
-          detailsContent += `
+    }
+    if (item.antonyms && item.antonyms.trim()) {
+      detailsContent += `
             <div class="list-detail-section" style="flex:1; background: var(--section-relation-bg); border-left-color: var(--section-relation-border);">
                 <div class="list-detail-label">≠ Антонимы</div>
                 <div class="list-detail-text">${item.antonyms}</div>
             </div>`;
-      }
-      detailsContent += `</div>`;
+    }
+    detailsContent += `</div>`;
   }
-  
+
   // Notes
-  if ((item.my_notes && item.my_notes.trim()) || (item.collocations && item.collocations.trim())) {
-     const info = [item.collocations, item.my_notes].filter(s => s && s.trim()).join("<br>");
-     detailsContent += `
+  if (
+    (item.my_notes && item.my_notes.trim()) ||
+    (item.collocations && item.collocations.trim())
+  ) {
+    const info = [item.collocations, item.my_notes]
+      .filter((s) => s && s.trim())
+      .join("<br>");
+    detailsContent += `
         <div class="list-detail-section" style="background: var(--section-extra-bg); border-left-color: var(--section-extra-border);">
             <div class="list-detail-label">📝 Инфо</div>
             <div class="list-detail-text">${info}</div>
-        </div>`; 
+        </div>`;
   }
 
   details.innerHTML = `<div class="list-details-inner">${detailsContent || '<div class="list-detail-empty">Нет дополнительной информации</div>'}</div>`;
@@ -1296,23 +1501,23 @@ function createListItem(item: Word, index: number): HTMLElement {
   setupLongPress(el, item.id);
 
   el.onclick = (e) => {
-      if (el.dataset.lpHandled) return;
+    if (el.dataset.lpHandled) return;
 
-      if (state.selectMode) {
-          e.stopPropagation();
-          import("./ui_bulk.ts").then(m => m.toggleSelection(item.id));
-          return;
-      }
+    if (state.selectMode) {
+      e.stopPropagation();
+      import("./ui_bulk.ts").then((m) => m.toggleSelection(item.id));
+      return;
+    }
 
-      if ((e.target as HTMLElement).closest("button")) return;
-      
-      if (container.classList.contains("expanded")) {
-          container.classList.remove("expanded");
-          details.style.maxHeight = "0";
-      } else {
-          container.classList.add("expanded");
-          details.style.maxHeight = details.scrollHeight + "px";
-      }
+    if ((e.target as HTMLElement).closest("button")) return;
+
+    if (container.classList.contains("expanded")) {
+      container.classList.remove("expanded");
+      details.style.maxHeight = "0";
+    } else {
+      container.classList.add("expanded");
+      details.style.maxHeight = details.scrollHeight + "px";
+    }
   };
 
   container.appendChild(el);
@@ -1321,45 +1526,59 @@ function createListItem(item: Word, index: number): HTMLElement {
 }
 
 async function openAddToListModal(wordId: number) {
-    const modal = document.getElementById('add-to-list-modal');
-    const content = document.getElementById('add-to-list-content');
-    if (!modal || !content) return;
+  const modal = document.getElementById("add-to-list-modal");
+  const content = document.getElementById("add-to-list-content");
+  if (!modal || !content) return;
 
-    const { data: { user } } = await client.auth.getUser();
-    if (!user) {
-        showToast("Войдите в аккаунт");
-        return;
-    }
+  const {
+    data: { user },
+  } = await client.auth.getUser();
+  if (!user) {
+    showToast("Войдите в аккаунт");
+    return;
+  }
 
-    const myLists = userLists.filter(l => l.user_id === user.id);
-    
-    content.innerHTML = myLists.map(list => {
-        const hasWord = listItems[list.id]?.has(wordId);
-        return `
+  const myLists = collectionsState.userLists.filter(
+    (l) => l.user_id === user.id,
+  );
+
+  content.innerHTML = myLists
+    .map((list) => {
+      const hasWord = collectionsState.listItems[list.id]?.has(wordId);
+      return `
         <div class="multiselect-item" onclick="toggleWordInList('${list.id}', ${wordId}, this)">
-            <input type="checkbox" ${hasWord ? 'checked' : ''} style="pointer-events: none;">
-            <span style="margin-left: 10px;">${list.icon || '📁'} ${list.title}</span>
+            <input type="checkbox" ${hasWord ? "checked" : ""} style="pointer-events: none;">
+            <span style="margin-left: 10px;">${list.icon || "📁"} ${list.title}</span>
         </div>
         `;
-    }).join('');
+    })
+    .join("");
 
-    openModal('add-to-list-modal');
+  openModal("add-to-list-modal");
 
-    // Глобальная функция для клика (можно вынести в window)
-    (window as any).toggleWordInList = async (listId: string, wId: number, el: HTMLElement) => {
-        const checkbox = el.querySelector('input') as HTMLInputElement;
-        const isAdding = !checkbox.checked;
-        checkbox.checked = isAdding;
+  // Глобальная функция для клика (можно вынести в window)
+  (window as any).toggleWordInList = async (
+    listId: string,
+    wId: number,
+    el: HTMLElement,
+  ) => {
+    const checkbox = el.querySelector("input") as HTMLInputElement;
+    const isAdding = !checkbox.checked;
+    checkbox.checked = isAdding;
 
-        if (isAdding) {
-            await client.from('list_items').insert({ list_id: listId, word_id: wId });
-            if (!listItems[listId]) listItems[listId] = new Set();
-            listItems[listId].add(wId);
-        } else {
-            await client.from('list_items').delete().match({ list_id: listId, word_id: wId });
-            listItems[listId]?.delete(wId);
-        }
-    };
+    if (isAdding) {
+      await client.from("list_items").insert({ list_id: listId, word_id: wId });
+      if (!collectionsState.listItems[listId])
+        collectionsState.listItems[listId] = new Set();
+      collectionsState.listItems[listId].add(wId);
+    } else {
+      await client
+        .from("list_items")
+        .delete()
+        .match({ list_id: listId, word_id: wId });
+      collectionsState.listItems[listId]?.delete(wId);
+    }
+  };
 }
 
 function getAccuracy(id: string | number): number {
@@ -1373,7 +1592,7 @@ function markLearned(id: string | number) {
   state.learned.add(id);
   state.mistakes.delete(id);
   recordAttempt(id, true);
-  
+
   if (state.wordHistory[id] && !state.wordHistory[id].learnedDate) {
     state.wordHistory[id].learnedDate = Date.now();
   }
@@ -1445,43 +1664,53 @@ async function uploadAndSaveImage(
   img: HTMLImageElement,
   imgContainer: HTMLElement,
   revealOverlay: HTMLElement,
-  deleteBtn: HTMLButtonElement
+  deleteBtn: HTMLButtonElement,
 ) {
-    const compressedBlob = await compressImage(imageBlob as File);
-    const fileName = `${item.id}_custom_${Date.now()}.jpg`;
-    
-    const { error: uploadError } = await client.storage.from('image-files').upload(fileName, compressedBlob, { contentType: 'image/jpeg', upsert: true });
-    if (uploadError) throw uploadError;
+  const compressedBlob = await compressImage(imageBlob as File);
+  const fileName = `${item.id}_custom_${Date.now()}.jpg`;
 
-    const { data: { publicUrl } } = client.storage.from('image-files').getPublicUrl(fileName);
-    
-    const { error: dbError } = await client.from('vocabulary').update({ image: publicUrl, image_source: 'custom' }).eq('id', item.id);
-    if (dbError) throw dbError;
+  const { error: uploadError } = await client.storage
+    .from("image-files")
+    .upload(fileName, compressedBlob, {
+      contentType: "image/jpeg",
+      upsert: true,
+    });
+  if (uploadError) throw uploadError;
 
-    item.image = publicUrl;
-    item.image_source = 'custom';
-    img.src = publicUrl;
-    img.dataset.src = publicUrl;
-    imgContainer.classList.remove("blurred");
-    
-    img.style.display = "";
-    imgContainer.style.backgroundColor = "";
-    revealOverlay.style.display = "";
-    deleteBtn.style.display = "flex";
-    deleteBtn.disabled = false;
+  const {
+    data: { publicUrl },
+  } = client.storage.from("image-files").getPublicUrl(fileName);
+
+  const { error: dbError } = await client
+    .from("vocabulary")
+    .update({ image: publicUrl, image_source: "custom" })
+    .eq("id", item.id);
+  if (dbError) throw dbError;
+
+  item.image = publicUrl;
+  item.image_source = "custom";
+  img.src = publicUrl;
+  img.dataset.src = publicUrl;
+  imgContainer.classList.remove("blurred");
+
+  img.style.display = "";
+  imgContainer.style.backgroundColor = "";
+  revealOverlay.style.display = "";
+  deleteBtn.style.display = "flex";
+  deleteBtn.disabled = false;
 }
 
 function showFullScreenImage(src: string, alt: string) {
-  const overlay = document.createElement('div');
-  overlay.className = 'fullscreen-image-overlay';
+  const overlay = document.createElement("div");
+  overlay.className = "fullscreen-image-overlay";
   overlay.style.cssText = `
       position: fixed; top: 0; left: 0; width: 100%; height: 100%;
       background: rgba(0,0,0,0.9); z-index: 30000;
       display: flex; justify-content: center; align-items: center;
       cursor: zoom-out; opacity: 0; transition: opacity 0.3s;
   `;
-  
-  const img = document.createElement('img');
+
+  const img = document.createElement("img");
   img.src = src;
   img.alt = alt;
   img.style.cssText = `
@@ -1490,19 +1719,19 @@ function showFullScreenImage(src: string, alt: string) {
       box-shadow: 0 0 20px rgba(0,0,0,0.5);
       transform: scale(0.9); transition: transform 0.3s;
   `;
-  
+
   overlay.appendChild(img);
   document.body.appendChild(overlay);
-  
+
   requestAnimationFrame(() => {
-      overlay.style.opacity = '1';
-      img.style.transform = 'scale(1)';
+    overlay.style.opacity = "1";
+    img.style.transform = "scale(1)";
   });
-  
+
   overlay.onclick = () => {
-      overlay.style.opacity = '0';
-      img.style.transform = 'scale(0.9)';
-      setTimeout(() => overlay.remove(), 300);
+    overlay.style.opacity = "0";
+    img.style.transform = "scale(0.9)";
+    setTimeout(() => overlay.remove(), 300);
   };
 }
 
@@ -1513,7 +1742,11 @@ function showFullScreenImage(src: string, alt: string) {
  * @param quality The JPEG quality (0 to 1).
  * @returns A promise that resolves with the compressed Blob.
  */
-function compressImage(file: File, maxWidth: number = 1280, quality: number = 0.8): Promise<Blob> {
+function compressImage(
+  file: File,
+  maxWidth: number = 1280,
+  quality: number = 0.8,
+): Promise<Blob> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.readAsDataURL(file);
@@ -1521,7 +1754,7 @@ function compressImage(file: File, maxWidth: number = 1280, quality: number = 0.
       const img = new Image();
       img.src = event.target?.result as string;
       img.onload = () => {
-        const canvas = document.createElement('canvas');
+        const canvas = document.createElement("canvas");
         let { width, height } = img;
 
         if (width > maxWidth || height > maxWidth) {
@@ -1536,11 +1769,16 @@ function compressImage(file: File, maxWidth: number = 1280, quality: number = 0.
 
         canvas.width = width;
         canvas.height = height;
-        const ctx = canvas.getContext('2d');
-        if (!ctx) return reject(new Error('Could not get canvas context'));
-        
+        const ctx = canvas.getContext("2d");
+        if (!ctx) return reject(new Error("Could not get canvas context"));
+
         ctx.drawImage(img, 0, 0, width, height);
-        canvas.toBlob((blob) => blob ? resolve(blob) : reject(new Error('Canvas to Blob failed')), 'image/jpeg', quality);
+        canvas.toBlob(
+          (blob) =>
+            blob ? resolve(blob) : reject(new Error("Canvas to Blob failed")),
+          "image/jpeg",
+          quality,
+        );
       };
       img.onerror = (error) => reject(error);
     };

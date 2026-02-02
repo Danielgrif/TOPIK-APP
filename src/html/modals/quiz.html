@@ -1,0 +1,67 @@
+<!-- Quiz Modal -->
+<div
+  id="quiz-modal"
+  class="modal"
+  role="dialog"
+  aria-modal="true"
+  aria-labelledby="quiz-modal-title"
+  tabindex="-1"
+  data-close-modal="quiz-modal"
+>
+  <div class="modal-content">
+    <div class="modal-body-container">
+      <div class="modal-header">
+        <h3 id="quiz-modal-title">🎯 Режимы тренировки</h3>
+        <div class="header-actions">
+          <button class="btn btn-icon close-modal-btn" data-close-modal="quiz-modal">✕</button>
+        </div>
+      </div>
+    <label for="quiz-search-input" class="visually-hidden">Поиск слов для тренировки</label>
+    <input type="text" id="quiz-search-input" name="quiz-search" class="search-box" placeholder="🔍 Поиск слов для тренировки..." style="width: 100%; margin-bottom: 12px; box-sizing: border-box; padding: 10px 15px;">
+    <div
+      id="quiz-filters"
+      style="margin-bottom: 12px; display: flex; gap: 8px"
+    >
+      <label for="quiz-topic-select" class="visually-hidden">Фильтр по теме</label>
+      <select
+        id="quiz-topic-select"
+        name="quiz-topic"
+        class="search-box"
+        style="padding: 8px; font-size: 13px; flex: 1"
+      ></select>
+      <label for="quiz-category-select" class="visually-hidden">Фильтр по категории</label>
+      <select
+        id="quiz-category-select"
+        name="quiz-category"
+        class="search-box"
+        style="padding: 8px; font-size: 13px; flex: 1"
+      ></select>
+    </div>
+    <div
+      id="quiz-difficulty"
+      style="margin-bottom: 12px; display: flex; gap: 8px; flex-wrap: wrap"
+    ></div>
+    <div
+      id="quiz-count"
+      style="margin-bottom: 12px; color: var(--text-sub); font-weight: 600"
+    >
+      Слов: 0
+    </div>
+    <div class="quiz-modes" id="quiz-mode-selector"></div>
+    <div id="quiz-game">
+      <div class="quiz-header">
+        <div id="quiz-score" class="quiz-meta-item">Вопрос 1/10</div>
+        <div class="quiz-progress-container">
+          <div class="quiz-progress-fill" id="quiz-progress-fill"></div>
+        </div>
+        <div id="quiz-timer-display" class="quiz-meta-item">00:00</div>
+      </div>
+      <div class="quiz-body">
+        <div class="quiz-question" id="quiz-q"></div>
+        <div class="quiz-options" id="quiz-opts"></div>
+      </div>
+      <div class="quiz-footer"><button class="btn btn-text-only" data-action="quit-quiz">Завершить тренировку</button></div>
+    </div>
+    </div>
+  </div>
+</div>

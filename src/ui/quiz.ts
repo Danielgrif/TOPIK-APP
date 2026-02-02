@@ -1,5 +1,10 @@
 import { state } from "../core/state.ts";
-import { showToast, parseBilingualString, playTone, playComboSound } from "../utils/utils.ts";
+import {
+  showToast,
+  parseBilingualString,
+  playTone,
+  playComboSound,
+} from "../utils/utils.ts";
 import { ensureSessionStarted, playAndSpeak, saveAndRender } from "./ui.ts";
 import { closeModal, openModal } from "./ui_modal.ts";
 import { recordAttempt, scheduleSaveState } from "../core/db.ts";
@@ -35,11 +40,18 @@ export function updateDailyChallengeUI() {
   const d = new Date();
   d.setDate(d.getDate() - 1);
   const yesterday = d.toLocaleDateString("en-CA");
-  const challenge = state.dailyChallenge || { lastDate: null, completed: false, streak: 0 };
-  
+  const challenge = state.dailyChallenge || {
+    lastDate: null,
+    completed: false,
+    streak: 0,
+  };
+
   const isCompleted = challenge.lastDate === today && challenge.completed;
   // Серия под угрозой, если она > 0, задание на сегодня не выполнено, и последнее выполнение было вчера
-  const isAtRisk = (challenge.streak || 0) > 0 && !isCompleted && challenge.lastDate === yesterday;
+  const isAtRisk =
+    (challenge.streak || 0) > 0 &&
+    !isCompleted &&
+    challenge.lastDate === yesterday;
   const isMaster = (challenge.streak || 0) >= 7;
 
   const isSunday = new Date().getDay() === 0;
@@ -108,33 +120,147 @@ export function buildQuizModes() {
 
   const modes = [
     // Challenges
-    { id: "mix", emoji: "🔀", label: "Микс", mode: "mix", category: "challenge" },
-    { id: "sprint", emoji: "⚡", label: "Спринт", mode: "sprint", category: "challenge" },
-    { id: "survival", emoji: "☠️", label: "Выживание", mode: "survival", category: "challenge" },
+    {
+      id: "mix",
+      emoji: "🔀",
+      label: "Микс",
+      mode: "mix",
+      category: "challenge",
+    },
+    {
+      id: "sprint",
+      emoji: "⚡",
+      label: "Спринт",
+      mode: "sprint",
+      category: "challenge",
+    },
+    {
+      id: "survival",
+      emoji: "☠️",
+      label: "Выживание",
+      mode: "survival",
+      category: "challenge",
+    },
 
     // Basics
-    { id: "multiple-choice", emoji: "🎯", label: "Выбор", mode: "multiple-choice", category: "basics" },
-    { id: "reverse", emoji: "🔄", label: "Обратно", mode: "reverse", category: "basics" },
-    { id: "flashcard", emoji: "🃏", label: "Карточки", mode: "flashcard", category: "basics" },
-    { id: "true-false", emoji: "✅", label: "Верно/Нет", mode: "true-false", category: "basics" },
+    {
+      id: "multiple-choice",
+      emoji: "🎯",
+      label: "Выбор",
+      mode: "multiple-choice",
+      category: "basics",
+    },
+    {
+      id: "reverse",
+      emoji: "🔄",
+      label: "Обратно",
+      mode: "reverse",
+      category: "basics",
+    },
+    {
+      id: "flashcard",
+      emoji: "🃏",
+      label: "Карточки",
+      mode: "flashcard",
+      category: "basics",
+    },
+    {
+      id: "true-false",
+      emoji: "✅",
+      label: "Верно/Нет",
+      mode: "true-false",
+      category: "basics",
+    },
 
     // Writing & Context
-    { id: "typing", emoji: "⌨️", label: "Написание", mode: "typing", category: "writing" },
-    { id: "sentence", emoji: "📝", label: "Пропуски", mode: "sentence", category: "writing" },
-    { id: "scramble", emoji: "🧩", label: "Конструктор", mode: "scramble", category: "writing" },
-    { id: "essay", emoji: "✍️", label: "Эссе", mode: "essay", category: "writing" },
+    {
+      id: "typing",
+      emoji: "⌨️",
+      label: "Написание",
+      mode: "typing",
+      category: "writing",
+    },
+    {
+      id: "sentence",
+      emoji: "📝",
+      label: "Пропуски",
+      mode: "sentence",
+      category: "writing",
+    },
+    {
+      id: "scramble",
+      emoji: "🧩",
+      label: "Конструктор",
+      mode: "scramble",
+      category: "writing",
+    },
+    {
+      id: "essay",
+      emoji: "✍️",
+      label: "Эссе",
+      mode: "essay",
+      category: "writing",
+    },
 
     // Audio
-    { id: "audio", emoji: "🎧", label: "Аудио", mode: "audio", category: "audio" },
-    { id: "dictation", emoji: "✍️", label: "Диктант", mode: "dictation", category: "audio" },
-    { id: "dialogue", emoji: "🗣️", label: "Диалог", mode: "dialogue", category: "audio" },
-    { id: "pronunciation", emoji: "🎤", label: "Речь", mode: "pronunciation", category: "audio" },
+    {
+      id: "audio",
+      emoji: "🎧",
+      label: "Аудио",
+      mode: "audio",
+      category: "audio",
+    },
+    {
+      id: "dictation",
+      emoji: "✍️",
+      label: "Диктант",
+      mode: "dictation",
+      category: "audio",
+    },
+    {
+      id: "dialogue",
+      emoji: "🗣️",
+      label: "Диалог",
+      mode: "dialogue",
+      category: "audio",
+    },
+    {
+      id: "pronunciation",
+      emoji: "🎤",
+      label: "Речь",
+      mode: "pronunciation",
+      category: "audio",
+    },
 
     // Advanced
-    { id: "association", emoji: "🔗", label: "Пары", mode: "association", category: "advanced" },
-    { id: "confusing", emoji: "🤔", label: "Похожие", mode: "confusing", category: "advanced" },
-    { id: "synonyms", emoji: "🤝", label: "Синонимы", mode: "synonyms", category: "advanced" },
-    { id: "antonyms", emoji: "↔️", label: "Антонимы", mode: "antonyms", category: "advanced" },
+    {
+      id: "association",
+      emoji: "🔗",
+      label: "Пары",
+      mode: "association",
+      category: "advanced",
+    },
+    {
+      id: "confusing",
+      emoji: "🤔",
+      label: "Похожие",
+      mode: "confusing",
+      category: "advanced",
+    },
+    {
+      id: "synonyms",
+      emoji: "🤝",
+      label: "Синонимы",
+      mode: "synonyms",
+      category: "advanced",
+    },
+    {
+      id: "antonyms",
+      emoji: "↔️",
+      label: "Антонимы",
+      mode: "antonyms",
+      category: "advanced",
+    },
   ];
 
   const categories: Record<string, string> = {
@@ -142,7 +268,7 @@ export function buildQuizModes() {
     basics: "📚 Основы",
     writing: "✍️ Письмо",
     audio: "🎧 Аудирование",
-    advanced: "🧠 Продвинутый"
+    advanced: "🧠 Продвинутый",
   };
 
   quizTopic = state.quizTopic || "all";
@@ -170,10 +296,10 @@ export function buildQuizModes() {
   const selector = document.getElementById("quiz-mode-selector");
   if (selector) {
     selector.innerHTML = "";
-    
+
     // Group modes by category
     const grouped: Record<string, typeof modes> = {};
-    modes.forEach(m => {
+    modes.forEach((m) => {
       if (!grouped[m.category]) grouped[m.category] = [];
       grouped[m.category].push(m);
     });
@@ -412,7 +538,7 @@ export function startQuizMode(mode: string) {
           bar.style.backgroundColor = "";
         }
       }
-      
+
       // Update sprint button timers if they exist
       const sprintBars = document.querySelectorAll(".sprint-timer-bar");
       sprintBars.forEach((sb) => {
@@ -467,7 +593,7 @@ export function startDailyChallenge() {
     ensureSessionStarted();
 
     quizWords = currentConfig.getWords(state.dataStore);
-    
+
     if (!quizWords || quizWords.length === 0) {
       showToast("⚠️ Не удалось подобрать слова для вызова. Попробуйте позже.");
       return;
@@ -842,9 +968,11 @@ function endQuiz(forceEnd: boolean = false) {
   }
 
   // FIX: Проверяем, был ли квиз действительно завершен для Ежедневного вызова
-  const isDaily = currentQuizMode === "daily" || currentQuizMode === "super-daily";
+  const isDaily =
+    currentQuizMode === "daily" || currentQuizMode === "super-daily";
   // Квиз завершен, если это не принудительный выход И мы дошли до конца
-  const isCompleted = !forceEnd && quizWords.length > 0 && quizIndex >= quizWords.length - 1;
+  const isCompleted =
+    !forceEnd && quizWords.length > 0 && quizIndex >= quizWords.length - 1;
 
   if (isDaily && !isCompleted) {
     showToast("⚠️ Вызов прерван. Награда не получена.");
@@ -1072,11 +1200,11 @@ function showQuizSummaryModal(correct: number, total: number, xp: number) {
   let title = "Неплохо!";
   let emoji = "🙂";
   let color = "var(--text-main)";
-  
-  if (accuracy === 100) { 
-    title = "Идеально!"; 
-    emoji = "🏆"; 
-    color = "var(--gold)"; 
+
+  if (accuracy === 100) {
+    title = "Идеально!";
+    emoji = "🏆";
+    color = "var(--gold)";
     if (typeof window.confetti === "function") {
       window.confetti({
         particleCount: 150,
@@ -1085,10 +1213,19 @@ function showQuizSummaryModal(correct: number, total: number, xp: number) {
         zIndex: 20005,
       });
     }
+  } else if (accuracy >= 80) {
+    title = "Отлично!";
+    emoji = "🔥";
+    color = "var(--success)";
+  } else if (accuracy >= 50) {
+    title = "Хорошо";
+    emoji = "👍";
+    color = "var(--primary)";
+  } else {
+    title = "Надо потренироваться";
+    emoji = "💪";
+    color = "var(--text-sub)";
   }
-  else if (accuracy >= 80) { title = "Отлично!"; emoji = "🔥"; color = "var(--success)"; }
-  else if (accuracy >= 50) { title = "Хорошо"; emoji = "👍"; color = "var(--primary)"; }
-  else { title = "Надо потренироваться"; emoji = "💪"; color = "var(--text-sub)"; }
 
   modal.innerHTML = `
     <div class="modal-content modal-centered" style="text-align: center; max-width: 350px; padding: 30px 20px;">
@@ -1099,7 +1236,7 @@ function showQuizSummaryModal(correct: number, total: number, xp: number) {
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 30px;">
             <div style="background: var(--surface-2); padding: 15px; border-radius: 16px; border: 1px solid var(--border-color);">
                 <div style="font-size: 12px; color: var(--text-sub); margin-bottom: 5px; font-weight: 600;">Точность</div>
-                <div style="font-size: 24px; font-weight: 900; color: ${accuracy >= 80 ? 'var(--success)' : 'var(--text-main)'};">${accuracy}%</div>
+                <div style="font-size: 24px; font-weight: 900; color: ${accuracy >= 80 ? "var(--success)" : "var(--text-main)"};">${accuracy}%</div>
             </div>
             <div style="background: var(--surface-2); padding: 15px; border-radius: 16px; border: 1px solid var(--border-color);">
                 <div style="font-size: 12px; color: var(--text-sub); margin-bottom: 5px; font-weight: 600;">XP</div>
@@ -1114,14 +1251,14 @@ function showQuizSummaryModal(correct: number, total: number, xp: number) {
         <button class="btn btn-quiz" style="width: 100%; padding: 15px; font-size: 16px; border-radius: 16px;" onclick="window.handleQuizSummaryContinue()">Продолжить</button>
     </div>
   `;
-  
+
   openModal("quiz-summary-modal");
 }
 
 function updateComboUI(streak: number | undefined) {
   const el = document.getElementById("quiz-combo");
   if (!el) return;
-  
+
   if (streak && streak > 1) {
     el.style.display = "block";
     el.innerText = `🔥 ${streak}`;
@@ -1133,6 +1270,7 @@ function updateComboUI(streak: number | undefined) {
   }
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 (window as any).handleQuizSummaryContinue = () => {
   closeModal("quiz-summary-modal");
   // Если это был ежедневный вызов, показываем статус (серию и награду) после закрытия сводки

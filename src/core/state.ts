@@ -1,3 +1,4 @@
+/* eslint-disable no-console, @typescript-eslint/no-explicit-any */
 import {
   Word,
   UserStats,
@@ -6,7 +7,7 @@ import {
   StudyGoal,
   MusicTrack,
 } from "../types/index.ts";
-import { decompress } from "../utils/utils.ts";
+import { createLocalBackup } from "./backup.ts";
 
 export interface Session {
   date: string;
@@ -165,16 +166,28 @@ try {
       const storedVersion = Number(localStorage.getItem("db_version") || "0");
       if (storedVersion >= CURRENT_DB_VERSION) return;
 
-      console.log(`🔄 Migrating data from v${storedVersion} to v${CURRENT_DB_VERSION}...`);
+      // 🛡️ Автоматическое создание резервной копии перед миграцией
+      console.log("🛡️ Creating safety backup before migration...");
+      createLocalBackup();
+
+      console.log(
+        `🔄 Migrating data from v${storedVersion} to v${CURRENT_DB_VERSION}...`,
+      );
 
       // Пример миграции: перенос данных из v4 в v5 (если бы мы обновлялись с v4)
       if (storedVersion < 5) {
         const keys = [
-          "user_stats", "learned", "mistakes", "favorites", 
-          "word_history", "streak", "sessions", "achievements"
+          "user_stats",
+          "learned",
+          "mistakes",
+          "favorites",
+          "word_history",
+          "streak",
+          "sessions",
+          "achievements",
         ];
-        
-        keys.forEach(baseKey => {
+
+        keys.forEach((baseKey) => {
           const oldKey = `${baseKey}_v4`;
           const newKey = `${baseKey}_v5`;
           const val = localStorage.getItem(oldKey);
@@ -190,7 +203,7 @@ try {
         if (raw) {
           try {
             const stats = JSON.parse(raw);
-            
+
             // Пример переименования поля: oldField -> newField
             // if (stats.oldField !== undefined) {
             //   stats.newField = stats.oldField;
@@ -201,7 +214,9 @@ try {
             if (stats.survivalHealth === undefined) stats.survivalHealth = 0;
 
             localStorage.setItem(key, JSON.stringify(stats));
-            console.log("✅ Migration v6 applied: user_stats structure updated");
+            console.log(
+              "✅ Migration v6 applied: user_stats structure updated",
+            );
           } catch (e) {
             console.error("Migration v6 failed:", e);
           }
@@ -217,7 +232,7 @@ try {
             if (Array.isArray(sessions)) {
               const updatedSessions = sessions.map((s: any) => ({
                 ...s,
-                platform: s.platform || "web" // Значение по умолчанию
+                platform: s.platform || "web", // Значение по умолчанию
               }));
               localStorage.setItem(key, JSON.stringify(updatedSessions));
               console.log("✅ Migration v7 applied: sessions array updated");
@@ -244,7 +259,9 @@ try {
 
               if (uniqueSessions.length !== sessions.length) {
                 localStorage.setItem(key, JSON.stringify(uniqueSessions));
-                console.log(`✅ Migration v8 applied: removed ${sessions.length - uniqueSessions.length} duplicate sessions`);
+                console.log(
+                  `✅ Migration v8 applied: removed ${sessions.length - uniqueSessions.length} duplicate sessions`,
+                );
               }
             }
           } catch (e) {
@@ -266,12 +283,15 @@ try {
                 const dateKey = s.date; // Используем дату как ключ для объединения
                 if (mergedMap.has(dateKey)) {
                   const existing = mergedMap.get(dateKey);
-                  
+
                   // Взвешенная точность перед обновлением слов
                   const totalWords = existing.wordsReviewed + s.wordsReviewed;
-                  const weightedAcc = totalWords > 0 
-                    ? (existing.accuracy * existing.wordsReviewed + s.accuracy * s.wordsReviewed) / totalWords 
-                    : existing.accuracy;
+                  const weightedAcc =
+                    totalWords > 0
+                      ? (existing.accuracy * existing.wordsReviewed +
+                          s.accuracy * s.wordsReviewed) /
+                        totalWords
+                      : existing.accuracy;
 
                   existing.duration += s.duration;
                   existing.wordsReviewed += s.wordsReviewed;
@@ -284,7 +304,9 @@ try {
 
               const mergedSessions = Array.from(mergedMap.values());
               localStorage.setItem(key, JSON.stringify(mergedSessions));
-              console.log(`✅ Migration v9 applied: merged ${sessions.length} sessions into ${mergedSessions.length}`);
+              console.log(
+                `✅ Migration v9 applied: merged ${sessions.length} sessions into ${mergedSessions.length}`,
+              );
             }
           } catch (e) {
             console.error("Migration v9 failed:", e);
@@ -305,7 +327,10 @@ try {
     try {
       return JSON.parse(val);
     } catch (e) {
-      console.warn(`⚠️ Corrupted data for key "${key}". Resetting to default.`, e);
+      console.warn(
+        `⚠️ Corrupted data for key "${key}". Resetting to default.`,
+        e,
+      );
       return def;
     }
   };
@@ -333,21 +358,25 @@ try {
     state.dailyChallenge.streak = 0;
   state.searchHistory = load("search_history_v1", []);
   state.customWords = load("custom_words_v1", []);
-  
+
   // Загрузка сжатого словаря
   const cachedVocab = localStorage.getItem("vocabulary_cache_v1");
   if (cachedVocab) {
     try {
-      // Пробуем распаковать. Если не получается (старый формат), парсим как есть.
-      const decompressed = cachedVocab.startsWith("[") ? cachedVocab : decompress(cachedVocab);
-      if (!decompressed) throw new Error("Decompression failed");
-      const parsed = JSON.parse(decompressed);
+      // Убрана декомпрессия, парсим напрямую
+      const parsed = JSON.parse(cachedVocab);
 
       // Валидация схемы: проверяем, что это массив и ВСЕ элементы имеют обязательные поля.
       // Метод .every() работает очень быстро (менее 10мс для 10,000 элементов) и не блокирует UI.
-      const isValid = Array.isArray(parsed) && parsed.every((item: any) => 
-        item && typeof item === 'object' && 'id' in item && 'word_kr' in item
-      );
+      const isValid =
+        Array.isArray(parsed) &&
+        parsed.every(
+          (item: any) =>
+            item &&
+            typeof item === "object" &&
+            "id" in item &&
+            "word_kr" in item,
+        );
 
       if (isValid) {
         state.dataStore = parsed;
@@ -363,7 +392,8 @@ try {
   state.studyGoal = load("study_goal_v1", { type: "words", target: 10 });
   state.favoriteQuotes = load("favorite_quotes_v1", []);
   state.dirtyWordIds = new Set(load("dirty_ids_v1", []));
-  state.trashRetentionDays = localStorage.getItem("trash_retention_v1") !== null
+  state.trashRetentionDays =
+    localStorage.getItem("trash_retention_v1") !== null
       ? Number(localStorage.getItem("trash_retention_v1"))
       : 30;
   state.quizDifficulty = localStorage.getItem("quiz_difficulty_v1") || "all";
