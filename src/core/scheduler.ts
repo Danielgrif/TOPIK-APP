@@ -8,7 +8,7 @@ export interface ReviewResult {
 
 export const Scheduler = {
   _data: [] as Word[],
-  _history: {} as Record<string | number, WordHistoryItem>,
+  _history: Object.create(null) as Record<string | number, WordHistoryItem>,
 
   init({
     dataStore,
@@ -18,7 +18,7 @@ export const Scheduler = {
     wordHistory: Record<string | number, WordHistoryItem>;
   }) {
     this._data = dataStore || [];
-    this._history = wordHistory || {};
+    this._history = wordHistory || Object.create(null);
   },
 
   calculate(
@@ -84,26 +84,28 @@ export const Scheduler = {
     const due: (Word & { nextReview: number })[] = [];
     const seen = new Set();
 
-    this._data.forEach((word) => {
+    const data = this._data;
+    for (let i = 0; i < data.length; i++) {
+      const word = data[i];
       const key = word.id || word.word_kr;
 
-      if (seen.has(key)) return;
+      if (seen.has(key)) continue;
 
       const h = this._history[key];
 
-      if (!h) return;
+      if (!h) continue;
 
       if (!h.sm2) {
         due.push({ ...word, nextReview: 0 });
         seen.add(key);
-        return;
+        continue;
       }
 
       if (h.sm2 && h.sm2.nextReview !== undefined && h.sm2.nextReview <= now) {
         due.push({ ...word, nextReview: h.sm2.nextReview });
         seen.add(key);
       }
-    });
+    }
 
     due.sort((a, b) => a.nextReview - b.nextReview);
     return due.slice(0, limit);

@@ -1,6 +1,6 @@
 /* eslint-disable no-console, @typescript-eslint/no-explicit-any */
 import { client } from "../core/supabaseClient.ts";
-import { showToast, showUndoToast } from "../utils/utils.ts";
+import { showToast, showUndoToast, escapeHtml } from "../utils/utils.ts";
 import { render } from "./ui_card.ts";
 import { openModal, closeModal, openConfirm } from "./ui_modal.ts";
 import {
@@ -8,6 +8,7 @@ import {
   setCollectionFilter as setStateFilter,
   UserList,
 } from "../core/collections_data.ts";
+import { DB_TABLES } from "../core/constants.ts";
 
 export async function loadCollections() {
   const {
@@ -17,7 +18,7 @@ export async function loadCollections() {
 
   // 1. Загружаем списки (свои + публичные)
   const { data: lists, error } = await client
-    .from("user_lists")
+    .from(DB_TABLES.USER_LISTS)
     .select("*")
     .or(`user_id.eq.${user.id},is_public.eq.true`)
     .order("created_at", { ascending: false });
@@ -31,7 +32,7 @@ export async function loadCollections() {
   // 2. Загружаем содержимое списков
   // Оптимизация: загружаем только для видимых списков, но пока загрузим всё для простоты
   const { data: items, error: itemsError } = await client
-    .from("list_items")
+    .from(DB_TABLES.LIST_ITEMS)
     .select("*");
 
   if (itemsError) {
@@ -39,12 +40,15 @@ export async function loadCollections() {
     return;
   }
 
-  collectionsState.listItems = {};
-  items?.forEach((item: any) => {
-    if (!collectionsState.listItems[item.list_id])
-      collectionsState.listItems[item.list_id] = new Set();
-    collectionsState.listItems[item.list_id].add(item.word_id);
-  });
+  collectionsState.listItems = Object.create(null);
+  if (items) {
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i];
+      if (!collectionsState.listItems[item.list_id])
+        collectionsState.listItems[item.list_id] = new Set();
+      collectionsState.listItems[item.list_id].add(item.word_id);
+    }
+  }
 
   updateCollectionUI();
 }
@@ -87,7 +91,7 @@ export async function createList() {
   }
 
   const { data, error } = await client
-    .from("user_lists")
+    .from(DB_TABLES.USER_LISTS)
     .insert({
       title,
       is_public: publicCheck.checked,
@@ -175,7 +179,7 @@ export function deleteList(listId: string, btn?: HTMLElement) {
       async () => {
         // Commit
         const { error } = await client
-          .from("user_lists")
+          .from(DB_TABLES.USER_LISTS)
           .delete()
           .eq("id", listId);
         if (error) showToast("Ошибка удаления на сервере");
@@ -224,7 +228,7 @@ export async function saveListChanges() {
   }
 
   const { error } = await client
-    .from("user_lists")
+    .from(DB_TABLES.USER_LISTS)
     .update({ title: newTitle, icon: newIcon })
     .eq("id", listId);
   if (error) {
@@ -285,18 +289,20 @@ export function updateCollectionUI() {
 
             // Safe escaping for onclick handlers
             const safeTitle = list.title
+              .replace(/\\/g, "\\\\")
               .replace(/'/g, "\\'")
               .replace(/"/g, "&quot;");
             const safeIcon = (list.icon || "📁")
+              .replace(/\\/g, "\\\\")
               .replace(/'/g, "\\'")
               .replace(/"/g, "&quot;");
 
             return `
                 <div class="collection-item-card">
                     <div onclick="window.setCollectionFilter('${list.id}')" style="flex: 1; display: flex; align-items: center; gap: 10px; min-width: 0; cursor: pointer;" title="Открыть список">
-                        <span style="font-size: 24px; flex-shrink: 0;">${list.icon || "📁"}</span>
+                        <span style="font-size: 24px; flex-shrink: 0;">${escapeHtml(list.icon || "📁")}</span>
                         <div style="display: flex; flex-direction: column; min-width: 0;">
-                            <span style="font-weight: bold; font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${list.title}</span>
+                            <span style="font-weight: bold; font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${escapeHtml(list.title)}</span>
                             <span style="font-size: 11px; color: var(--text-sub); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${list.is_public ? "🌐 Публичный" : "🔒 Личный"} • Слов: ${collectionsState.listItems[list.id]?.size || 0}</span>
                         </div>
                     </div>
@@ -327,7 +333,10 @@ export function updateCollectionUI() {
         '<option value="" disabled selected>-- Выберите список --</option>' +
         '<option value="create-new-list" style="font-weight:bold; color:var(--primary);">➕ Создать новый список...</option>' +
         myLists
-          .map((l: UserList) => `<option value="${l.id}">${l.title}</option>`)
+          .map(
+            (l: UserList) =>
+              `<option value="${l.id}">${escapeHtml(l.title)}</option>`,
+          )
           .join("");
     });
   }
@@ -342,7 +351,7 @@ export function updateCollectionUI() {
         const list = collectionsState.userLists.find(
           (l: UserList) => l.id === collectionsState.currentCollectionFilter,
         );
-        filterBtn.innerHTML = `<span>${list?.icon || "📁"} ${list?.title || "Список"}</span> <span>✕</span>`;
+        filterBtn.innerHTML = `<span>${escapeHtml(list?.icon || "📁")} ${escapeHtml(list?.title || "Список")}</span> <span>✕</span>`;
       }
       filterBtn.onclick = (e) => {
         e.stopPropagation();

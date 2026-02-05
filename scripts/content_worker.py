@@ -61,8 +61,6 @@ if not os.getenv("SUPABASE_URL"):
 SUPABASE_URL = os.getenv("SUPABASE_URL") or os.getenv("VITE_SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_SERVICE_KEY") or os.getenv("SUPABASE_KEY") or os.getenv("VITE_SUPABASE_KEY") # Нужен ключ с правами записи!
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-BUCKET_NAME = "audio-files"
-IMAGE_BUCKET_NAME = "image-files"
 MIN_FILE_SIZE = 500 # Минимальный размер файла в байтах (исключает пустые заголовки)
 
 # Очистка ключей от кавычек, если они есть (частая проблема .env)
@@ -73,6 +71,24 @@ if GEMINI_API_KEY: GEMINI_API_KEY = GEMINI_API_KEY.replace('"', '').replace("'",
 # Проверка на дефолтное значение
 if GEMINI_API_KEY == "ваш_ключ_здесь":
     GEMINI_API_KEY = None
+
+# Константы для имен таблиц и бакетов
+DB_TABLES = {
+    "VOCABULARY": "vocabulary",
+    "QUOTES": "quotes",
+    "WORD_REQUESTS": "word_requests",
+    "USER_PROGRESS": "user_progress",
+    "LIST_ITEMS": "list_items",
+}
+DB_BUCKETS = {
+    "AUDIO": "audio-files",
+    "IMAGES": "image-files",
+}
+WORD_REQUEST_STATUS = {
+    "PENDING": "pending",
+    "PROCESSED": "processed",
+    "ERROR": "error",
+}
 
 if not SUPABASE_URL or not SUPABASE_KEY:
     logging.error("❌ ОШИБКА: Не найдены переменные окружения SUPABASE_URL или SUPABASE_SERVICE_KEY (или их VITE_ аналоги).")
@@ -135,12 +151,12 @@ except Exception as e:
 # 1.1 Проверка и создание бакета (автоматическая настройка)
 try:
     buckets = supabase.storage.list_buckets()
-    if not any(b.name == BUCKET_NAME for b in buckets):
-        logging.info(f"📦 Бакет '{BUCKET_NAME}' не найден. Создаю новый публичный бакет...")
-        supabase.storage.create_bucket(BUCKET_NAME, options={"public": True})
-        logging.info(f"✅ Бакет '{BUCKET_NAME}' успешно создан.")
+    if not any(b.name == DB_BUCKETS['AUDIO'] for b in buckets):
+        logging.info(f"📦 Бакет '{DB_BUCKETS['AUDIO']}' не найден. Создаю новый публичный бакет...")
+        supabase.storage.create_bucket(DB_BUCKETS['AUDIO'], options={"public": True})
+        logging.info(f"✅ Бакет '{DB_BUCKETS['AUDIO']}' успешно создан.")
     else:
-        logging.info(f"ℹ️ Бакет '{BUCKET_NAME}' уже существует.")
+        logging.info(f"ℹ️ Бакет '{DB_BUCKETS['AUDIO']}' уже существует.")
 except Exception as e:
     # Игнорируем ошибку, если бакет уже есть, но API вернул ошибку прав доступа
     logging.warning(f"⚠️ Проверка бакета: {e}")
@@ -148,14 +164,14 @@ except Exception as e:
 # 1.2 Проверка и создание бакета для изображений
 try:
     buckets = supabase.storage.list_buckets()
-    if not any(b.name == IMAGE_BUCKET_NAME for b in buckets):
-        logging.info(f"📦 Бакет '{IMAGE_BUCKET_NAME}' не найден. Создаю новый публичный бакет...")
-        supabase.storage.create_bucket(IMAGE_BUCKET_NAME, options={"public": True})
-        logging.info(f"✅ Бакет '{IMAGE_BUCKET_NAME}' успешно создан.")
+    if not any(b.name == DB_BUCKETS['IMAGES'] for b in buckets):
+        logging.info(f"📦 Бакет '{DB_BUCKETS['IMAGES']}' не найден. Создаю новый публичный бакет...")
+        supabase.storage.create_bucket(DB_BUCKETS['IMAGES'], options={"public": True})
+        logging.info(f"✅ Бакет '{DB_BUCKETS['IMAGES']}' успешно создан.")
     else:
         # Если бакет уже есть, убедимся, что он публичный
-        logging.info(f"ℹ️ Бакет '{IMAGE_BUCKET_NAME}' найден. Обновляю права на Public...")
-        supabase.storage.update_bucket(IMAGE_BUCKET_NAME, {"public": True})
+        logging.info(f"ℹ️ Бакет '{DB_BUCKETS['IMAGES']}' найден. Обновляю права на Public...")
+        supabase.storage.update_bucket(DB_BUCKETS['IMAGES'], {"public": True})
 except Exception as e:
     logging.warning(f"⚠️ Проверка бакета изображений: {e}")
 
@@ -167,8 +183,8 @@ else:
 
 if args.retry_errors:
     try:
-        logging.info("🔄 Сброс заявок со статусом 'error' на 'pending'...")
-        res = supabase.table('word_requests').update({'status': 'pending'}).eq('status', 'error').execute()
+        logging.info(f"🔄 Сброс заявок со статусом '{WORD_REQUEST_STATUS['ERROR']}' на '{WORD_REQUEST_STATUS['PENDING']}'...")
+        res = supabase.table(DB_TABLES['WORD_REQUESTS']).update({'status': WORD_REQUEST_STATUS['PENDING']}).eq('status', WORD_REQUEST_STATUS['ERROR']).execute()
         count = len(res.data) if res.data else 0
         logging.info(f"✅ Сброшено заявок: {count}")
     except Exception as e:
@@ -304,7 +320,7 @@ async def generate_dialogue_audio(text, filepath):
         return False
 
 def check_integrity(bucket_name, table_name='vocabulary'):
-    """Проверка целостности файлов и ссылок в БД"""
+    """Проверка целостности файлов и ссылок в БД."""
     logging.info(f"🧹 Запуск проверки целостности для бакета '{bucket_name}'...")
     
     # 1. Получаем список файлов в бакете
@@ -331,7 +347,7 @@ def check_integrity(bucket_name, table_name='vocabulary'):
         rows = []
         offset = 0
         while True:
-            res = supabase.table(table_name).select("*").range(offset, offset + 999).execute()
+            res = supabase.table(DB_TABLES.get(table_name.upper(), table_name)).select("*").range(offset, offset + 999).execute()
             if not res.data: break
             rows.extend(res.data)
             offset += 1000
@@ -343,7 +359,7 @@ def check_integrity(bucket_name, table_name='vocabulary'):
     fixed_count = 0
 
     # Колонки, которые содержат ссылки на файлы в этом бакете
-    target_cols = ['audio_url', 'audio_male', 'example_audio'] if bucket_name == BUCKET_NAME else ['image']
+    target_cols = ['audio_url', 'audio_male', 'example_audio'] if bucket_name == DB_BUCKETS['AUDIO'] else ['image']
 
     for row in rows:
         if not isinstance(row, dict): continue
@@ -356,7 +372,7 @@ def check_integrity(bucket_name, table_name='vocabulary'):
             filename = unquote(url.split('/')[-1].split('?')[0]) # Убираем query params и декодируем
 
             # Проверка: файл существует и не пустой (для аудио > 100 байт)
-            min_size = 100 if bucket_name == BUCKET_NAME else 0
+            min_size = 100 if bucket_name == DB_BUCKETS['AUDIO'] else 0
             
             if filename not in storage_files or storage_files[filename] <= min_size:
                 logging.warning(f"⚠️ Битая ссылка или пустой файл: id={row_id} col={col} file={filename}")
@@ -368,7 +384,7 @@ def check_integrity(bucket_name, table_name='vocabulary'):
         
         if updates:
             try:
-                supabase.table(table_name).update(updates).eq('id', row_id).execute()
+                supabase.table(DB_TABLES.get(table_name.upper(), table_name)).update(updates).eq('id', row_id).execute()
                 fixed_count += 1
             except Exception as e:
                 logging.error(f"Ошибка обновления id={row_id}: {e}")
@@ -404,8 +420,8 @@ def optimize_image_data(data):
         return data
 
 if args.check:
-    check_integrity(BUCKET_NAME)
-    check_integrity(IMAGE_BUCKET_NAME)
+    check_integrity(DB_BUCKETS['AUDIO'], DB_TABLES['VOCABULARY'])
+    check_integrity(DB_BUCKETS['IMAGES'], DB_TABLES['VOCABULARY'])
     logging.info("🏁 Проверка завершена. Переход к восстановлению контента...")
 
 async def upload_to_supabase(bucket, path, data, content_type):
@@ -432,7 +448,7 @@ async def update_db_record(row_id, updates, table='vocabulary'):
     def _do_update():
         for i in range(3):
             try:
-                return supabase.table(table).update(updates).eq("id", row_id).execute()
+                return supabase.table(DB_TABLES.get(table.upper(), table)).update(updates).eq("id", row_id).execute()
             except Exception as e:
                 if "10035" in str(e) or "10054" in str(e): time.sleep(1); continue
                 raise e
@@ -450,10 +466,10 @@ async def handle_main_audio(session, row, word, word_hash, force_audio=False):
     if await generate_edge_tts(word, filepath, "ko-KR-SunHiNeural"):
         try:
             if row.get('audio_url'):
-                await delete_old_file(BUCKET_NAME, row.get('audio_url'))
+                await delete_old_file(DB_BUCKETS['AUDIO'], row.get('audio_url'))
             with open(filepath, 'rb') as f:
-                await upload_to_supabase(BUCKET_NAME, audio_filename, f, "audio/mpeg")
-            url = supabase.storage.from_(BUCKET_NAME).get_public_url(audio_filename)
+                await upload_to_supabase(DB_BUCKETS['AUDIO'], audio_filename, f, "audio/mpeg")
+            url = supabase.storage.from_(DB_BUCKETS['AUDIO']).get_public_url(audio_filename)
             logging.info(f"✅ Audio Female: {word}")
             return {'audio_url': url}
         finally:
@@ -473,10 +489,10 @@ async def handle_male_audio(row, word, word_hash, force_audio=False):
     if await generate_edge_tts(word, filepath, "ko-KR-InJoonNeural"):
         try:
             if row.get('audio_male'):
-                await delete_old_file(BUCKET_NAME, row.get('audio_male'))
+                await delete_old_file(DB_BUCKETS['AUDIO'], row.get('audio_male'))
             with open(filepath, 'rb') as f:
-                await upload_to_supabase(BUCKET_NAME, male_filename, f, "audio/mpeg")
-            url = supabase.storage.from_(BUCKET_NAME).get_public_url(male_filename)
+                await upload_to_supabase(DB_BUCKETS['AUDIO'], male_filename, f, "audio/mpeg")
+            url = supabase.storage.from_(DB_BUCKETS['AUDIO']).get_public_url(male_filename)
             logging.info(f"✅ Audio Male: {word}")
             return {'audio_male': url}
         finally:
@@ -505,10 +521,10 @@ async def handle_example_audio(row, example, force_audio=False):
     if ex_downloaded:
         try:
             if row.get('example_audio'):
-                await delete_old_file(BUCKET_NAME, row.get('example_audio'))
+                await delete_old_file(DB_BUCKETS['AUDIO'], row.get('example_audio'))
             with open(filepath, 'rb') as f:
-                await upload_to_supabase(BUCKET_NAME, ex_filename, f, "audio/mpeg")
-            url = supabase.storage.from_(BUCKET_NAME).get_public_url(ex_filename)
+                await upload_to_supabase(DB_BUCKETS['AUDIO'], ex_filename, f, "audio/mpeg")
+            url = supabase.storage.from_(DB_BUCKETS['AUDIO']).get_public_url(ex_filename)
             logging.info(f"✅ Example: {example[:10]}...")
             return {'example_audio': url}
         finally:
@@ -632,8 +648,8 @@ async def process_word_request(request):
     if not has_manual_data and not GEMINI_API_KEY:
         logging.warning(f"⚠️ Пропуск {word_kr}: нет ключа Gemini и нет ручных данных.")
         # FIX: Явно обновляем статус на ошибку, чтобы клиент не ждал вечно
-        supabase.table('word_requests').update({
-            'status': 'error', 
+        supabase.table(DB_TABLES['WORD_REQUESTS']).update({
+            'status': WORD_REQUEST_STATUS['ERROR'], 
             'my_notes': 'Server Error: Missing Gemini API Key'
         }).eq('id', req_id).execute()
         return
@@ -693,7 +709,7 @@ async def process_word_request(request):
             
             if not text_response:
                 logging.error(f"❌ Все модели AI недоступны для {word_kr}. Ошибка: {last_error}")
-                supabase.table('word_requests').update({'status': 'error', 'my_notes': f'All AI models failed: {last_error}'}).eq('id', req_id).execute()
+                supabase.table(DB_TABLES['WORD_REQUESTS']).update({'status': WORD_REQUEST_STATUS['ERROR'], 'my_notes': f'All AI models failed: {last_error}'}).eq('id', req_id).execute()
                 return
             
             # Очистка от markdown ```json ... ```
@@ -706,7 +722,7 @@ async def process_word_request(request):
                 parsed_data = json.loads(text_response.strip())
             except json.JSONDecodeError:
                 logging.error(f"❌ Ошибка парсинга JSON для {word_kr}")
-                supabase.table('word_requests').update({'status': 'error', 'my_notes': 'Invalid JSON'}).eq('id', req_id).execute()
+                supabase.table(DB_TABLES['WORD_REQUESTS']).update({'status': WORD_REQUEST_STATUS['ERROR'], 'my_notes': 'Invalid JSON'}).eq('id', req_id).execute()
                 return
 
             if isinstance(parsed_data, list):
@@ -715,12 +731,12 @@ async def process_word_request(request):
                 items_to_process = [parsed_data]
             else:
                 logging.error(f"❌ Неверный формат ответа AI для {word_kr}")
-                supabase.table('word_requests').update({'status': 'error'}).eq('id', req_id).execute()
+                supabase.table(DB_TABLES['WORD_REQUESTS']).update({'status': WORD_REQUEST_STATUS['ERROR']}).eq('id', req_id).execute()
                 return
         
         if not items_to_process:
              logging.error(f"❌ Нет данных для обработки {word_kr}")
-             supabase.table('word_requests').update({'status': 'error'}).eq('id', req_id).execute()
+             supabase.table(DB_TABLES['WORD_REQUESTS']).update({'status': WORD_REQUEST_STATUS['ERROR']}).eq('id', req_id).execute()
              return
 
         # Обработка каждого элемента (значения слова)
@@ -735,7 +751,7 @@ async def process_word_request(request):
 
             # 2. Проверка на дубликаты в vocabulary
             # Проверяем не только по слову, но и по переводу, чтобы различать омонимы
-            existing = supabase.table('vocabulary').select('id, translation').eq('word_kr', data.get('word_kr')).execute()
+            existing = supabase.table(DB_TABLES['VOCABULARY']).select('id, translation').eq('word_kr', data.get('word_kr')).execute()
             existing_rows = getattr(existing, 'data', []) or []
             
             word_id = None
@@ -759,7 +775,7 @@ async def process_word_request(request):
                 
                 clean_data = {k: v for k, v in data.items() if k in allowed_keys}
                 
-                insert_res = supabase.table('vocabulary').insert(clean_data).execute()
+                insert_res = supabase.table(DB_TABLES['VOCABULARY']).insert(clean_data).execute()
                 insert_data = getattr(insert_res, 'data', None)
                 
                 if insert_data and isinstance(insert_data, list) and len(insert_data) > 0:
@@ -775,7 +791,7 @@ async def process_word_request(request):
             # Опционально: Добавить слово в "Изучаемые" пользователя, который его запросил
             if word_id and user_id:
                  try:
-                     supabase.table('user_progress').upsert({'user_id': user_id, 'word_id': word_id, 'is_learned': False}).execute()
+                     supabase.table(DB_TABLES['USER_PROGRESS']).upsert({'user_id': user_id, 'word_id': word_id, 'is_learned': False}).execute()
                  except Exception as e:
                      logging.warning(f"Не удалось добавить в прогресс пользователя: {e}")
 
@@ -783,21 +799,21 @@ async def process_word_request(request):
             target_list_id = request.get('target_list_id')
             if word_id and target_list_id:
                 try:
-                    supabase.table('list_items').upsert({'list_id': target_list_id, 'word_id': word_id}).execute()
+                    supabase.table(DB_TABLES['LIST_ITEMS']).upsert({'list_id': target_list_id, 'word_id': word_id}).execute()
                     logging.info(f"✅ Слово добавлено в список {target_list_id}")
                 except Exception as e:
                     logging.warning(f"⚠️ Ошибка добавления в список: {e}")
 
         # 4. Обновление статуса заявки (после обработки всех вариантов)
-        supabase.table('word_requests').update({'status': 'processed'}).eq('id', req_id).execute()
+        supabase.table(DB_TABLES['WORD_REQUESTS']).update({'status': WORD_REQUEST_STATUS['PROCESSED']}).eq('id', req_id).execute()
 
     except asyncio.TimeoutError:
         logging.error(f"❌ Timeout AI для {word_kr}")
-        supabase.table('word_requests').update({'status': 'error', 'my_notes': 'AI Timeout'}).eq('id', req_id).execute()
+        supabase.table(DB_TABLES['WORD_REQUESTS']).update({'status': WORD_REQUEST_STATUS['ERROR'], 'my_notes': 'AI Timeout'}).eq('id', req_id).execute()
 
     except Exception as e:
         logging.error(f"❌ Ошибка AI обработки для {word_kr}: {e}")
-        supabase.table('word_requests').update({'status': 'error'}).eq('id', req_id).execute()
+        supabase.table(DB_TABLES['WORD_REQUESTS']).update({'status': WORD_REQUEST_STATUS['ERROR']}).eq('id', req_id).execute()
 
 async def handle_quote_audio(row, force_audio=False):
     """Обработка аудио для цитаты (EdgeTTS)"""
@@ -815,10 +831,10 @@ async def handle_quote_audio(row, force_audio=False):
     if await generate_edge_tts(text, filepath, "ko-KR-SunHiNeural"):
         try:
             if row.get('audio_url'):
-                await delete_old_file(BUCKET_NAME, row.get('audio_url'))
+                await delete_old_file(DB_BUCKETS['AUDIO'], row.get('audio_url'))
             with open(filepath, 'rb') as f:
-                await upload_to_supabase(BUCKET_NAME, filename, f, "audio/mpeg")
-            url = supabase.storage.from_(BUCKET_NAME).get_public_url(filename)
+                await upload_to_supabase(DB_BUCKETS['AUDIO'], filename, f, "audio/mpeg")
+            url = supabase.storage.from_(DB_BUCKETS['AUDIO']).get_public_url(filename)
             logging.info(f"✅ Quote Audio: {text[:15]}...")
             return {'audio_url': url}
         finally:
@@ -835,7 +851,7 @@ async def process_quote(sem, session, row):
         try:
             updates = await handle_quote_audio(row, args.force_audio or args.force_quotes)
             if updates:
-                await update_db_record(row_id, updates, table='quotes')
+                await update_db_record(row_id, updates, table=DB_TABLES['QUOTES'])
         except Exception as e:
             logging.error(f"❌ Ошибка цитаты {row_id}: {e}")
 
@@ -872,7 +888,7 @@ async def user_requests_loop():
     while True:
         try:
             # Всегда проверяем заявки
-            reqs = supabase.table('word_requests').select("*").eq('status', 'pending').limit(5).execute()
+            reqs = supabase.table(DB_TABLES['WORD_REQUESTS']).select("*").eq('status', WORD_REQUEST_STATUS['PENDING']).limit(5).execute()
             if reqs.data:
                 logging.info(f"⚡ Найдено {len(reqs.data)} новых заявок от пользователей.")
                 for req in reqs.data:
@@ -900,7 +916,7 @@ async def background_tasks_loop(initial_concurrency):
             
             # 0.5. Обработка цитат (Quotes)
             try:
-                q_query = supabase.table('quotes').select("*")
+                q_query = supabase.table(DB_TABLES['QUOTES']).select("*")
                 if not (args.force_audio or args.force_quotes):
                     # Обрабатываем те, у которых нет аудио (NULL или пустая строка)
                     q_query = q_query.or_("audio_url.is.null,audio_url.eq.")
@@ -925,10 +941,10 @@ async def background_tasks_loop(initial_concurrency):
                     words = []
                 else:
                     if args.force_images or args.force_audio:
-                        query = supabase.table('vocabulary').select("*")
+                        query = supabase.table(DB_TABLES['VOCABULARY']).select("*")
                     else:
                         # Берем больше слов за раз для эффективности
-                        query = supabase.table('vocabulary').select("*").or_("audio_url.is.null,audio_male.is.null,image.is.null,example_audio.is.null").limit(200)
+                        query = supabase.table(DB_TABLES['VOCABULARY']).select("*").or_("audio_url.is.null,audio_male.is.null,image.is.null,example_audio.is.null").limit(200)
                     
                     if args.topic:
                         query = query.ilike("topic", f"%{args.topic}%")
@@ -1005,7 +1021,7 @@ def check_schema_health():
     
     try:
         # Делаем запрос к колонкам, чтобы проверить их существование
-        supabase.table('vocabulary').select(",".join(expected_columns)).limit(1).execute()
+        supabase.table(DB_TABLES['VOCABULARY']).select(",".join(expected_columns)).limit(1).execute()
         logging.info("✅ Схема таблицы vocabulary корректна.")
         return True
     except Exception as e:

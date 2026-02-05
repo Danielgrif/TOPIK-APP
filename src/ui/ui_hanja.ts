@@ -1,6 +1,7 @@
 import { state } from "../core/state.ts";
 import { openModal } from "./ui_modal.ts";
 import { Word } from "../types/index.ts";
+import { escapeHtml } from "../utils/utils.ts";
 
 export function openHanjaModal(char: string) {
   const container = document.getElementById("hanja-list");
@@ -27,15 +28,17 @@ export function openHanjaModal(char: string) {
         ? w.word_hanja
             .split("")
             .map((c) =>
-              c === char ? `<span class="highlight">${c}</span>` : c,
+              c === char
+                ? `<span class="highlight">${escapeHtml(c)}</span>`
+                : escapeHtml(c),
             )
             .join("")
         : "";
 
       el.innerHTML = `
-                <div class="hanja-card-word">${w.word_kr}</div>
+                <div class="hanja-card-word">${escapeHtml(w.word_kr)}</div>
                 <div class="hanja-card-hanja">${hanjaHtml}</div>
-                <div class="hanja-card-trans">${w.translation}</div>
+                <div class="hanja-card-trans">${escapeHtml(w.translation)}</div>
             `;
       container.appendChild(el);
     });

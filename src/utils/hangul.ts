@@ -52,6 +52,10 @@ const DOUBLE_JUNG: Record<string, string> = {
   ㅜㅔ: "ㅞ",
   ㅜㅣ: "ㅟ",
   ㅡㅣ: "ㅢ",
+  ㅘㅣ: "ㅙ",
+  ㅝㅣ: "ㅞ",
+  ㅑㅣ: "ㅒ",
+  ㅕㅣ: "ㅖ",
 };
 
 // Карта составных патчимов (конечных согласных)
@@ -69,12 +73,17 @@ const DOUBLE_JONG: Record<string, string> = {
   ㅂㅅ: "ㅄ",
 };
 
+const REVERSE_DOUBLE_JONG: Record<string, string[]> = Object.create(null);
+for (const key in DOUBLE_JONG) {
+  REVERSE_DOUBLE_JONG[DOUBLE_JONG[key]] = key.split("");
+}
+
 /**
  * Конвертирует строку английских символов в корейский (Hangul).
  * Простая реализация конечного автомата для сборки слогов.
  */
 export function toKorean(input: string): string {
-  let result = "";
+  const result: string[] = [];
   let state = 0; // 0:Start, 1:Cho, 2:Jung, 3:Jong, 4:Jong+Jong
   let cho = -1,
     jung = -1,
@@ -93,10 +102,10 @@ export function toKorean(input: string): string {
 
     // Если символ не корейская буква (например, пробел или цифра), сбрасываем состояние
     if (!jamo) {
-      if (state === 2 || state === 3 || state === 4) result += combine();
-      else if (state === 1) result += CHO[cho];
+      if (state === 2 || state === 3 || state === 4) result.push(combine());
+      else if (state === 1) result.push(CHO[cho]);
 
-      result += char;
+      result.push(char);
       state = 0;
       cho = -1;
       jung = -1;
@@ -116,7 +125,15 @@ export function toKorean(input: string): string {
         cho = CHO.indexOf(jamo);
         state = 1;
       } else if (isJung) {
-        result += jamo;
+        // Проверка на составную гласную без согласной (например ㅗ + ㅏ = ㅘ)
+        const lastChar = result.length > 0 ? result[result.length - 1] : "";
+        const double = DOUBLE_JUNG[lastChar + jamo];
+        if (double) {
+          result.pop();
+          result.push(double);
+        } else {
+          result.push(jamo);
+        }
       } // Гласная без согласной
     } else if (state === 1) {
       // Есть Cho
@@ -124,7 +141,7 @@ export function toKorean(input: string): string {
         jung = JUNG.indexOf(jamo);
         state = 2;
       } else if (isCho) {
-        result += CHO[cho];
+        result.push(CHO[cho]);
         cho = CHO.indexOf(jamo);
       } // Cho + Cho -> сброс
     } else if (state === 2) {
@@ -135,18 +152,18 @@ export function toKorean(input: string): string {
         if (double) {
           jung = JUNG.indexOf(double);
         } else {
-          result += combine();
+          result.push(combine());
           cho = -1;
           jung = JUNG.indexOf(jamo);
           state = 0;
-          result += jamo;
+          result.push(jamo);
         } // Не соединяется
       } else if (jongIdx > 0) {
         jong = jongIdx;
         state = 3;
       } // Cho + Jung + Jong
       else if (isCho) {
-        result += combine();
+        result.push(combine());
         cho = CHO.indexOf(jamo);
         jung = -1;
         jong = 0;
@@ -163,7 +180,7 @@ export function toKorean(input: string): string {
         const prevSyllable = String.fromCharCode(
           0xac00 + cho * 21 * 28 + jung * 28 + 0,
         );
-        result += prevSyllable;
+        result.push(prevSyllable);
 
         // Текущий Jong становится Cho нового слога
         cho = CHO.indexOf(prevJongChar);
@@ -177,14 +194,14 @@ export function toKorean(input: string): string {
           jong = JONG.indexOf(double);
           state = 4;
         } else {
-          result += combine();
+          result.push(combine());
           cho = CHO.indexOf(jamo);
           jung = -1;
           jong = 0;
           state = 1;
         }
       } else if (isCho) {
-        result += combine();
+        result.push(combine());
         cho = CHO.indexOf(jamo);
         jung = -1;
         jong = 0;
@@ -195,17 +212,35 @@ export function toKorean(input: string): string {
       if (isJung) {
         // Разбиваем двойной патчим при встрече с гласной
         // Пример: 닭 (dalg) + ㅏ (a) -> 달가 (dal-ga)
-        // Нам нужно знать, из чего состоял двойной патчим. Для простоты берем последний введенный символ.
-        // Но в state 4 мы уже "забыли" компоненты.
-        // Упрощение: просто завершаем слог и начинаем новый (не идеально, но работает для большинства случаев ввода)
-        result += combine();
-        cho = -1;
-        jung = JUNG.indexOf(jamo);
-        jong = 0;
-        state = 0;
-        result += jamo;
+        const currentJongChar = JONG[jong];
+        const parts = REVERSE_DOUBLE_JONG[currentJongChar];
+
+        if (parts) {
+          const [first, second] = parts;
+          const firstJongIdx = JONG.indexOf(first);
+
+          // 1. Commit previous syllable with first part of batchim
+          result.push(
+            String.fromCharCode(
+              0xac00 + cho * 21 * 28 + jung * 28 + firstJongIdx,
+            ),
+          );
+
+          // 2. Start new syllable with second part as Cho
+          cho = CHO.indexOf(second);
+          jung = JUNG.indexOf(jamo);
+          jong = 0;
+          state = 2;
+        } else {
+          result.push(combine());
+          cho = -1;
+          jung = JUNG.indexOf(jamo);
+          jong = 0;
+          state = 0;
+          result.push(jamo);
+        }
       } else {
-        result += combine();
+        result.push(combine());
         if (isCho) {
           cho = CHO.indexOf(jamo);
           jung = -1;
@@ -216,15 +251,15 @@ export function toKorean(input: string): string {
           jung = -1;
           jong = 0;
           state = 0;
-          result += jamo;
+          result.push(jamo);
         }
       }
     }
   }
 
   // Добавляем остаток
-  if (state === 2 || state === 3 || state === 4) result += combine();
-  else if (state === 1) result += CHO[cho];
+  if (state === 2 || state === 3 || state === 4) result.push(combine());
+  else if (state === 1) result.push(CHO[cho]);
 
-  return result;
+  return result.join("");
 }

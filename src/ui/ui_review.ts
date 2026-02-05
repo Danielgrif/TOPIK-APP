@@ -3,7 +3,7 @@ import { Scheduler } from "../core/scheduler.ts";
 import { showToast, playTone } from "../utils/utils.ts";
 import { openModal } from "./ui_modal.ts"; // closeModal используется в HTML строке
 import { ensureSessionStarted } from "./ui.ts";
-import { updateSRSBadge } from "../core/stats.ts";
+import { updateSRSBadge, checkAchievements } from "../core/stats.ts";
 import { scheduleSaveState } from "../core/db.ts";
 import { Word } from "../types/index.ts";
 
@@ -98,6 +98,7 @@ function buildReviewModal(queue: Word[]) {
         playTone("failure");
       }
 
+      checkAchievements();
       scheduleSaveState();
 
       const d = Math.round(res.interval * 10) / 10;

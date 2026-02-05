@@ -6,8 +6,13 @@ import { showToast } from "../utils/utils.ts";
 import { saveAndRender } from "../ui/ui.ts";
 import { openModal, closeModal, openConfirm } from "../ui/ui_modal.ts";
 import { applyTheme, updateVoiceUI } from "../ui/ui_settings.ts";
+import { User } from "../types/index.ts";
+import type { Session } from "@supabase/supabase-js";
 
-export function updateAuthUI(user: any) {
+export function updateAuthUI(user: User | null) {
+  // Keep a reference to the current user in the global state
+  state.currentUser = user;
+
   const profileBtn = document.getElementById("profile-button");
   const avatar = document.getElementById("profile-avatar");
   const name = document.getElementById("profile-name");
@@ -70,13 +75,7 @@ export function openProfileModal() {
   client.auth
     .getSession()
     .then(
-      ({
-        data,
-        error,
-      }: {
-        data: { session: { user: any } | null } | null;
-        error: { message: string } | null;
-      }) => {
+      ({ data, error }: { data: { session: Session | null }; error: any }) => {
         if (error) throw error;
         const session = data?.session;
         if (session && session.user) {
@@ -285,14 +284,14 @@ async function performSignup(email: string, password: string) {
           // Ignore if stats already exist
         }
       }
-      await finalizeAuth(data.user);
+      if (data.user) await finalizeAuth(data.user);
     }
   } catch (e) {
     handleAuthError(e);
   }
 }
 
-async function finalizeAuth(user: any) {
+async function finalizeAuth(user: User) {
   showToast("✅ Успешно!");
   updateAuthUI(user);
   await loadFromSupabase(user);

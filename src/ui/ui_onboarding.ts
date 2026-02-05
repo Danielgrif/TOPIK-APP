@@ -1,4 +1,5 @@
 import { showToast } from "../utils/utils.ts";
+import { LS_KEYS } from "../core/constants.ts";
 
 /**
  * Checks if an element is currently visible on the screen.
@@ -61,7 +62,7 @@ const onboardingSteps = [
 ];
 
 export function checkAndShowOnboarding() {
-  if (!localStorage.getItem("onboarding_completed_v1")) {
+  if (!localStorage.getItem(LS_KEYS.ONBOARDING)) {
     setTimeout(() => renderOnboarding(), 1000);
   }
 }
@@ -328,7 +329,7 @@ function finishOnboarding() {
     });
     setTimeout(() => overlay.remove(), 300);
   }
-  if (overlay) overlay.style.display = "none"; // <--- Скрываем сразу
-  localStorage.setItem("onboarding_completed_v1", "true");
+  if (overlay) overlay.style.display = "none";
+  localStorage.setItem(LS_KEYS.ONBOARDING, "true");
   showToast("Удачи в обучении! 🍀");
 }

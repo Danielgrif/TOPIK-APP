@@ -44,7 +44,6 @@ import {
   renderSkeletons,
   resetSearchHandler,
   setupGridEffects,
-  promiseWithTimeout,
 } from "./ui/ui_card.ts";
 import {
   openModal,
@@ -91,6 +90,7 @@ import {
   speak,
   typeText,
   cancelSpeech,
+  promiseWithTimeout,
 } from "./utils/utils.ts";
 import {
   updateXPUI,
@@ -108,8 +108,11 @@ import {
 } from "./ui/quiz.ts";
 import { setupTrash } from "./ui/ui_trash.ts";
 import { checkPronunciation } from "./core/speech.ts";
+import { SW_MESSAGES } from "./core/constants.ts";
+import { Quote, User } from "./types/index.ts";
+import type { Session } from "@supabase/supabase-js";
 
-let currentQuote: any = null;
+let currentQuote: Quote | null = null;
 let welcomeAudioTimeout: number | null = null;
 
 function performWelcomeClose() {
@@ -354,7 +357,7 @@ function setupGlobalListeners() {
         case "save-quote":
           if (currentQuote) {
             const idx = state.favoriteQuotes.findIndex(
-              (q: any) => q.id === currentQuote.id,
+              (q) => q.id === currentQuote!.id,
             );
             if (idx >= 0) {
               state.favoriteQuotes.splice(idx, 1);
@@ -536,9 +539,9 @@ function setupGlobalListeners() {
   // Validation for Topic/Category inputs (No numbers/symbols)
   const validateTextOnly = (e: Event) => {
     const input = e.target as HTMLInputElement;
-    // Allow: Letters (EN, RU, KR), spaces, hyphens. Remove: Numbers, symbols.
+    // Allow: Letters (EN, RU, KR), Numbers, spaces, hyphens.
     input.value = input.value.replace(
-      /[^a-zA-Zа-яА-Я가-힣\u3130-\u318F\s-]/g,
+      /[^a-zA-Zа-яА-Я가-힣\u3130-\u318F0-9\s-]/g,
       "",
     );
   };
@@ -632,7 +635,7 @@ function setupLevelUpObserver() {
   observer.observe(overlay, { attributes: true });
 }
 
-function showWelcomeScreen(user?: any) {
+function showWelcomeScreen(user?: User) {
   const welcomeOverlay = document.getElementById("welcome-overlay");
   const welcomeName = document.getElementById("welcome-username");
   const welcomeQuote = document.getElementById("welcome-quote");
@@ -641,12 +644,8 @@ function showWelcomeScreen(user?: any) {
     let name = "Гость";
     if (user) {
       // Если передан объект пользователя, берем имя из метаданных, иначе из email
-      // Если передана строка (старый код), считаем это email
-      const userData = typeof user === "string" ? { email: user } : user;
       name =
-        userData.user_metadata?.full_name ||
-        userData.email?.split("@")[0] ||
-        "Гость";
+        user.user_metadata?.full_name || user.email?.split("@")[0] || "Гость";
     }
     welcomeName.textContent = name;
 
@@ -687,9 +686,7 @@ function showWelcomeScreen(user?: any) {
           let textToSpeak = "시작이 반이다";
           if (quote) {
             currentQuote = quote;
-            const isFav = state.favoriteQuotes.some(
-              (q: any) => q.id === quote.id,
-            );
+            const isFav = state.favoriteQuotes.some((q) => q.id === quote.id);
             const heart = isFav ? "❤️" : "🤍";
             const activeClass = isFav ? "active" : "";
 
@@ -805,7 +802,7 @@ function setupRealtimeUpdates() {
       (payload: { new: any }) => {
         const newWord = payload.new;
         // Проверяем, нет ли уже этого слова (на всякий случай)
-        if (newWord && !state.dataStore.find((w: any) => w.id === newWord.id)) {
+        if (newWord && !state.dataStore.find((w) => w.id === newWord.id)) {
           console.log("🔥 Realtime: New word added", newWord.word_kr);
           state.dataStore.unshift(newWord); // Добавляем в начало списка
           showToast(`✨ Готово: ${newWord.word_kr}`); // Уведомляем пользователя
@@ -885,21 +882,24 @@ async function init() {
   // FIX: Настраиваем слушатель только для БУДУЩИХ событий (вход/выход).
   // INITIAL_SESSION игнорируем, так как обработаем его явно ниже, чтобы не было "скачка" интерфейса.
   client.auth.onAuthStateChange(
-    async (event: string, session: { user: any } | null) => {
+    async (event: string, session: Session | null) => {
       if (event === "INITIAL_SESSION") return;
 
       try {
-        if (session) {
+        if (session?.user) {
           updateAuthUI(session.user);
+          updateAuthUI(session.user as any as User);
           if (event === "SIGNED_IN") {
             cleanAuthUrl();
             await loadFromSupabase(session.user);
+            await loadFromSupabase(session.user as any as User);
             applyTheme();
             updateVoiceUI();
             saveAndRender();
             closeModal("login-modal");
             import("./ui/ui_collections.ts").then((m) => m.loadCollections());
             showWelcomeScreen(session.user);
+            showWelcomeScreen(session.user as any as User);
           }
           if (event === "PASSWORD_RECOVERY") {
             openProfileModal();
@@ -920,15 +920,20 @@ async function init() {
     client.auth.getSession(),
     5000, // 5 секунд таймаут
     new Error("Session check timed out"),
-  ).catch(() => ({ data: { session: null } }))) as { data: { session: any } };
+  ).catch(() => ({ data: { session: null } }))) as {
+    data: { session: Session | null };
+  };
 
-  const session = data?.session;
+  const session = data.session;
   if (session) {
     updateAuthUI(session.user);
+    updateAuthUI(session.user as any as User);
     cleanAuthUrl();
     await loadFromSupabase(session.user);
+    await loadFromSupabase(session.user as any as User);
     import("./ui/ui_collections.ts").then((m) => m.loadCollections());
     showWelcomeScreen(session.user);
+    showWelcomeScreen(session.user as any as User);
   } else {
     updateAuthUI(null);
     showWelcomeScreen(); // Приветствие для гостя
@@ -1036,7 +1041,10 @@ async function init() {
 
     // Слушаем сообщения от SW (например, о завершении докачки)
     navigator.serviceWorker.addEventListener("message", (event) => {
-      if (event.data && event.data.type === "DOWNLOAD_QUEUE_COMPLETED") {
+      if (
+        event.data &&
+        event.data.type === SW_MESSAGES.DOWNLOAD_QUEUE_COMPLETED
+      ) {
         if (event.data.count > 0)
           showToast(`✅ Докачано файлов: ${event.data.count}`);
       }
@@ -1115,9 +1123,8 @@ Object.assign(window, {
     toggleAutoUpdate(el);
     if (state.autoUpdate && "serviceWorker" in navigator) {
       navigator.serviceWorker.getRegistration().then((reg) => {
-        if (reg && reg.waiting) {
-          reg.waiting.postMessage({ type: "SKIP_WAITING" });
-        }
+        if (reg && reg.waiting)
+          reg.waiting.postMessage({ type: SW_MESSAGES.SKIP_WAITING });
       });
     }
   },

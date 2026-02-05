@@ -1,7 +1,7 @@
 /* eslint-disable no-console, @typescript-eslint/no-explicit-any */
 import { state } from "../core/state.ts";
 import { render, getFilteredData } from "./ui_card.ts";
-import { showToast, showUndoToast } from "../utils/utils.ts";
+import { showToast, showUndoToast, escapeHtml } from "../utils/utils.ts";
 import { client } from "../core/supabaseClient.ts";
 import { openConfirm, openModal, closeModal } from "./ui_modal.ts";
 import { collectionsState, type UserList } from "../core/collections_data.ts";
@@ -100,7 +100,7 @@ export function bulkDelete() {
               .from("vocabulary")
               .delete()
               .in("id", ids)
-              .select("*", { count: "exact" });
+              .select("*");
             console.log("   - Результат удаления:", { error, count });
 
             if (error) {
@@ -182,7 +182,7 @@ export function bulkAddToList() {
         .map(
           (list: UserList) => `
             <div class="multiselect-item" onclick="window.handleBulkAddToList('${list.id}')">
-                <span style="margin-left: 10px;">${list.icon || "📁"} ${list.title}</span>
+                <span style="margin-left: 10px;">${escapeHtml(list.icon || "📁")} ${escapeHtml(list.title)}</span>
             </div>
         `,
         )
@@ -193,7 +193,7 @@ export function bulkAddToList() {
 }
 
 // Глобальный обработчик для выбора списка
-(window as any).handleBulkAddToList = async (listId: string) => {
+window.handleBulkAddToList = async (listId: string) => {
   const ids = Array.from(state.selectedWords);
   const rows = ids.map((id) => ({ list_id: listId, word_id: id }));
 

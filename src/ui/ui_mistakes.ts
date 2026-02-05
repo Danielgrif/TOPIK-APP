@@ -1,7 +1,6 @@
 import { state } from "../core/state.ts";
 import { openModal, closeModal } from "./ui_modal.ts";
-import { Word } from "../types/index.ts";
-import { parseBilingualString } from "../utils/utils.ts";
+import { parseBilingualString, escapeHtml } from "../utils/utils.ts";
 import { setStarFilter } from "./ui_filters.ts";
 
 export function openMistakesModal() {
@@ -39,9 +38,10 @@ function renderMistakesContent() {
   const container = document.getElementById("mistakes-content");
   if (!container) return;
 
-  const mistakeIds = Array.from(state.mistakes);
+  // Optimization: O(N) scan instead of O(N*M)
+  const words = state.dataStore.filter((w) => state.mistakes.has(w.id));
 
-  if (mistakeIds.length === 0) {
+  if (words.length === 0) {
     container.innerHTML = `
       <div style="text-align: center; padding: 40px; color: var(--text-sub);">
         <div style="font-size: 48px; margin-bottom: 15px;">🎉</div>
@@ -52,13 +52,11 @@ function renderMistakesContent() {
     return;
   }
 
-  const words = mistakeIds
-    .map((id) => state.dataStore.find((w) => w.id === id))
-    .filter((w): w is Word => !!w);
+  const totalMistakes = words.length;
 
   // Aggregation
-  const byTopic: Record<string, number> = {};
-  const byPart: Record<string, number> = {};
+  const byTopic: Record<string, number> = Object.create(null);
+  const byPart: Record<string, number> = Object.create(null);
 
   words.forEach((w) => {
     const topic = w.topic || w.topic_ru || w.topic_kr || "Other";
@@ -74,7 +72,7 @@ function renderMistakesContent() {
   const html = `
     <div style="display: flex; gap: 10px; margin-bottom: 20px;">
       <div class="stat-card-primary" style="flex: 1; border-bottom: 3px solid var(--danger);">
-        <div class="stat-value-primary">${mistakeIds.length}</div>
+        <div class="stat-value-primary">${totalMistakes}</div>
         <div class="stat-label-primary">Всего ошибок</div>
       </div>
       <button class="btn btn-quiz" style="flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center;" onclick="window.startMistakeQuiz()">
@@ -93,11 +91,11 @@ function renderMistakesContent() {
           .map(
             ([topic, count]) => `
           <div style="display: flex; justify-content: space-between; margin-bottom: 6px; font-size: 13px;">
-            <span>${parseBilingualString(topic).ru}</span>
+            <span>${escapeHtml(parseBilingualString(topic).ru)}</span>
             <span style="font-weight: bold; color: var(--danger);">${count}</span>
           </div>
           <div style="height: 4px; background: var(--surface-3); border-radius: 2px; overflow: hidden;">
-            <div style="height: 100%; background: var(--danger); width: ${(count / mistakeIds.length) * 100}%"></div>
+            <div style="height: 100%; background: var(--danger); width: ${(count / totalMistakes) * 100}%"></div>
           </div>
           <div style="margin-bottom: 8px;"></div>
         `,
@@ -113,11 +111,11 @@ function renderMistakesContent() {
           .map(
             ([part, count]) => `
           <div style="display: flex; justify-content: space-between; margin-bottom: 6px; font-size: 13px;">
-            <span>${parseBilingualString(part).ru}</span>
+            <span>${escapeHtml(parseBilingualString(part).ru)}</span>
             <span style="font-weight: bold; color: var(--warning);">${count}</span>
           </div>
           <div style="height: 4px; background: var(--surface-3); border-radius: 2px; overflow: hidden;">
-            <div style="height: 100%; background: var(--warning); width: ${(count / mistakeIds.length) * 100}%"></div>
+            <div style="height: 100%; background: var(--warning); width: ${(count / totalMistakes) * 100}%"></div>
           </div>
           <div style="margin-bottom: 8px;"></div>
         `,
@@ -134,8 +132,8 @@ function renderMistakesContent() {
           (w) => `
         <div class="list-item mistake">
           <div class="list-col-main">
-            <div class="list-word">${w.word_kr}</div>
-            <div class="list-trans">${w.translation}</div>
+            <div class="list-word">${escapeHtml(w.word_kr)}</div>
+            <div class="list-trans">${escapeHtml(w.translation)}</div>
           </div>
           <div class="list-col-meta">
             <span class="list-badge">${w.level || "★☆☆"}</span>

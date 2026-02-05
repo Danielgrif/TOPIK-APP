@@ -1,6 +1,7 @@
 import { state } from "../core/state.ts";
 import { client } from "../core/supabaseClient.ts";
 import { showToast } from "../utils/utils.ts";
+import { LS_KEYS } from "../core/constants.ts";
 import { immediateSaveState } from "../core/db.ts";
 import { createLocalBackup } from "../core/backup.ts";
 import {
@@ -8,6 +9,7 @@ import {
   updateSRSBadge,
   updateXPUI,
   checkAchievements,
+  invalidateTopicMasteryCache,
 } from "../core/stats.ts";
 import { render } from "./ui_card.ts";
 import { openConfirm } from "./ui_modal.ts";
@@ -17,16 +19,16 @@ export async function resetAllProgress() {
   try {
     createLocalBackup(); // Создаем резервную копию перед удалением
     const progressKeys = [
-      "user_stats_v5",
-      "learned_v5",
-      "mistakes_v5",
-      "favorites_v5",
-      "word_history_v5",
-      "streak_v5",
-      "sessions_v5",
-      "achievements_v5",
+      LS_KEYS.USER_STATS,
+      LS_KEYS.LEARNED,
+      LS_KEYS.MISTAKES,
+      LS_KEYS.FAVORITES,
+      LS_KEYS.WORD_HISTORY,
+      LS_KEYS.STREAK,
+      LS_KEYS.SESSIONS,
+      LS_KEYS.ACHIEVEMENTS,
       "daily_challenge_v1",
-      "dirty_ids_v1",
+      LS_KEYS.DIRTY_IDS,
     ];
     progressKeys.forEach((k) => localStorage.removeItem(k));
 
@@ -44,7 +46,7 @@ export async function resetAllProgress() {
     state.learned = new Set();
     state.mistakes = new Set();
     state.favorites = new Set();
-    state.wordHistory = {};
+    state.wordHistory = Object.create(null);
     state.streak = { count: 0, lastDate: null };
     state.sessions = [];
     state.achievements = [];
@@ -81,6 +83,7 @@ export async function resetAllProgress() {
     if (shopBalance) shopBalance.innerText = "0";
 
     immediateSaveState();
+    invalidateTopicMasteryCache();
     updateStats();
     updateXPUI();
     render();
@@ -105,7 +108,7 @@ export async function clearData() {
       : "Сбросить весь прогресс? Это действие нельзя отменить.",
     () => resetAllProgress(),
     {
-      showInput: isEmailAuth,
+      showInput: isEmailAuth || undefined,
       inputPlaceholder: "Ваш пароль",
       onValidate: isEmailAuth
         ? async (val: string) => {
@@ -221,6 +224,7 @@ export function importProgress(event: Event) {
       }
 
       saveAndRender();
+      invalidateTopicMasteryCache();
       checkAchievements(false);
       showToast("✅ Данные импортированы!");
     } catch (err: unknown) {

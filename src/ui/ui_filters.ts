@@ -3,6 +3,7 @@ import {
   parseBilingualString,
   showToast,
   getIconForValue,
+  escapeHtml,
 } from "../utils/utils.ts";
 import { render } from "./ui_card.ts";
 import { Word } from "../types/index.ts";
@@ -12,12 +13,12 @@ const VIRTUAL_BUFFER = 10;
 
 // --- Optimization Cache ---
 let cachedDataStoreRef: Word[] | null = null;
-let cachedWordsByType: Record<string, Word[]> = {};
+let cachedWordsByType: Record<string, Word[]> = Object.create(null);
 
 function getWordsByType(type: string): Word[] {
   // Перестраиваем кэш только если массив данных изменился (по ссылке)
   if (cachedDataStoreRef !== state.dataStore) {
-    cachedWordsByType = {};
+    cachedWordsByType = Object.create(null);
     for (let i = 0; i < state.dataStore.length; i++) {
       const w = state.dataStore[i];
       const t = w.type || "word";
@@ -47,11 +48,13 @@ export function toggleFilterPanel() {
 
 function getTopicsForCurrentType(): string[] {
   const topics = new Set<string>();
-  state.dataStore.forEach((w: Word) => {
-    if (w.type !== state.currentType) return;
+  const data = state.dataStore;
+  for (let i = 0; i < data.length; i++) {
+    const w = data[i];
+    if (w.type !== state.currentType) continue;
     const t = w.topic || w.topic_ru || w.topic_kr;
     if (t) topics.add(t);
-  });
+  }
   return Array.from(topics).sort();
 }
 
@@ -89,7 +92,7 @@ function createMultiselectItem(value: string, label: string): HTMLElement {
     state.currentTopic.includes(value) ||
     (value === "all" && state.currentTopic.includes("all"));
   const icon = getIconForValue(value, "🏷️");
-  itemDiv.innerHTML = `<input type="checkbox" ${isChecked ? "checked" : ""}> <span style="margin-right: 6px;">${icon}</span> <span>${label}</span>`;
+  itemDiv.innerHTML = `<input type="checkbox" ${isChecked ? "checked" : ""}> <span style="margin-right: 6px;">${icon}</span> <span>${escapeHtml(label)}</span>`;
 
   itemDiv.onclick = (e) => {
     e.stopPropagation();
@@ -250,18 +253,20 @@ function populateCategoryFilter() {
 
     const getCategories = () => {
       const categories = new Set<string>();
-      state.dataStore.forEach((w: Word) => {
-        if (w.type !== state.currentType) return;
+      const data = state.dataStore;
+      const currentType = state.currentType;
+      const currentTopic = state.currentTopic;
+      const isAllTopics = currentTopic.includes("all");
+
+      for (let i = 0; i < data.length; i++) {
+        const w = data[i];
+        if (w.type !== currentType) continue;
         const t = w.topic || w.topic_ru || w.topic_kr;
-        if (
-          !t ||
-          (!state.currentTopic.includes("all") &&
-            !state.currentTopic.includes(t))
-        )
-          return;
+        if (!t || (!isAllTopics && !currentTopic.includes(t))) continue;
+
         const c = w.category || w.category_ru || w.category_kr;
         if (c) categories.add(c);
-      });
+      }
       return Array.from(categories).sort();
     };
 
@@ -390,7 +395,7 @@ function createCategoryItem(value: string, label: string): HTMLElement {
     state.currentCategory.includes(value) ||
     (value === "all" && state.currentCategory.includes("all"));
   const icon = getIconForValue(value, "🔹");
-  itemDiv.innerHTML = `<input type="checkbox" ${isChecked ? "checked" : ""}> <span style="margin-right: 6px;">${icon}</span> <span>${label}</span>`;
+  itemDiv.innerHTML = `<input type="checkbox" ${isChecked ? "checked" : ""}> <span style="margin-right: 6px;">${icon}</span> <span>${escapeHtml(label)}</span>`;
   itemDiv.onclick = (e) => {
     e.stopPropagation();
     handleCategoryChange(value);

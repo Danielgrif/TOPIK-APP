@@ -1564,3 +1564,46 @@ body.dark-mode .color-option[data-value="pink"], body.dark-mode .stats-color-btn
     display: flex; align-items: center; justify-content: center;
 }
 .view-btn.active { background: var(--surface-3); color: var(--primary); }
+
+/* --- Retry Mechanism UI --- */
+.request-error-container {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px;
+    background: rgba(239, 68, 68, 0.08);
+    border: 1px solid rgba(239, 68, 68, 0.2);
+    border-radius: 12px;
+    margin-top: 10px;
+    animation: fadeIn 0.3s ease;
+}
+
+.request-error-text {
+    flex: 1;
+    font-size: 13px;
+    color: var(--danger);
+    font-weight: 500;
+}
+
+.retry-btn {
+    background: var(--surface-1);
+    border: 1px solid var(--danger);
+    color: var(--danger);
+    padding: 6px 14px;
+    border-radius: 8px;
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    white-space: nowrap;
+}
+
+.retry-btn:hover {
+    background: var(--danger);
+    color: white;
+    box-shadow: 0 2px 8px rgba(239, 68, 68, 0.3);
+}
+
+.retry-btn:active {
+    transform: scale(0.95);
+}

@@ -1,3 +1,5 @@
+import { LS_KEYS } from "./constants";
+
 /* eslint-disable no-console */
 export function createLocalBackup() {
   try {
@@ -14,9 +16,10 @@ export function createLocalBackup() {
       "custom_words_v1",
       "favorite_quotes_v1",
       "dirty_ids_v1",
+      "word_requests_state_v1",
     ];
 
-    const backup: Record<string, string> = {};
+    const backup: Record<string, string> = Object.create(null);
     let size = 0;
 
     keys.forEach((key) => {
@@ -36,7 +39,7 @@ export function createLocalBackup() {
       return;
     }
 
-    localStorage.setItem("safety_backup_v1", JSON.stringify(backup));
+    localStorage.setItem(LS_KEYS.SAFETY_BACKUP, JSON.stringify(backup));
     console.log("🛡️ Safety backup created");
   } catch (e) {
     console.warn("⚠️ Backup failed:", e);
@@ -45,7 +48,7 @@ export function createLocalBackup() {
 
 export function restoreLocalBackup(): boolean {
   try {
-    const raw = localStorage.getItem("safety_backup_v1");
+    const raw = localStorage.getItem(LS_KEYS.SAFETY_BACKUP);
     if (!raw) return false;
 
     const backup = JSON.parse(raw);

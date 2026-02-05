@@ -2,20 +2,23 @@
 <header id="main-header">
   <!-- XP and Level Widget -->
   <div id="xp-level-widget" data-modal-target="stats-modal">
-    <div class="level-badge-header">LVL <span id="user-level">1</span></div>
-    <div class="xp-track">
-      <div id="xp-fill" class="xp-bar-fill"></div>
+    <div class="level-indicator">
+      <span class="lvl-label-mini">LVL</span>
+      <span id="user-level">1</span>
     </div>
-    <div id="xp-text" class="xp-label">0/100</div>
+    <div class="xp-progress-wrapper">
+      <div class="xp-track"><div id="xp-fill" class="xp-bar-fill"></div></div>
+      <div id="xp-text" class="xp-label">0 / 100</div>
+    </div>
   </div>
 
   <!-- Right side actions -->
   <div class="header-right">
     <button class="coin-pill" data-action="open-shop" title="Магазин">
-      <span>💰</span>
+      <span class="coin-icon">💰</span>
       <span id="coins-count-header">0</span>
     </button>
-    <button id="header-dark-mode-toggle" class="btn-icon" data-action="toggle-dark-mode" title="Сменить тему">☀️</button>
+    <button id="header-dark-mode-toggle" class="btn-icon theme-toggle-btn" data-action="toggle-dark-mode" title="Сменить тему">☀️</button>
     <button id="profile-button" class="profile-btn" data-action="open-profile">
       <div id="profile-avatar" class="profile-avatar">👤</div>
       <span id="profile-name" class="profile-name">Профиль</span>

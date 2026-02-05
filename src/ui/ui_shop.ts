@@ -3,6 +3,7 @@ import { showToast, playTone } from "../utils/utils.ts";
 import { openModal } from "./ui_modal.ts";
 import { scheduleSaveState } from "../core/db.ts";
 import { saveAndRender } from "./ui.ts";
+import { checkAchievements, addXP, updateStats } from "../core/stats.ts";
 
 const SHOP_ITEMS = [
   {
@@ -127,7 +128,7 @@ export function buyItem(id: string, btn?: HTMLElement) {
         animateItemToTarget(btn, inventoryTab, item.icon);
     }
     if (id === "xp_scroll") {
-      import("../core/stats.ts").then((m) => m.addXP(500));
+      addXP(500);
       const xpWidget = document.getElementById("xp-level-widget");
       if (btn && xpWidget) animateItemToTarget(btn, xpWidget, item.icon);
     }
@@ -143,9 +144,10 @@ export function buyItem(id: string, btn?: HTMLElement) {
 
     playTone("success");
     showToast(`Куплено: ${item.name}`);
+    checkAchievements();
     scheduleSaveState();
     renderShop();
-    import("../core/stats.ts").then((m) => m.updateStats());
+    updateStats();
   } else {
     playTone("failure");
     showToast("Недостаточно монет или лимит исчерпан");
@@ -173,6 +175,7 @@ export function claimDailyReward(btn?: HTMLElement) {
     state.userStats.lastDailyReward = now;
     playTone("success");
     showToast("🎁 Получено: 100 монет!");
+    checkAchievements();
     saveAndRender();
     renderShop();
   }

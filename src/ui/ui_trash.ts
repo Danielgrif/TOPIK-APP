@@ -1,6 +1,6 @@
 import { client } from "../core/supabaseClient.ts";
 import { state } from "../core/state.ts";
-import { showToast } from "../utils/utils.ts";
+import { showToast, escapeHtml } from "../utils/utils.ts";
 import { openConfirm } from "./ui_modal.ts";
 import { render } from "./ui_card.ts";
 import { Word } from "../types/index.ts";
@@ -41,7 +41,7 @@ function renderTrashList() {
                     <input type="checkbox" onclick="window.toggleTrashSelection(${word.id}, this.checked)" ${isSelected ? "checked" : ""} />
                 </div>
                 <div class="trash-item-info">
-                    <div class="trash-item-word">${word.word_kr} - ${word.translation}</div>
+                    <div class="trash-item-word">${escapeHtml(word.word_kr)} - ${escapeHtml(word.translation)}</div>
                     <div class="trash-item-date">Удалено: ${new Date(word.deleted_at!).toLocaleDateString()}</div>
                 </div>
                 <div class="trash-item-actions">
@@ -334,8 +334,14 @@ async function bulkRestore() {
   });
 }
 
-Object.assign(window, {
-  restoreWord,
-  permanentlyDeleteWord,
-  toggleTrashSelection,
-});
+declare global {
+  interface Window {
+    restoreWord: typeof restoreWord;
+    permanentlyDeleteWord: typeof permanentlyDeleteWord;
+    toggleTrashSelection: typeof toggleTrashSelection;
+  }
+}
+
+window.restoreWord = restoreWord;
+window.permanentlyDeleteWord = permanentlyDeleteWord;
+window.toggleTrashSelection = toggleTrashSelection;

@@ -17,17 +17,30 @@ export function addXP(val: number) {
 
   let currentLevel = Number(state.userStats.level || 1);
   let requiredForCurrentLevel = getXPForNextLevel(currentLevel);
+  let leveledUp = false;
 
   while (state.userStats.xp >= requiredForCurrentLevel) {
     state.userStats.xp -= requiredForCurrentLevel;
     currentLevel++;
     showLevelUpAnimation(currentLevel);
+    leveledUp = true;
 
     requiredForCurrentLevel = getXPForNextLevel(currentLevel);
   }
 
   state.userStats.level = currentLevel;
   updateXPUI();
+
+  if (leveledUp) {
+    const bar = document.getElementById("xp-fill");
+    if (bar) {
+      bar.classList.remove("level-up-shine");
+      void bar.offsetWidth; // Force reflow для перезапуска анимации
+      bar.classList.add("level-up-shine");
+      setTimeout(() => bar.classList.remove("level-up-shine"), 1500);
+    }
+  }
+
   scheduleSaveState();
 }
 
@@ -167,21 +180,25 @@ export function updateSRSBadge() {
 export function calculateOverallAccuracy(): number {
   let totalAttempts = 0,
     totalCorrect = 0;
-  Object.values(state.wordHistory).forEach((w) => {
+  const history = Object.values(state.wordHistory);
+  for (let i = 0; i < history.length; i++) {
+    const w = history[i];
     if (w && typeof w.attempts === "number") {
       totalAttempts += w.attempts;
       totalCorrect += w.correct;
     }
-  });
+  }
   if (totalAttempts === 0) return 0;
   return Math.round((totalCorrect / totalAttempts) * 100);
 }
 
 export function getAchievementDefinitions() {
-  const getMasteredCount = () =>
-    Object.values(state.wordHistory).filter(
-      (h) => h.attempts >= 3 && h.correct / h.attempts >= 0.9,
-    ).length;
+  // Optimization: Calculate mastered count once to avoid iterating wordHistory multiple times
+  const masteredCount = Object.values(state.wordHistory).filter(
+    (h) => h.attempts >= 3 && h.correct / h.attempts >= 0.9,
+  ).length;
+
+  const getMasteredCount = () => masteredCount;
 
   return [
     {
@@ -409,37 +426,72 @@ export function renderAchievements() {
   });
 }
 
+let cachedTopicMasteryHtml: string | null = null;
+let cachedLearnedSize: number = -1;
+let cachedCurrentType: string | null = null;
+
+export function invalidateTopicMasteryCache() {
+  cachedTopicMasteryHtml = null;
+  cachedLearnedSize = -1;
+  cachedCurrentType = null;
+}
+
 export function renderTopicMastery() {
   const container = document.getElementById("topic-mastery-list");
   if (!container) return;
-  container.innerHTML = "";
 
-  const topics: Record<string, { total: number; learned: number }> = {};
+  // Optimization: Use cached HTML if learned count and type haven't changed
+  if (
+    cachedTopicMasteryHtml &&
+    state.learned.size === cachedLearnedSize &&
+    state.currentType === cachedCurrentType
+  ) {
+    container.innerHTML = cachedTopicMasteryHtml;
+    return;
+  }
 
-  state.dataStore.forEach((w) => {
-    if (w.type !== state.currentType) return;
+  const topics: Record<string, { total: number; learned: number }> =
+    Object.create(null);
+
+  const data = state.dataStore;
+  const len = data.length;
+  const currentType = state.currentType;
+
+  for (let i = 0; i < len; i++) {
+    const w = data[i];
+    if (w.type !== currentType) continue;
     const t = w.topic || w.topic_ru || w.topic_kr || "Other";
     if (!topics[t]) topics[t] = { total: 0, learned: 0 };
     topics[t].total++;
     if (state.learned.has(w.id)) topics[t].learned++;
-  });
+  }
 
+  let html = "";
   Object.entries(topics).forEach(([topic, stats]) => {
     const pct = Math.round((stats.learned / stats.total) * 100);
-    const el = document.createElement("div");
-    el.className = "topic-mastery-item";
-    el.innerHTML = `
+    html += `
+        <div class="topic-mastery-item">
             <div class="topic-name">${topic}</div>
             <div class="topic-progress">
                 <div class="topic-bar" style="width: ${pct}%"></div>
             </div>
             <div class="topic-stats">${stats.learned}/${stats.total}</div>
-        `;
-    container.appendChild(el);
+        </div>`;
   });
+
+  container.innerHTML = html;
+  cachedTopicMasteryHtml = html;
+  cachedLearnedSize = state.learned.size;
+  cachedCurrentType = currentType;
 }
 
-const chartInstances: Record<string, unknown> = {};
+const chartInstances: Record<string, any> = {};
+
+interface ChartTooltipContext {
+  raw: any;
+  label: any;
+  dataset: { label: any; data?: any[] };
+}
 
 // Helper for chart styling
 function getChartTheme() {
@@ -456,7 +508,7 @@ function getChartTheme() {
 }
 
 function destroyChart(key: string) {
-  const instance = chartInstances[key] as { destroy: () => void } | undefined;
+  const instance = chartInstances[key];
   if (instance && typeof instance.destroy === "function") {
     instance.destroy();
   }
@@ -589,6 +641,15 @@ export function renderActivityChart() {
   const now = new Date();
   const theme = getChartTheme();
 
+  // Optimization: Pre-calculate activity map to avoid iterating wordHistory 7 times
+  const activityMap = new Map<string, number>();
+  Object.values(state.wordHistory).forEach((h) => {
+    if (h.learnedDate) {
+      const ld = new Date(h.learnedDate).toLocaleDateString("en-CA");
+      activityMap.set(ld, (activityMap.get(ld) || 0) + 1);
+    }
+  });
+
   for (let i = 6; i >= 0; i--) {
     const d = new Date();
     d.setDate(now.getDate() - i);
@@ -597,13 +658,7 @@ export function renderActivityChart() {
 
     // Hybrid approach:
     // 1. Count newly learned words (precise)
-    let learnedCount = 0;
-    Object.values(state.wordHistory).forEach((h) => {
-      if (h.learnedDate) {
-        const ld = new Date(h.learnedDate).toLocaleDateString("en-CA");
-        if (ld === localDateStr) learnedCount++;
-      }
-    });
+    let learnedCount = activityMap.get(localDateStr) || 0;
 
     // 2. If learned count is 0 (likely past days before migration), fallback to session activity
     // This ensures the chart isn't empty for past active days
@@ -673,7 +728,7 @@ export function renderActivityChart() {
         cornerRadius: 8,
         displayColors: false,
         callbacks: {
-          label: (context: any) => `📝 ~${context.raw} слов`,
+          label: (context: ChartTooltipContext) => `📝 ~${context.raw} слов`,
         },
       },
     },
@@ -693,7 +748,9 @@ export function renderLearnedChart() {
   const levels = { "★☆☆": 0, "★★☆": 0, "★★★": 0 };
   const totals = { "★☆☆": 0, "★★☆": 0, "★★★": 0 };
 
-  state.dataStore.forEach((w) => {
+  const data = state.dataStore;
+  for (let i = 0; i < data.length; i++) {
+    const w = data[i];
     if (w.level && w.level in totals) {
       // @ts-ignore
       totals[w.level]++;
@@ -702,7 +759,7 @@ export function renderLearnedChart() {
         levels[w.level]++;
       }
     }
-  });
+  }
 
   chartInstances["learned"] = new window.Chart(ctx, {
     type: "bar",
@@ -732,8 +789,8 @@ export function renderLearnedChart() {
           padding: 10,
           cornerRadius: 8,
           callbacks: {
-            label: (context: any) => {
-              const lvl = context.label;
+            label: (context: ChartTooltipContext) => {
+              const lvl = context.label as keyof typeof totals;
               // @ts-ignore
               const total = totals[lvl] || 0;
               const val = context.raw;
@@ -823,7 +880,7 @@ export function renderAccuracyChart() {
           padding: 10,
           cornerRadius: 8,
           callbacks: {
-            label: (context: any) => `🎯 ${context.raw}%`,
+            label: (context: ChartTooltipContext) => `🎯 ${context.raw}%`,
           },
         },
       },
@@ -933,7 +990,7 @@ export function renderForgettingCurve() {
           borderColor: theme.gridColor,
           borderWidth: 1,
           callbacks: {
-            label: (context: any) =>
+            label: (context: ChartTooltipContext) =>
               `🧠 ${context.dataset.label}: ${Math.round(context.raw)}%`,
           },
         },
@@ -963,13 +1020,15 @@ export function renderSRSDistributionChart() {
 
   const theme = getChartTheme();
   const counts = [0, 0, 0, 0];
-  state.dataStore.forEach((w) => {
+  const data = state.dataStore;
+  for (let i = 0; i < data.length; i++) {
+    const w = data[i];
     const h = state.wordHistory[w.id];
     if (!h || !h.sm2 || h.sm2.interval === 0) counts[0]++;
     else if (h.sm2.interval < 3) counts[1]++;
     else if (h.sm2.interval < 21) counts[2]++;
     else counts[3]++;
-  });
+  }
 
   const totalWords = counts.reduce((a, b) => a + b, 0);
 
@@ -1015,9 +1074,9 @@ export function renderSRSDistributionChart() {
           padding: 10,
           cornerRadius: 8,
           callbacks: {
-            label: (context: any) => {
-              const val = context.raw;
-              const total = context.dataset.data.reduce(
+            label: (context: ChartTooltipContext) => {
+              const val = context.raw as number;
+              const total = (context.dataset.data || []).reduce(
                 (a: number, b: number) => a + b,
                 0,
               );
@@ -1036,7 +1095,7 @@ export function renderSRSDistributionChart() {
     plugins: [
       {
         id: "centerText",
-        afterDraw: (chart: any) => {
+        afterDraw: (chart: { ctx?: any; width?: any; height?: any }) => {
           const ctx = chart.ctx;
           const { width, height } = chart;
 

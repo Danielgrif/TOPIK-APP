@@ -2,6 +2,7 @@ import { state } from "../core/state.ts";
 import { setTypeFilter } from "./ui_filters.ts";
 import { closeModal } from "./ui_modal.ts";
 import { showToast, playTone } from "../utils/utils.ts";
+import { LS_KEYS, SW_MESSAGES } from "../core/constants.ts";
 
 export function showUpdateNotification(worker: ServiceWorker) {
   let el = document.getElementById("update-notification");
@@ -14,7 +15,9 @@ export function showUpdateNotification(worker: ServiceWorker) {
         `;
     document.body.appendChild(el);
     const btn = document.getElementById("update-btn");
-    if (btn) btn.onclick = () => worker.postMessage({ type: "SKIP_WAITING" });
+    if (btn)
+      btn.onclick = () =>
+        worker.postMessage({ type: SW_MESSAGES.SKIP_WAITING });
   }
   setTimeout(() => el!.classList.add("show"), 500);
 }
@@ -117,9 +120,8 @@ export function saveSearchHistory(query: string) {
   state.searchHistory.unshift(query);
   if (state.searchHistory.length > 5)
     state.searchHistory = state.searchHistory.slice(0, 5);
-
   localStorage.setItem(
-    "search_history_v1",
+    LS_KEYS.SEARCH_HISTORY,
     JSON.stringify(state.searchHistory),
   );
 }
@@ -156,7 +158,7 @@ export function showSearchHistory(inputEl: HTMLInputElement) {
       e.stopPropagation();
       state.searchHistory = state.searchHistory.filter((x: string) => x !== q);
       localStorage.setItem(
-        "search_history_v1",
+        LS_KEYS.SEARCH_HISTORY,
         JSON.stringify(state.searchHistory),
       );
       showSearchHistory(inputEl);
@@ -178,7 +180,7 @@ export function hideSearchHistory() {
 }
 
 export function showInstallBanner() {
-  if (localStorage.getItem("pwa_banner_dismissed_v1")) return;
+  if (localStorage.getItem(LS_KEYS.PWA_BANNER_DISMISSED)) return;
 
   const banner = document.getElementById("install-banner");
   if (banner) {
@@ -189,7 +191,7 @@ export function showInstallBanner() {
 export function dismissInstallBanner() {
   const banner = document.getElementById("install-banner");
   if (banner) banner.classList.remove("show");
-  localStorage.setItem("pwa_banner_dismissed_v1", "true");
+  localStorage.setItem(LS_KEYS.PWA_BANNER_DISMISSED, "true");
 }
 
 export function showLevelUpAnimation(level: number) {

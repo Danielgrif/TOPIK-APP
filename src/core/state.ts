@@ -6,8 +6,11 @@ import {
   DailyChallenge,
   StudyGoal,
   MusicTrack,
+  Quote,
+  User,
 } from "../types/index.ts";
 import { createLocalBackup } from "./backup.ts";
+import { LS_KEYS } from "./constants.ts";
 
 export interface Session {
   date: string;
@@ -15,6 +18,14 @@ export interface Session {
   wordsReviewed: number;
   accuracy: number;
   platform?: string; // Пример нового поля
+}
+
+export interface WordRequestState {
+  id: string | number;
+  word: string;
+  status: "pending" | "ai" | "audio" | "done" | "error";
+  error?: string;
+  timestamp: number;
 }
 
 export interface AppState {
@@ -32,11 +43,12 @@ export interface AppState {
   searchHistory: string[];
   customWords: Word[];
   studyGoal: StudyGoal;
-  favoriteQuotes: any[];
+  favoriteQuotes: Quote[];
   dirtyWordIds: Set<string | number>;
   trashRetentionDays: number;
   selectMode: boolean;
   selectedWords: Set<string | number>;
+  wordRequests: WordRequestState[];
 
   currentStar: string;
   currentTopic: string[];
@@ -68,6 +80,7 @@ export interface AppState {
   sessionSeconds: number;
   sessionInterval: number | null;
   sessionWordsReviewed: number;
+  currentUser: User | null;
 }
 
 export const CURRENT_DB_VERSION = 9;
@@ -89,7 +102,7 @@ export const state: AppState = {
   learned: new Set(),
   mistakes: new Set(),
   favorites: new Set(),
-  wordHistory: {},
+  wordHistory: Object.create(null),
   streak: { count: 0, lastDate: null },
   sessions: [],
   achievements: [],
@@ -102,33 +115,34 @@ export const state: AppState = {
   trashRetentionDays: 30,
   selectMode: false,
   selectedWords: new Set(),
+  wordRequests: [],
 
   currentStar: "all",
   currentTopic: ["all"],
   currentCategory: ["all"],
   currentType: "word",
-  hanjaMode: localStorage.getItem("hanja_mode_v1") === "true",
-  currentVoice: localStorage.getItem("voice_pref") || "female",
+  hanjaMode: localStorage.getItem(LS_KEYS.HANJA_MODE) === "true",
+  currentVoice: localStorage.getItem(LS_KEYS.VOICE_PREF) || "female",
   audioSpeed:
-    localStorage.getItem("audio_speed_v1") !== null
-      ? Number(localStorage.getItem("audio_speed_v1"))
+    localStorage.getItem(LS_KEYS.AUDIO_SPEED) !== null
+      ? Number(localStorage.getItem(LS_KEYS.AUDIO_SPEED))
       : 0.9,
-  darkMode: localStorage.getItem("dark_mode_v1") === "true",
+  darkMode: localStorage.getItem(LS_KEYS.DARK_MODE) === "true",
   focusMode: false, // Отключаем сохранение состояния при перезагрузке
-  zenMode: localStorage.getItem("zen_mode_v1") === "true",
-  viewMode: localStorage.getItem("view_mode_v1") || "grid",
-  themeColor: localStorage.getItem("theme_color_v1") || "purple",
-  autoUpdate: localStorage.getItem("auto_update_v1") !== "false",
-  autoTheme: localStorage.getItem("auto_theme_v1") === "true",
+  zenMode: localStorage.getItem(LS_KEYS.ZEN_MODE) === "true",
+  viewMode: localStorage.getItem(LS_KEYS.VIEW_MODE) || "grid",
+  themeColor: localStorage.getItem(LS_KEYS.THEME_COLOR) || "purple",
+  autoUpdate: localStorage.getItem(LS_KEYS.AUTO_UPDATE) !== "false",
+  autoTheme: localStorage.getItem(LS_KEYS.AUTO_THEME) === "true",
   backgroundMusicEnabled:
-    localStorage.getItem("background_music_enabled_v1") === "true",
+    localStorage.getItem(LS_KEYS.MUSIC_ENABLED) === "true",
   backgroundMusicVolume:
-    localStorage.getItem("background_music_volume_v1") !== null
-      ? Number(localStorage.getItem("background_music_volume_v1"))
+    localStorage.getItem(LS_KEYS.MUSIC_VOLUME) !== null
+      ? Number(localStorage.getItem(LS_KEYS.MUSIC_VOLUME))
       : 0.3,
   ttsVolume:
-    localStorage.getItem("tts_volume_v1") !== null
-      ? Number(localStorage.getItem("tts_volume_v1"))
+    localStorage.getItem(LS_KEYS.TTS_VOLUME) !== null
+      ? Number(localStorage.getItem(LS_KEYS.TTS_VOLUME))
       : 1.0,
 
   MUSIC_TRACKS: [
@@ -148,9 +162,9 @@ export const state: AppState = {
       filename: "Future Bass Pop (Instrumental).mp3",
     },
   ],
-  quizDifficulty: "all",
-  quizTopic: "all",
-  quizCategory: "all",
+  quizDifficulty: localStorage.getItem(LS_KEYS.QUIZ_DIFFICULTY) || "all",
+  quizTopic: localStorage.getItem(LS_KEYS.QUIZ_TOPIC) || "all",
+  quizCategory: localStorage.getItem(LS_KEYS.QUIZ_CATEGORY) || "all",
 
   isSyncing: false,
 
@@ -158,12 +172,15 @@ export const state: AppState = {
   sessionSeconds: 0,
   sessionInterval: null,
   sessionWordsReviewed: 0,
+  currentUser: null,
 };
 
 try {
   const runMigrations = () => {
     try {
-      const storedVersion = Number(localStorage.getItem("db_version") || "0");
+      const storedVersion = Number(
+        localStorage.getItem(LS_KEYS.DB_VERSION) || "0",
+      );
       if (storedVersion >= CURRENT_DB_VERSION) return;
 
       // 🛡️ Автоматическое создание резервной копии перед миграцией
@@ -275,11 +292,11 @@ try {
         const raw = localStorage.getItem(key);
         if (raw) {
           try {
-            const sessions = JSON.parse(raw);
+            const sessions: Session[] = JSON.parse(raw);
             if (Array.isArray(sessions)) {
               const mergedMap = new Map();
 
-              sessions.forEach((s: any) => {
+              sessions.forEach((s) => {
                 const dateKey = s.date; // Используем дату как ключ для объединения
                 if (mergedMap.has(dateKey)) {
                   const existing = mergedMap.get(dateKey);
@@ -314,7 +331,7 @@ try {
         }
       }
 
-      localStorage.setItem("db_version", String(CURRENT_DB_VERSION));
+      localStorage.setItem(LS_KEYS.DB_VERSION, String(CURRENT_DB_VERSION));
     } catch (e) {
       console.error("Migration failed:", e);
     }
@@ -335,16 +352,17 @@ try {
     }
   };
 
-  state.userStats = load("user_stats_v5", state.userStats);
-  state.learned = new Set(load("learned_v5", []));
-  state.mistakes = new Set(load("mistakes_v5", []));
-  state.favorites = new Set(load("favorites_v5", []));
-  state.wordHistory = load("word_history_v5", state.wordHistory);
-  state.streak = load("streak_v5", { count: 0, lastDate: null });
+  state.userStats = load(LS_KEYS.USER_STATS, state.userStats);
+  state.learned = new Set(load(LS_KEYS.LEARNED, []));
+  state.mistakes = new Set(load(LS_KEYS.MISTAKES, []));
+  state.favorites = new Set(load(LS_KEYS.FAVORITES, []));
+  const loadedHistory = load(LS_KEYS.WORD_HISTORY, {});
+  state.wordHistory = Object.assign(Object.create(null), loadedHistory);
+  state.streak = load(LS_KEYS.STREAK, { count: 0, lastDate: null });
   if (state.streak.count === undefined) state.streak.count = 0;
   if (state.streak.lastDate === undefined) state.streak.lastDate = null;
-  state.sessions = load("sessions_v5", state.sessions);
-  state.achievements = load("achievements_v5", state.achievements);
+  state.sessions = load(LS_KEYS.SESSIONS, state.sessions);
+  state.achievements = load(LS_KEYS.ACHIEVEMENTS, state.achievements);
   state.dailyChallenge = load("daily_challenge_v1", {
     lastDate: null,
     completed: false,
@@ -356,11 +374,12 @@ try {
     state.dailyChallenge.completed = false;
   if (state.dailyChallenge.streak === undefined)
     state.dailyChallenge.streak = 0;
-  state.searchHistory = load("search_history_v1", []);
-  state.customWords = load("custom_words_v1", []);
+  state.searchHistory = load(LS_KEYS.SEARCH_HISTORY, []);
+  state.customWords = load(LS_KEYS.CUSTOM_WORDS, []);
+  state.wordRequests = load(LS_KEYS.WORD_REQUESTS, []);
 
   // Загрузка сжатого словаря
-  const cachedVocab = localStorage.getItem("vocabulary_cache_v1");
+  const cachedVocab = localStorage.getItem(LS_KEYS.VOCAB_CACHE);
   if (cachedVocab) {
     try {
       // Убрана декомпрессия, парсим напрямую
@@ -371,7 +390,7 @@ try {
       const isValid =
         Array.isArray(parsed) &&
         parsed.every(
-          (item: any) =>
+          (item: Word) =>
             item &&
             typeof item === "object" &&
             "id" in item &&
@@ -385,20 +404,20 @@ try {
       }
     } catch (e) {
       console.warn("Failed to decompress vocabulary cache, resetting.", e);
-      localStorage.removeItem("vocabulary_cache_v1");
+      localStorage.removeItem(LS_KEYS.VOCAB_CACHE);
       state.dataStore = [];
     }
   }
-  state.studyGoal = load("study_goal_v1", { type: "words", target: 10 });
-  state.favoriteQuotes = load("favorite_quotes_v1", []);
-  state.dirtyWordIds = new Set(load("dirty_ids_v1", []));
+  state.studyGoal = load(LS_KEYS.STUDY_GOAL, { type: "words", target: 10 });
+  state.favoriteQuotes = load(LS_KEYS.FAVORITE_QUOTES, []);
+  state.dirtyWordIds = new Set(load(LS_KEYS.DIRTY_IDS, []));
   state.trashRetentionDays =
-    localStorage.getItem("trash_retention_v1") !== null
-      ? Number(localStorage.getItem("trash_retention_v1"))
+    localStorage.getItem(LS_KEYS.TRASH_RETENTION) !== null
+      ? Number(localStorage.getItem(LS_KEYS.TRASH_RETENTION))
       : 30;
-  state.quizDifficulty = localStorage.getItem("quiz_difficulty_v1") || "all";
-  state.quizTopic = localStorage.getItem("quiz_topic_v1") || "all";
-  state.quizCategory = localStorage.getItem("quiz_category_v1") || "all";
+  state.quizDifficulty = localStorage.getItem(LS_KEYS.QUIZ_DIFFICULTY) || "all";
+  state.quizTopic = localStorage.getItem(LS_KEYS.QUIZ_TOPIC) || "all";
+  state.quizCategory = localStorage.getItem(LS_KEYS.QUIZ_CATEGORY) || "all";
 
   if (state.userStats.sprintRecord === undefined)
     state.userStats.sprintRecord = 0;

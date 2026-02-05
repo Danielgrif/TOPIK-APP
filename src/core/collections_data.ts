@@ -8,7 +8,7 @@ export interface UserList {
 
 export const collectionsState = {
   userLists: [] as UserList[],
-  listItems: {} as Record<string, Set<number>>,
+  listItems: Object.create(null) as Record<string, Set<number>>,
   currentCollectionFilter: null as string | null,
 };
 

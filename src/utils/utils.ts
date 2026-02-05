@@ -3,6 +3,42 @@ import { state } from "../core/state.ts";
 /**
  * Icons mapping for topics and categories
  */
+export function escapeHtml(unsafe: string | number | null | undefined): string {
+  if (unsafe == null) return "";
+  return String(unsafe)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;")
+    .replace(/`/g, "&#96;");
+}
+
+export function escapeRegExp(string: string): string {
+  return string.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/**
+ * Wraps a promise with a timeout.
+ * @param promise The promise to wrap.
+ * @param ms The timeout in milliseconds.
+ * @param timeoutError The error to throw on timeout.
+ * @returns The result of the promise.
+ */
+export function promiseWithTimeout<T>(
+  promise: Promise<T>,
+  ms: number,
+  timeoutError = new Error("Promise timed out"),
+): Promise<T> {
+  const timeout = new Promise<never>((_, reject) => {
+    const id = setTimeout(() => {
+      clearTimeout(id);
+      reject(timeoutError);
+    }, ms);
+  });
+  return Promise.race([promise, timeout]);
+}
+
 export const ICONS_MAP: Record<string, string> = {
   daily: "🏠",
   life: "🏠",
@@ -217,32 +253,30 @@ export function parseBilingualString(str: string | null | undefined): {
  * Calculates Levenshtein distance between two strings.
  */
 export function levenshtein(a: string, b: string): number {
-  const tmp: number[][] = [];
-  if (a.length === 0) {
-    return b.length;
-  }
-  if (b.length === 0) {
-    return a.length;
-  }
-  for (let i = 0; i <= b.length; i++) {
-    tmp[i] = [i];
-  }
-  for (let j = 0; j <= a.length; j++) {
-    tmp[0][j] = j;
-  }
+  if (a.length === 0) return b.length;
+  if (b.length === 0) return a.length;
+
+  // Ensure 'a' is the shorter string to minimize memory usage
+  if (a.length > b.length) [a, b] = [b, a];
+
+  const row: number[] = [];
+  for (let i = 0; i <= a.length; i++) row[i] = i;
+
   for (let i = 1; i <= b.length; i++) {
+    let prev = i;
+    let diagonal = i - 1;
     for (let j = 1; j <= a.length; j++) {
-      tmp[i][j] =
-        b.charAt(i - 1) === a.charAt(j - 1)
-          ? tmp[i - 1][j - 1]
-          : Math.min(
-              tmp[i - 1][j - 1] + 1,
-              tmp[i][j - 1] + 1,
-              tmp[i - 1][j] + 1,
-            );
+      const val = row[j];
+      if (b.charAt(i - 1) === a.charAt(j - 1)) {
+        row[j] = diagonal;
+      } else {
+        row[j] = Math.min(diagonal, prev, val) + 1;
+      }
+      diagonal = val;
+      prev = row[j];
     }
   }
-  return tmp[b.length][a.length];
+  return row[a.length];
 }
 
 /**

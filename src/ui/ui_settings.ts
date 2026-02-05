@@ -4,6 +4,7 @@ import { showToast } from "../utils/utils.ts";
 import { render } from "./ui_card.ts";
 import { scheduleSaveState, immediateSaveState } from "../core/db.ts";
 import { openConfirm } from "./ui_modal.ts";
+import { LS_KEYS } from "../core/constants.ts";
 import { syncGlobalStats } from "../core/sync.ts";
 
 const THEME_PALETTES: Record<
@@ -178,7 +179,7 @@ const THEME_PALETTES_DARK: Record<
  */
 export function toggleHanjaMode(el: HTMLInputElement) {
   state.hanjaMode = el.checked;
-  localStorage.setItem("hanja_mode_v1", String(state.hanjaMode));
+  localStorage.setItem(LS_KEYS.HANJA_MODE, String(state.hanjaMode));
   render();
   immediateSaveState();
   syncGlobalStats();
@@ -189,7 +190,7 @@ export function toggleHanjaMode(el: HTMLInputElement) {
  */
 export function toggleVoice() {
   state.currentVoice = state.currentVoice === "female" ? "male" : "female";
-  localStorage.setItem("voice_pref", state.currentVoice);
+  localStorage.setItem(LS_KEYS.VOICE_PREF, state.currentVoice);
   updateVoiceUI();
   showToast(
     `Голос: ${state.currentVoice === "female" ? "Женский" : "Мужской"}`,
@@ -214,7 +215,7 @@ export function updateVoiceUI() {
  */
 export function setAudioSpeed(val: string | number) {
   state.audioSpeed = typeof val === "string" ? parseFloat(val) : val;
-  localStorage.setItem("audio_speed_v1", String(state.audioSpeed));
+  localStorage.setItem(LS_KEYS.AUDIO_SPEED, String(state.audioSpeed));
   const el = document.getElementById("speed-val");
   if (el) el.textContent = state.audioSpeed + "x";
   scheduleSaveState();
@@ -226,7 +227,7 @@ export function setAudioSpeed(val: string | number) {
  */
 export function setTtsVolume(val: string | number) {
   state.ttsVolume = typeof val === "string" ? parseFloat(val) : val;
-  localStorage.setItem("tts_volume_v1", String(state.ttsVolume));
+  localStorage.setItem(LS_KEYS.TTS_VOLUME, String(state.ttsVolume));
   const el = document.getElementById("tts-volume-val");
   if (el) el.textContent = `${Math.round(state.ttsVolume * 100)}%`;
   scheduleSaveState();
@@ -238,7 +239,7 @@ export function setTtsVolume(val: string | number) {
  */
 export function toggleAutoTheme(el: HTMLInputElement) {
   state.autoTheme = el.checked;
-  localStorage.setItem("auto_theme_v1", String(state.autoTheme));
+  localStorage.setItem(LS_KEYS.AUTO_THEME, String(state.autoTheme));
   if (state.autoTheme) {
     checkAutoTheme();
   }
@@ -254,7 +255,7 @@ export function checkAutoTheme() {
 
   if (state.darkMode !== isNight) {
     state.darkMode = isNight;
-    localStorage.setItem("dark_mode_v1", String(state.darkMode));
+    localStorage.setItem(LS_KEYS.DARK_MODE, String(state.darkMode));
     applyTheme();
   }
 }
@@ -264,7 +265,7 @@ export function checkAutoTheme() {
  */
 export function toggleDarkMode() {
   state.darkMode = !state.darkMode;
-  localStorage.setItem("dark_mode_v1", String(state.darkMode));
+  localStorage.setItem(LS_KEYS.DARK_MODE, String(state.darkMode));
   applyTheme();
   immediateSaveState();
   syncGlobalStats();
@@ -276,7 +277,7 @@ export function toggleDarkMode() {
  */
 export function toggleAutoUpdate(el: HTMLInputElement) {
   state.autoUpdate = el.checked;
-  localStorage.setItem("auto_update_v1", String(state.autoUpdate));
+  localStorage.setItem(LS_KEYS.AUTO_UPDATE, String(state.autoUpdate));
   showToast(`Автообновление: ${state.autoUpdate ? "ВКЛ" : "ВЫКЛ"}`);
   immediateSaveState();
   syncGlobalStats();
@@ -334,7 +335,7 @@ export function applyTheme() {
 export function setAccentColor(colorKey: string) {
   if (!Object.keys(THEME_PALETTES).includes(colorKey)) return;
   state.themeColor = colorKey;
-  localStorage.setItem("theme_color_v1", state.themeColor);
+  localStorage.setItem(LS_KEYS.THEME_COLOR, state.themeColor);
   applyAccentColor();
   immediateSaveState();
   syncGlobalStats();
@@ -461,7 +462,7 @@ export function toggleBackgroundMusic(el?: HTMLInputElement) {
     ? el.checked
     : !state.backgroundMusicEnabled;
   localStorage.setItem(
-    "background_music_enabled_v1",
+    LS_KEYS.MUSIC_ENABLED,
     String(state.backgroundMusicEnabled),
   );
   applyBackgroundMusic();
@@ -472,8 +473,8 @@ export function toggleBackgroundMusic(el?: HTMLInputElement) {
 
 let activePlayerId = "a";
 let hasInteracted = false;
-/** @type {number|null} */
-let volumeAnimationInterval: number | null = null; // Единый интервал для всех анимаций громкости
+/** @type {ReturnType<typeof setInterval>|null} */
+let volumeAnimationInterval: ReturnType<typeof setInterval> | null = null; // Единый интервал для всех анимаций громкости
 let currentFadeOutPlayer: HTMLAudioElement | null = null; // Ссылка на плеер, который затухает
 
 /**
@@ -681,7 +682,7 @@ export function crossfade(
 export function setBackgroundMusicVolume(val: string | number) {
   state.backgroundMusicVolume = typeof val === "string" ? parseFloat(val) : val;
   localStorage.setItem(
-    "background_music_volume_v1",
+    LS_KEYS.MUSIC_VOLUME,
     String(state.backgroundMusicVolume),
   );
   const el = document.getElementById("background-music-volume-val");
@@ -694,22 +695,22 @@ export function setBackgroundMusicVolume(val: string | number) {
 export function resetAllSettings() {
   openConfirm("Сбросить все настройки к значениям по умолчанию?", () => {
     const settingsKeys = [
-      "hanja_mode_v1",
-      "voice_pref",
-      "audio_speed_v1",
-      "dark_mode_v1",
-      "auto_update_v1",
-      "auto_theme_v1",
-      "theme_color_v1",
-      "background_music_enabled_v1",
-      "background_music_volume_v1",
-      "focus_mode_v1",
-      "zen_mode_v1",
-      "view_mode_v1",
-      "study_goal_v1",
-      "quiz_difficulty_v1",
-      "quiz_topic_v1",
-      "quiz_category_v1",
+      LS_KEYS.HANJA_MODE,
+      LS_KEYS.VOICE_PREF,
+      LS_KEYS.AUDIO_SPEED,
+      LS_KEYS.DARK_MODE,
+      LS_KEYS.AUTO_UPDATE,
+      LS_KEYS.AUTO_THEME,
+      LS_KEYS.THEME_COLOR,
+      LS_KEYS.MUSIC_ENABLED,
+      LS_KEYS.MUSIC_VOLUME,
+      "focus_mode_v1", // Not in LS_KEYS, seems intentional
+      LS_KEYS.ZEN_MODE,
+      LS_KEYS.VIEW_MODE,
+      LS_KEYS.STUDY_GOAL,
+      LS_KEYS.QUIZ_DIFFICULTY,
+      LS_KEYS.QUIZ_TOPIC,
+      LS_KEYS.QUIZ_CATEGORY,
     ];
 
     settingsKeys.forEach((key) => localStorage.removeItem(key));
@@ -762,7 +763,7 @@ export function updateTrashRetentionUI() {
 }
 
 export function resetOnboarding() {
-  localStorage.removeItem("onboarding_completed_v1");
+  localStorage.removeItem(LS_KEYS.ONBOARDING);
   showToast("🎓 Обучение сброшено. Перезагрузка...");
   setTimeout(() => location.reload(), 800);
 }

@@ -2,7 +2,7 @@ import { Word } from "../types/index.ts";
 import { state } from "../core/state.ts";
 import { findConfusingWords } from "../core/confusing_words.ts";
 import { showComboEffect, showToast } from "../utils/utils.ts";
-import { addXP, updateStats } from "../core/stats.ts";
+import { addXP, updateStats, checkAchievements } from "../core/stats.ts";
 
 export interface TickResult {
   gameOver: boolean;
@@ -19,7 +19,7 @@ export interface QuizConfig {
   initialTimer: number;
   isTimerCountdown: boolean;
   initialLives: number;
-  onTick(currentTimer: number): TickResult;
+  onTick(currentTimer: number, delta?: number): TickResult;
   onAnswer(
     isCorrect: boolean,
     currentTimer: number,
@@ -47,8 +47,8 @@ class BaseQuizConfig implements QuizConfig {
     return unlearned.concat(learned).slice(0, 10);
   }
 
-  onTick(t: number): TickResult {
-    const nextTimer = t + 1;
+  onTick(t: number, delta: number = 1): TickResult {
+    const nextTimer = t + delta;
     const mins = Math.floor(nextTimer / 60);
     const secs = nextTimer % 60;
     return {
@@ -86,8 +86,8 @@ class SprintQuizConfig extends BaseQuizConfig {
     return words.slice(0, 100);
   }
 
-  onTick(t: number): TickResult {
-    const next = t - 1;
+  onTick(t: number, delta: number = 1): TickResult {
+    const next = t - delta;
     const pct = Math.max(0, (next / 60) * 100);
     return {
       gameOver: next <= 0,
@@ -156,8 +156,8 @@ class SurvivalQuizConfig extends BaseQuizConfig {
     return words.slice(0, 200);
   }
 
-  onTick(t: number): TickResult {
-    const next = t - 1;
+  onTick(t: number, delta: number = 1): TickResult {
+    const next = t - delta;
     const pct = Math.min(100, Math.max(0, (next / 30) * 100));
     return {
       gameOver: next <= 0,
@@ -206,12 +206,18 @@ class DailyQuizConfig extends BaseQuizConfig {
     const countReview = isSunday ? 3 : 2;
     const total = countNew + countReview;
 
-    const unlearned = pool
-      .filter((w) => !state.learned.has(w.id))
-      .sort(() => Math.random() - 0.5);
-    const learned = pool
-      .filter((w) => state.learned.has(w.id))
-      .sort(() => Math.random() - 0.5);
+    // Optimization: Single pass to separate learned and unlearned words
+    const unlearned: Word[] = [];
+    const learned: Word[] = [];
+
+    for (let i = 0; i < pool.length; i++) {
+      const w = pool[i];
+      if (state.learned.has(w.id)) learned.push(w);
+      else unlearned.push(w);
+    }
+
+    unlearned.sort(() => Math.random() - 0.5);
+    learned.sort(() => Math.random() - 0.5);
 
     let words = [
       ...unlearned.slice(0, countNew),
@@ -220,17 +226,24 @@ class DailyQuizConfig extends BaseQuizConfig {
 
     if (words.length < total) {
       const currentIds = new Set(words.map((w) => w.id));
-      const easyPool = pool.filter(
-        (w) => !currentIds.has(w.id) && w.level === "★☆☆",
-      );
+
+      // Optimization: Single pass to find easy words and others
+      const easyPool: Word[] = [];
+      const others: Word[] = [];
+
+      for (let i = 0; i < pool.length; i++) {
+        const w = pool[i];
+        if (!currentIds.has(w.id)) {
+          if (w.level === "★☆☆") easyPool.push(w);
+          else others.push(w);
+        }
+      }
+
       easyPool.sort(() => Math.random() - 0.5);
       words = words.concat(easyPool.slice(0, total - words.length));
 
       if (words.length < total) {
-        const currentIds2 = new Set(words.map((w) => w.id));
-        const others = pool
-          .filter((w) => !currentIds2.has(w.id))
-          .sort(() => Math.random() - 0.5);
+        others.sort(() => Math.random() - 0.5);
         words = words.concat(others.slice(0, total - words.length));
       }
     }
@@ -247,13 +260,18 @@ class DailyQuizConfig extends BaseQuizConfig {
     if (state.dailyChallenge.lastDate === yesterday) streak++;
     else if (state.dailyChallenge.lastDate !== today) streak = 1;
 
-    const baseCoins = 50;
-    const streakBonus = Math.min(streak, 7) * 10;
-    const totalCoins = baseCoins + streakBonus;
+    const isSunday = new Date().getDay() === 0;
+    const multiplier = isSunday ? 2 : 1;
 
-    addXP(50);
+    const baseCoins = 50 * multiplier;
+    const streakBonus = Math.min(streak, 7) * 10 * multiplier;
+    const totalCoins = baseCoins + streakBonus;
+    const xpAward = 50 * multiplier;
+
+    addXP(xpAward);
     state.userStats.coins += totalCoins;
     updateStats();
+    checkAchievements();
 
     state.dailyChallenge = { lastDate: today, completed: true, streak: streak };
     localStorage.setItem(
@@ -262,7 +280,7 @@ class DailyQuizConfig extends BaseQuizConfig {
     );
 
     showComboEffect(
-      `🔥 Вызов пройден!\n+50 XP | +${totalCoins} 💰\nСерия: ${streak} дн.`,
+      `🔥 Вызов пройден!\n+${xpAward} XP | +${totalCoins} 💰\nСерия: ${streak} дн.`,
     );
 
     if (typeof window.confetti === "function") {

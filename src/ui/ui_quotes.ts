@@ -1,5 +1,5 @@
 import { state } from "../core/state.ts";
-import { showToast, speak } from "../utils/utils.ts";
+import { showToast, speak, escapeHtml } from "../utils/utils.ts";
 import { immediateSaveState } from "../core/db.ts";
 
 export function renderFavoriteQuotes() {
@@ -22,9 +22,9 @@ export function renderFavoriteQuotes() {
     el.className = "quote-card";
     el.innerHTML = `
       <div class="quote-content">
-        <div class="quote-kr">${quote.quote_kr}</div>
-        <div class="quote-ru">${quote.quote_ru}</div>
-        ${quote.literal_translation ? `<div class="quote-literal">(${quote.literal_translation})</div>` : ""}
+        <div class="quote-kr">${escapeHtml(quote.quote_kr)}</div>
+        <div class="quote-ru">${escapeHtml(quote.quote_ru)}</div>
+        ${quote.literal_translation ? `<div class="quote-literal">(${escapeHtml(quote.literal_translation)})</div>` : ""}
       </div>
       <div class="quote-actions">
         <button class="btn-icon speak-quote-btn">🔊</button>
@@ -43,8 +43,7 @@ export function renderFavoriteQuotes() {
 }
 
 function removeQuote(id: number | string) {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  state.favoriteQuotes = state.favoriteQuotes.filter((q: any) => q.id !== id);
+  state.favoriteQuotes = state.favoriteQuotes.filter((q) => q.id !== id);
   immediateSaveState();
   renderFavoriteQuotes();
   showToast("Цитата удалена");

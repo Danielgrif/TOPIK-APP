@@ -1,6 +1,7 @@
 import { client } from "./supabaseClient.ts";
 import { state } from "./state.ts";
 import { showToast } from "../utils/utils.ts";
+import { DB_TABLES, LS_KEYS } from "./constants.ts";
 
 export async function syncGlobalStats() {
   if (state.isSyncing) return;
@@ -54,7 +55,7 @@ export async function syncGlobalStats() {
     };
 
     const { error: globalError } = await client
-      .from("user_global_stats")
+      .from(DB_TABLES.USER_GLOBAL_STATS)
       .upsert(globalUpdates, { onConflict: "user_id" });
 
     if (globalError) throw globalError;
@@ -86,14 +87,14 @@ export async function syncGlobalStats() {
 
       if (updates.length > 0) {
         const { error: progressError } = await client
-          .from("user_progress")
+          .from(DB_TABLES.USER_PROGRESS)
           .upsert(updates, { onConflict: "user_id,word_id" });
 
         if (progressError) throw progressError;
       }
 
       state.dirtyWordIds.clear();
-      localStorage.setItem("dirty_ids_v1", "[]");
+      localStorage.setItem(LS_KEYS.DIRTY_IDS, "[]");
     }
   } catch (e) {
     console.error("Sync failed:", e);

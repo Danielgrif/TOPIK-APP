@@ -93,3 +93,23 @@ export interface UserWordProgress {
   sm2_ef?: number;
   sm2_next_review?: number;
 }
+
+export interface Quote {
+  id: number;
+  quote_kr: string;
+  quote_ru: string;
+  literal_translation?: string;
+  explanation?: string;
+  audio_url?: string;
+}
+
+// Minimal Supabase User interface to avoid full dependency
+export interface User {
+  id: string;
+  email?: string;
+  user_metadata: {
+    full_name?: string;
+    [key: string]: unknown;
+  };
+  [key: string]: unknown;
+}

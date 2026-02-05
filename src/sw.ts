@@ -14,6 +14,12 @@ import { CacheableResponsePlugin } from "workbox-cacheable-response";
 
 declare let self: ServiceWorkerGlobalScope;
 
+const SW_MESSAGES = {
+  SKIP_WAITING: "SKIP_WAITING",
+  PROCESS_DOWNLOAD_QUEUE: "PROCESS_DOWNLOAD_QUEUE",
+  DOWNLOAD_QUEUE_COMPLETED: "DOWNLOAD_QUEUE_COMPLETED",
+};
+
 self.skipWaiting();
 clientsClaim();
 cleanupOutdatedCaches();
@@ -157,7 +163,7 @@ async function processDownloadQueue() {
       const clients = await self.clients.matchAll();
       clients.forEach((client) =>
         client.postMessage({
-          type: "DOWNLOAD_QUEUE_COMPLETED",
+          type: SW_MESSAGES.DOWNLOAD_QUEUE_COMPLETED,
           count: items.length,
         }),
       );
@@ -168,10 +174,10 @@ async function processDownloadQueue() {
 }
 
 self.addEventListener("message", (event) => {
-  if (event.data && event.data.type === "SKIP_WAITING") {
+  if (event.data && event.data.type === SW_MESSAGES.SKIP_WAITING) {
     self.skipWaiting();
   }
-  if (event.data && event.data.type === "PROCESS_DOWNLOAD_QUEUE") {
+  if (event.data && event.data.type === SW_MESSAGES.PROCESS_DOWNLOAD_QUEUE) {
     processDownloadQueue();
   }
 });

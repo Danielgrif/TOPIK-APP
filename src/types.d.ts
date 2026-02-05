@@ -1,4 +1,6 @@
 /// <reference types="vite/client" />
+import type { SupabaseClient } from "@supabase/supabase-js";
+import type { Chart } from "chart.js";
 
 declare global {
   interface Window {
@@ -6,7 +8,11 @@ declare global {
 
     /** Supabase Client injected via CDN */
     supabase: {
-      createClient: (url: string, key: string) => unknown;
+      createClient: (
+        url: string,
+        key: string,
+        options?: object,
+      ) => SupabaseClient;
     };
 
     /** Canvas Confetti library */
@@ -19,8 +25,7 @@ declare global {
     }) => void;
 
     /** Chart.js */
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    Chart: any;
+    Chart: typeof Chart;
 
     // --- Browser APIs ---
     SpeechRecognition: unknown;
@@ -40,6 +45,7 @@ declare global {
       word: string,
       btn?: HTMLElement,
       callback?: (score: number, text: string, audioUrl?: string) => void,
+      canvas?: HTMLCanvasElement,
     ) => void;
     setBackgroundMusicVolume: (volume: string | number) => void;
     scheduleSaveState: () => void;
@@ -66,6 +72,8 @@ declare global {
     permanentlyDeleteWord: (id: number, btn: HTMLElement) => void;
     handleBulkAddToList: (listId: string) => void;
     toggleWordInList: (listId: string, wId: number, el: HTMLElement) => void;
+    startMistakeQuiz: () => void;
+    handleQuizSummaryContinue: () => void;
 
     // Auth & Settings
     handleAuth: (type: string) => void;

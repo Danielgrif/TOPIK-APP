@@ -1,12 +1,18 @@
 /* eslint-disable no-console, @typescript-eslint/no-explicit-any */
 import { client } from "../core/supabaseClient.ts";
-import { showToast, showUndoToast } from "../utils/utils.ts";
+import {
+  showToast,
+  showUndoToast,
+  promiseWithTimeout,
+} from "../utils/utils.ts";
 import { closeModal } from "./ui_modal.ts";
 import { state } from "../core/state.ts";
 import { immediateSaveState } from "../core/db.ts";
 import { render } from "./ui_card.ts";
 import { toKorean } from "../utils/hangul.ts";
-import { promiseWithTimeout } from "./ui_card.ts";
+import { DB_TABLES, WORD_REQUEST_STATUS } from "../core/constants.ts";
+import { WordRequestState } from "../core/state.ts";
+import type { RealtimePostgresChangesPayload } from "@supabase/supabase-js";
 
 console.log("📂 Loaded: ui_custom_words.ts");
 
@@ -15,6 +21,12 @@ interface CancellationToken {
 }
 
 let cancellationToken: CancellationToken | null = null;
+
+// New state for tracking progress of each word
+const requestProgress = new Map<
+  string | number,
+  { status: "pending" | "ai" | "audio" | "done"; word: string }
+>();
 
 export async function submitWordRequest() {
   console.log("🚀 submitWordRequest: Function started");
@@ -93,23 +105,23 @@ export async function submitWordRequest() {
 
     if (currentToken.isCancelled) throw new Error("Cancelled by user");
 
-    updateButtonText("Авторизация...", true);
-    console.log("🔐 Checking auth...");
-    // FIX: Используем getSession вместо getUser, чтобы избежать зависания при плохой сети
-    // FIX 2: Добавляем таймаут, чтобы гарантированно избежать зависания
-    const { data, error: authError } = await promiseWithTimeout<{
-      data: { session: { user: any } | null };
-      error: any | null;
-    }>(
-      client.auth.getSession(),
-      10000, // 10 секунд
-      new Error("Время проверки авторизации истекло. Проверьте интернет."),
-    );
+    let user = state.currentUser;
 
-    if (authError) throw authError;
+    // Если пользователя нет в стейте, пробуем получить его с таймаутом
+    if (!user) {
+      updateButtonText("Авторизация...", true);
+      console.log("🔐 No user in state, checking auth...");
+      const { data, error: authError } = await promiseWithTimeout<any>(
+        client.auth.getSession(),
+        10000,
+        new Error("Время проверки авторизации истекло. Проверьте интернет."),
+      );
+
+      if (authError) throw authError as Error;
+      user = data?.session?.user;
+    }
+
     if (currentToken.isCancelled) throw new Error("Cancelled by user");
-
-    const user = data?.session?.user;
 
     console.log("👤 User:", user?.id || "Guest");
 
@@ -132,15 +144,15 @@ export async function submitWordRequest() {
     // --- Валидация и Авто-исправление ---
     const validWords: string[] = [];
     const corrections: { original: string; corrected: string }[] = [];
-    // Разрешаем: Корейский, Английский, пробелы, дефис.
+    // Разрешаем: Корейский, Английский, Цифры, пробелы, дефис, знаки препинания.
     const VALID_PATTERN =
-      /^[a-zA-Z\uAC00-\uD7AF\u1100-\u11FF\u3130-\u318F\s-]+$/;
+      /^[a-zA-Z\uAC00-\uD7AF\u1100-\u11FF\u3130-\u318F0-9\s.,?!~-]+$/;
 
     for (const w of rawWords) {
       let wordToAdd = w;
 
-      // Авто-исправление: если слово полностью на английском, пробуем конвертировать в Hangul
-      if (/^[a-zA-Z]+$/.test(w)) {
+      // Авто-исправление: если слово похоже на английский ввод (буквы, цифры, дефисы, знаки), пробуем конвертировать
+      if (/^[a-zA-Z0-9\s.,?!~-]+$/.test(w)) {
         const corrected = toKorean(w);
         // Если результат содержит корейские слоги, считаем это опечаткой и исправляем
         if (/[가-힣]/.test(corrected)) {
@@ -250,10 +262,10 @@ export async function submitWordRequest() {
     // --- Validation for Topic/Category ---
     const topicVal = topicInput ? topicInput.value.trim() : "";
     const catVal = categoryInput ? categoryInput.value.trim() : "";
-    const INVALID_CHARS = /[^a-zA-Zа-яА-Я가-힣\u3130-\u318F\s-]/;
+    const INVALID_CHARS = /[^a-zA-Zа-яА-Я가-힣\u3130-\u318F0-9\s-]/;
 
     if (topicVal && INVALID_CHARS.test(topicVal)) {
-      showToast("❌ Тема: только буквы");
+      showToast("❌ Тема: недопустимые символы");
       if (topicInput) {
         topicInput.classList.add("shake");
         setTimeout(() => topicInput.classList.remove("shake"), 500);
@@ -262,7 +274,7 @@ export async function submitWordRequest() {
     }
 
     if (catVal && INVALID_CHARS.test(catVal)) {
-      showToast("❌ Категория: только буквы");
+      showToast("❌ Категория: недопустимые символы");
       if (categoryInput) {
         categoryInput.classList.add("shake");
         setTimeout(() => categoryInput.classList.remove("shake"), 500);
@@ -292,7 +304,7 @@ export async function submitWordRequest() {
     const payload = validWords.map((w) => ({
       user_id: user.id,
       word_kr: w,
-      status: "pending",
+      status: WORD_REQUEST_STATUS.PENDING,
       target_list_id: targetListId || null,
       topic: customTopic,
       category: customCategory,
@@ -302,14 +314,13 @@ export async function submitWordRequest() {
     console.log("📤 Sending payload to Supabase:", payload);
 
     // 1. Отправляем заявки и получаем их ID (select() важен для отслеживания)
-    const { data: insertedData, error } = await promiseWithTimeout<{
-      data: any[] | null;
-      error: any | null;
-    }>(
-      client.from("word_requests").insert(payload).select(),
-      30000, // 30 секунд на вставку
+    const { data: insertedData, error } = await promiseWithTimeout<any>(
+      client.from(DB_TABLES.WORD_REQUESTS).insert(payload).select() as any,
+      30000,
       new Error("Сервер не ответил на запрос сохранения."),
     );
+
+    if (currentToken.isCancelled) throw new Error("Cancelled by user");
 
     if (error) {
       throw error;
@@ -364,7 +375,7 @@ export async function submitWordRequest() {
 }
 
 function trackProgress(
-  requests: any[],
+  requests: WordRequestState[],
   input: HTMLTextAreaElement,
   listSelect: HTMLSelectElement,
   topicInput: HTMLInputElement,
@@ -375,21 +386,44 @@ function trackProgress(
   originalBtnContent: string,
 ) {
   const total = requests.length;
-  const processedIds = new Set<string>(); // Отслеживаем ID, чтобы не считать дважды
   const progressBar = document.getElementById("word-request-progress-bar");
   const statusText = document.getElementById("word-request-status-text");
   let errorCount = 0;
 
-  if (statusText) statusText.textContent = `Обработано: 0 из ${total}`;
+  // Initialize progress state for each request
+  requestProgress.clear();
+  requests.forEach((req) => {
+    requestProgress.set(req.id, {
+      status: WORD_REQUEST_STATUS.PENDING as any,
+      word: req.word,
+    });
+  });
 
-  const updateUI = () => {
-    const count = processedIds.size;
-    const percent = (count / total) * 100;
+  const updateUIWithStages = () => {
+    const doneCount = Array.from(requestProgress.values()).filter(
+      (p) => p.status === "done",
+    ).length;
+    const audioCount = Array.from(requestProgress.values()).filter(
+      (p) => p.status === "audio",
+    ).length;
+    const aiCount = Array.from(requestProgress.values()).filter(
+      (p) => p.status === "ai",
+    ).length;
 
-    if (progressBar) progressBar.style.width = `${percent}%`;
-    if (statusText) statusText.textContent = `Обработано: ${count} из ${total}`;
+    // Weighted progress for a smoother bar
+    const progress = (doneCount * 100 + audioCount * 80 + aiCount * 40) / total;
 
-    if (count === total) {
+    if (progressBar) progressBar.style.width = `${progress}%`;
+    if (statusText) {
+      let currentAction = "Завершение...";
+      if (aiCount > 0) currentAction = "🤖 Анализ AI...";
+      if (audioCount > 0) currentAction = "🔊 Генерация аудио...";
+      if (doneCount === total) currentAction = "✅ Готово!";
+
+      statusText.textContent = `${currentAction} (${doneCount}/${total})`;
+    }
+
+    if (doneCount === total) {
       cleanup(); // Останавливаем прослушку и таймер
       if (errorCount > 0) {
         showToast(`⚠️ Готово, но с ошибками: ${errorCount}`);
@@ -397,98 +431,79 @@ function trackProgress(
         showToast("✅ Готово! Слова добавлены.");
       }
 
-      setTimeout(() => {
-        closeModal("add-word-modal");
-        // Сброс формы
-        input.value = "";
-        if (listSelect) listSelect.value = "";
-        if (topicInput) topicInput.value = "";
-        if (categoryInput) categoryInput.value = "";
-
-        // Возвращаем вид формы для следующего раза
-        formView.style.display = "block";
-        progressView.style.display = "none";
-        if (progressBar) progressBar.style.width = "0%";
-
-        if (btn) {
-          btn.disabled = false;
-          btn.innerHTML = originalBtnContent || "Отправить заявку";
-        }
-
-        // Обновляем список слов на экране
-        render();
-      }, 1000);
+      // Wait a bit before closing to show "Готово!"
+      setTimeout(resetFormAndClose, 1200);
     }
   };
 
-  // Подписываемся на изменения (UPDATE) в таблице word_requests
-  const channel = client
-    .channel("word_requests_tracker")
+  // Set initial stage to 'ai' to start the progress
+  requestProgress.forEach(
+    (item) => (item.status = WORD_REQUEST_STATUS.AI as any),
+  );
+  updateUIWithStages();
+
+  // --- Realtime Listeners ---
+
+  // 1. Listen for vocabulary INSERTs (marks 'audio' stage)
+  const vocabChannel = client
+    .channel("public:vocabulary:custom-words")
     .on(
       "postgres_changes",
-      {
-        event: "UPDATE",
-        schema: "public",
-        table: "word_requests",
-        filter: `user_id=eq.${requests[0].user_id}`, // Фильтруем только свои заявки
-      },
-      (payload: any) => {
-        const updated = payload.new;
-        if (requests.find((r) => r.id === updated.id)) {
-          if (
-            (updated.status === "processed" || updated.status === "error") &&
-            !processedIds.has(updated.id)
-          ) {
+      { event: "INSERT", schema: "public", table: DB_TABLES.VOCABULARY },
+      (payload: RealtimePostgresChangesPayload<any>) => {
+        const newWord = payload.new as any;
+        if (!newWord) return;
+
+        // Find the request that matches the newly inserted word
+        for (const progress of requestProgress.values()) {
+          if (progress.word === newWord.word_kr && progress.status !== "done") {
             console.log(
-              `⚡ Realtime update: ${updated.word_kr} -> ${updated.status}`,
+              `🎤 Realtime vocab insert detected for: ${newWord.word_kr}`,
             );
-            if (updated.status === "error") {
-              errorCount++;
-              showToast(`❌ Ошибка сервера: ${updated.word_kr}`);
-            }
-            processedIds.add(updated.id);
-            updateUI();
+            progress.status = WORD_REQUEST_STATUS.AUDIO as any;
+            updateUIWithStages();
+            break; // Assume one request per word_kr for now
           }
         }
       },
     )
     .subscribe();
 
-  // Fallback: Опрос сервера каждые 2 секунды (если Realtime не сработал)
-  const interval = setInterval(async () => {
-    if (processedIds.size === total) return;
-
-    // Берем ID, которые еще не обработаны
-    const pendingIds = requests
-      .filter((r) => !processedIds.has(r.id))
-      .map((r) => r.id);
-    if (pendingIds.length === 0) return;
-
-    const { data } = await client
-      .from("word_requests")
-      .select("id, status")
-      .in("id", pendingIds);
-    if (data) {
-      data.forEach((row: any) => {
-        if (
-          (row.status === "processed" || row.status === "error") &&
-          !processedIds.has(row.id)
-        ) {
-          console.log(`🔄 Polling update: ${row.id} -> ${row.status}`);
-          if (row.status === "error") {
-            errorCount++;
-            showToast(`❌ Ошибка: ${row.status}`);
+  // 2. Listen for word_requests UPDATE (marks 'done' stage)
+  const requestChannel = client
+    .channel("word_requests_tracker")
+    .on(
+      "postgres_changes",
+      {
+        event: "UPDATE",
+        schema: "public",
+        table: DB_TABLES.WORD_REQUESTS,
+        filter: `id=in.(${requests.map((r) => r.id).join(",")})`,
+      },
+      (payload: RealtimePostgresChangesPayload<any>) => {
+        const updated = payload.new as any;
+        const progress = requestProgress.get(updated.id);
+        if (progress && progress.status !== "done") {
+          if (
+            updated.status === WORD_REQUEST_STATUS.PROCESSED ||
+            updated.status === WORD_REQUEST_STATUS.ERROR
+          ) {
+            console.log(`🏁 Realtime request update: ${progress.word}`);
+            if (updated.status === "error") errorCount++;
+            progress.status = "done";
+            updateUIWithStages();
           }
-          processedIds.add(row.id);
-          updateUI();
         }
-      });
-    }
-  }, 2000);
+      },
+    )
+    .subscribe();
 
   // Safety Timeout: Если через 45 секунд ничего не произошло, разблокируем интерфейс
   const safetyTimeout = setTimeout(() => {
-    if (processedIds.size < total) {
+    const doneCount = Array.from(requestProgress.values()).filter(
+      (p) => p.status === "done",
+    ).length;
+    if (doneCount < total) {
       cleanup();
       showToast("⏳ Сервер долго не отвечает. Попробуйте позже.");
       if (btn) {
@@ -496,19 +511,38 @@ function trackProgress(
         btn.innerHTML = originalBtnContent || "Отправить заявку";
       }
       if (statusText) statusText.textContent = "⚠️ Время ожидания истекло";
-      // Возвращаем форму, чтобы можно было повторить
-      formView.style.display = "block";
-      progressView.style.display = "none";
+      resetFormAndClose();
     }
   }, 90000); // Увеличено до 90 секунд
 
-  const cleanup = () => {
-    clearInterval(interval);
-    clearTimeout(safetyTimeout);
-    client.removeChannel(channel);
+  const resetFormAndClose = () => {
+    closeModal("add-word-modal");
+    // Сброс формы
+    input.value = "";
+    if (listSelect) listSelect.value = "";
+    if (topicInput) topicInput.value = "";
+    if (categoryInput) categoryInput.value = "";
+
+    // Возвращаем вид формы для следующего раза
+    formView.style.display = "block";
+    progressView.style.display = "none";
+    if (progressBar) progressBar.style.width = "0%";
+
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = originalBtnContent || "Отправить заявку";
+    }
+
+    // Обновляем список слов на экране
+    render();
   };
 
-  // Обработка кнопки отмены
+  const cleanup = () => {
+    clearTimeout(safetyTimeout);
+    client.removeChannel(vocabChannel);
+    client.removeChannel(requestChannel);
+  };
+
   const cancelBtn = document.getElementById("cancel-word-request-btn");
   if (cancelBtn) {
     cancelBtn.onclick = async () => {
@@ -518,7 +552,10 @@ function trackProgress(
       const idsToCancel = requests.map((r) => r.id);
       if (idsToCancel.length > 0) {
         try {
-          await client.from("word_requests").delete().in("id", idsToCancel);
+          await client
+            .from(DB_TABLES.WORD_REQUESTS)
+            .delete()
+            .in("id", idsToCancel);
           showToast("🚫 Заявка отменена на сервере");
         } catch (e) {
           console.error("Failed to cancel request on server:", e);
@@ -526,12 +563,7 @@ function trackProgress(
         }
       }
 
-      if (btn) {
-        btn.disabled = false;
-        btn.innerHTML = originalBtnContent || "Отправить заявку";
-      }
-      formView.style.display = "block";
-      progressView.style.display = "none";
+      resetFormAndClose();
     };
   }
 }
@@ -561,7 +593,7 @@ export async function deleteCustomWord(id: string | number) {
     },
     async () => {
       // Commit
-      await client.from("word_requests").delete().eq("id", id);
+      await client.from(DB_TABLES.WORD_REQUESTS).delete().eq("id", id);
       immediateSaveState();
     },
   );

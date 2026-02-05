@@ -4,12 +4,20 @@ import {
   generateDiffHtml,
   speak,
   playTone,
+  escapeHtml,
+  escapeRegExp,
 } from "../utils/utils.ts";
 import { enableQuizKeyboard } from "./ui.ts";
 import { findAssociations } from "../core/associations.ts";
 import { checkPronunciation } from "../core/speech.ts";
 import { findConfusingWords } from "../core/confusing_words.ts";
 import { Word } from "../types/index.ts";
+
+function getAudioBtnHtml(url: string | undefined): string {
+  if (!url) return "";
+  const jsSafe = url.replace(/\\/g, "\\\\").replace(/'/g, "\\'");
+  return `<button class="speak-btn" onclick="window.speak(null, '${escapeHtml(jsSafe)}')">🔊</button>`;
+}
 
 function getOptions(correctWord: Word, count: number = 4): Word[] {
   const options: Word[] = [correctWord];
@@ -70,7 +78,7 @@ interface Strategy {
 export const QuizStrategies: Record<string, Strategy> = {
   "multiple-choice": {
     render(word, container, onAnswer, qEl) {
-      qEl.innerHTML = `<div class="quiz-question-text">${word.word_kr}</div><div class="quiz-question-sub">Выберите перевод</div>`;
+      qEl.innerHTML = `<div class="quiz-question-text">${escapeHtml(word.word_kr)}</div><div class="quiz-question-sub">Выберите перевод</div>`;
       container.innerHTML = "";
       getOptions(word).forEach((opt) => {
         const btn = document.createElement("button");
@@ -90,12 +98,12 @@ export const QuizStrategies: Record<string, Strategy> = {
       qEl.innerHTML = `
         <div class="quiz-question-flipper">
             <div class="quiz-question-front">
-                <div class="quiz-question-text">${word.word_kr}</div>
+                <div class="quiz-question-text">${escapeHtml(word.word_kr)}</div>
                 <div class="quiz-question-sub">Вспомните перевод</div>
             </div>
             <div class="quiz-question-back">
-                <div class="quiz-question-text primary">${word.translation}</div>
-                <div class="quiz-question-sub">${word.word_kr}</div>
+                <div class="quiz-question-text primary">${escapeHtml(word.translation || "")}</div>
+                <div class="quiz-question-sub">${escapeHtml(word.word_kr)}</div>
             </div>
         </div>
       `;
@@ -148,12 +156,17 @@ export const QuizStrategies: Record<string, Strategy> = {
 
   reverse: {
     render(word, container, onAnswer, qEl) {
-      let html = `<div class="quiz-question-text">${word.translation}</div><div class="quiz-question-sub">Выберите корейское слово</div>`;
+      let html = `<div class="quiz-question-text">${escapeHtml(word.translation || "")}</div><div class="quiz-question-sub">Выберите корейское слово</div>`;
       if (word.my_notes) {
         const maskHtml = `<span class="skeleton-pulse" style="display: inline-block; width: 2.5em; height: 0.8em; background: var(--surface-3); border-radius: 4px; vertical-align: middle; margin: 0 2px;"></span>`;
-        const maskedNotes = word.word_kr
-          ? word.my_notes.replace(new RegExp(word.word_kr, "gi"), maskHtml)
-          : word.my_notes;
+        const safeNotes = escapeHtml(word.my_notes);
+        const safeWord = escapeHtml(word.word_kr);
+        const maskedNotes = safeWord
+          ? safeNotes.replace(
+              new RegExp(escapeRegExp(safeWord), "gi"),
+              maskHtml,
+            )
+          : safeNotes;
         html += `<div style="font-size:14px; color:var(--text-sub); margin-top:5px;">(${maskedNotes})</div>`;
       }
       qEl.innerHTML = html;
@@ -173,13 +186,13 @@ export const QuizStrategies: Record<string, Strategy> = {
 
   sentence: {
     render(word, container, onAnswer, qEl) {
-      const full = word.example_kr || "";
-      const display = full.includes(word.word_kr)
-        ? full.replace(word.word_kr, "___")
+      const full = escapeHtml(word.example_kr || "");
+      const safeWord = escapeHtml(word.word_kr);
+
+      const display = full.includes(safeWord)
+        ? full.replace(safeWord, "___")
         : `___ ${full}`;
-      const audioBtn = word.example_audio
-        ? `<button class="speak-btn" onclick="window.speak(null, '${word.example_audio}')">🔊</button>`
-        : "";
+      const audioBtn = getAudioBtnHtml(word.example_audio);
 
       qEl.innerHTML = `<div class="quiz-question-text small">"${display}"</div><div class="quiz-question-sub">Вставьте пропущенное слово</div>`;
       if (word.example_audio) qEl.insertAdjacentHTML("beforeend", audioBtn);
@@ -204,13 +217,17 @@ export const QuizStrategies: Record<string, Strategy> = {
       if (word.image) {
         html += `<img src="${word.image}" class="quiz-image">`;
       }
-      html += `<div class="quiz-question-text">${word.translation}</div><div class="quiz-question-sub">Напишите на корейском</div>`;
+      html += `<div class="quiz-question-text">${escapeHtml(word.translation || "")}</div><div class="quiz-question-sub">Напишите на корейском</div>`;
 
       if (word.my_notes) {
         const maskHtml = `<span class="skeleton-pulse" style="display: inline-block; width: 2.5em; height: 0.8em; background: var(--surface-3); border-radius: 4px; vertical-align: middle; margin: 0 2px;"></span>`;
-        let notes = word.my_notes.replace(/</g, "&lt;");
+        let notes = escapeHtml(word.my_notes);
         if (word.word_kr) {
-          notes = notes.replace(new RegExp(word.word_kr, "gi"), maskHtml);
+          const safeWord = escapeHtml(word.word_kr);
+          notes = notes.replace(
+            new RegExp(escapeRegExp(safeWord), "gi"),
+            maskHtml,
+          );
         }
         html += `<div style="font-size:14px; color:var(--text-sub); margin-top:5px;">(${notes})</div>`;
       }
@@ -244,14 +261,14 @@ export const QuizStrategies: Record<string, Strategy> = {
           input.classList.add("correct");
           input.classList.add("pulse-green");
           if (dist > 0) {
-            feedback.innerHTML = `<div style="color:var(--warning); font-weight:bold; margin-bottom:5px;">Опечатка:</div><div style="font-size:18px;">${generateDiffHtml(val, correct)}</div>`;
+            feedback.innerHTML = `<div style="color:var(--warning); font-weight:bold; margin-bottom:5px;">Опечатка:</div><div style="font-size:18px;">${generateDiffHtml(escapeHtml(val), escapeHtml(correct))}</div>`;
             container.appendChild(feedback);
             autoAdvance = false;
           }
         } else {
           input.classList.add("incorrect");
           input.classList.add("shake");
-          feedback.innerHTML = `<div style="color:var(--danger); font-weight:bold; margin-bottom:5px;">Неверно! Ответ: ${word.word_kr}</div><div style="font-size:18px;">${generateDiffHtml(val, correct)}</div>`;
+          feedback.innerHTML = `<div style="color:var(--danger); font-weight:bold; margin-bottom:5px;">Неверно! Ответ: ${escapeHtml(word.word_kr)}</div><div style="font-size:18px;">${generateDiffHtml(escapeHtml(val), escapeHtml(correct))}</div>`;
           container.appendChild(feedback);
           autoAdvance = false;
         }
@@ -281,7 +298,7 @@ export const QuizStrategies: Record<string, Strategy> = {
 
   essay: {
     render(word, container, onAnswer, qEl) {
-      qEl.innerHTML = `<div class="quiz-question-text small">"${word.example_ru || "..."}"</div><div class="quiz-question-sub">Переведите предложение</div>`;
+      qEl.innerHTML = `<div class="quiz-question-text small">"${escapeHtml(word.example_ru || "...")}"</div><div class="quiz-question-sub">Переведите предложение</div>`;
 
       container.innerHTML = "";
 
@@ -302,15 +319,13 @@ export const QuizStrategies: Record<string, Strategy> = {
         const feedback = document.createElement("div");
         feedback.className = "essay-feedback";
         const diffHtml = generateDiffHtml(
-          textarea.value,
-          word.example_kr || "",
+          escapeHtml(textarea.value),
+          escapeHtml(word.example_kr || ""),
         );
-        const audioBtn = word.example_audio
-          ? `<button class="speak-btn" onclick="window.speak(null, '${word.example_audio}')">🔊</button>`
-          : "";
+        const audioBtn = getAudioBtnHtml(word.example_audio);
         feedback.innerHTML = `
                     <div style="font-weight:bold; margin-bottom:5px;">Правильный ответ:</div>
-                    <div style="font-size:18px; margin-bottom:10px; display:flex; align-items:center;"><span>${word.example_kr}</span> ${audioBtn}</div>
+                    <div style="font-size:18px; margin-bottom:10px; display:flex; align-items:center;"><span>${escapeHtml(word.example_kr || "")}</span> ${audioBtn}</div>
                     <div style="font-weight:bold; margin-bottom:5px;">Ваш вариант (сравнение):</div>
                     <div style="font-size:18px;">${diffHtml}</div>
                 `;
@@ -379,7 +394,7 @@ export const QuizStrategies: Record<string, Strategy> = {
           isCorrectPair = true;
         }
       }
-      qEl.innerHTML = `<div class="quiz-question-text">${word.word_kr}</div><div class="quiz-question-sub primary large">${shownTranslation}</div>`;
+      qEl.innerHTML = `<div class="quiz-question-text">${escapeHtml(word.word_kr)}</div><div class="quiz-question-sub primary large">${escapeHtml(shownTranslation || "")}</div>`;
 
       container.classList.add("grid-2");
       container.innerHTML = "";
@@ -442,7 +457,7 @@ export const QuizStrategies: Record<string, Strategy> = {
     render(word, container, onAnswer, qEl) {
       const fullText = word.example_kr || "";
       const maskedText = fullText.replace(
-        new RegExp(word.word_kr, "gi"),
+        new RegExp(escapeRegExp(word.word_kr), "gi"),
         "_______",
       );
 
@@ -484,7 +499,7 @@ export const QuizStrategies: Record<string, Strategy> = {
             <div id="scramble-source" class="scramble-container"></div>`;
 
       const scrambleRu = qEl.querySelector("#scramble-ru");
-      if (scrambleRu) scrambleRu.textContent = `"${word.example_ru || "..."}"`;
+      if (scrambleRu) scrambleRu.textContent = `"${word.example_ru || "..."}"`; // textContent is safe
 
       const sourceEl = document.getElementById("scramble-source");
       const targetEl = document.getElementById("scramble-target");
@@ -549,10 +564,8 @@ export const QuizStrategies: Record<string, Strategy> = {
                 }
                 const feedback = document.createElement("div");
                 feedback.className = "essay-feedback";
-                const audioBtn = word.example_audio
-                  ? `<button class="speak-btn" onclick="window.speak(null, '${word.example_audio}')">🔊</button>`
-                  : "";
-                feedback.innerHTML = `<div style="font-weight:bold; margin-bottom:5px;">Правильный ответ:</div><div style="font-size:18px; display:flex; align-items:center;"><span>${sentence}</span> ${audioBtn}</div>`;
+                const audioBtn = getAudioBtnHtml(word.example_audio);
+                feedback.innerHTML = `<div style="font-weight:bold; margin-bottom:5px;">Правильный ответ:</div><div style="font-size:18px; display:flex; align-items:center;"><span>${escapeHtml(sentence)}</span> ${audioBtn}</div>`;
                 container.appendChild(feedback);
               }
               onAnswer(isCorrect, false);
@@ -575,7 +588,7 @@ export const QuizStrategies: Record<string, Strategy> = {
 
   confusing: {
     render(word, container, onAnswer, qEl) {
-      qEl.innerHTML = `<div class="quiz-question-text primary">"${word.translation}"</div><div class="quiz-question-sub">Выберите правильное слово</div>`;
+      qEl.innerHTML = `<div class="quiz-question-text primary">"${escapeHtml(word.translation || "")}"</div><div class="quiz-question-sub">Выберите правильное слово</div>`;
       container.innerHTML = "";
 
       const allGroups = findConfusingWords();
@@ -607,7 +620,7 @@ export const QuizStrategies: Record<string, Strategy> = {
 
   synonyms: {
     render(word, container, onAnswer, qEl) {
-      qEl.innerHTML = `<div class="quiz-question-text primary">${word.word_kr}</div><div class="quiz-question-sub">Найдите синоним</div>`;
+      qEl.innerHTML = `<div class="quiz-question-text primary">${escapeHtml(word.word_kr)}</div><div class="quiz-question-sub">Найдите синоним</div>`;
       container.innerHTML = "";
 
       const syns = (word.synonyms || "")
@@ -648,7 +661,7 @@ export const QuizStrategies: Record<string, Strategy> = {
 
   antonyms: {
     render(word, container, onAnswer, qEl) {
-      qEl.innerHTML = `<div class="quiz-question-text danger">${word.word_kr}</div><div class="quiz-question-sub">Найдите антоним</div>`;
+      qEl.innerHTML = `<div class="quiz-question-text danger">${escapeHtml(word.word_kr)}</div><div class="quiz-question-sub">Найдите антоним</div>`;
       container.innerHTML = "";
 
       const ants = (word.antonyms || "")
@@ -786,7 +799,7 @@ export const QuizStrategies: Record<string, Strategy> = {
 
   pronunciation: {
     render(word, container, onAnswer, qEl) {
-      qEl.innerHTML = `<div class="quiz-question-text">${word.word_kr}</div><div class="quiz-question-sub">${word.translation}</div>`;
+      qEl.innerHTML = `<div class="quiz-question-text">${escapeHtml(word.word_kr)}</div><div class="quiz-question-sub">${escapeHtml(word.translation || "")}</div>`;
       container.innerHTML = "";
 
       const wrapper = document.createElement("div");
@@ -861,7 +874,7 @@ export const QuizStrategies: Record<string, Strategy> = {
               
               <div style="background: var(--surface-2); padding: 12px; border-radius: 12px; margin-bottom: 15px;">
                 <div style="font-size: 12px; color: var(--text-sub); margin-bottom: 4px;">Вы сказали:</div>
-                <div style="font-size: 16px; font-weight: 600; color: var(--text-main);">${text || "..."}</div>
+                <div style="font-size: 16px; font-weight: 600; color: var(--text-main);">${escapeHtml(text || "...")}</div>
               </div>
             `;
 

@@ -4,11 +4,12 @@ import {
   parseBilingualString,
   playTone,
   playComboSound,
+  escapeHtml,
 } from "../utils/utils.ts";
 import { ensureSessionStarted, playAndSpeak, saveAndRender } from "./ui.ts";
 import { closeModal, openModal } from "./ui_modal.ts";
 import { recordAttempt, scheduleSaveState } from "../core/db.ts";
-import { addXP } from "../core/stats.ts";
+import { addXP, checkAchievements } from "../core/stats.ts";
 import { applyBackgroundMusic } from "./ui_settings.ts";
 import { QuizStrategies } from "./quiz_strategies.ts";
 import { Word } from "../types/index.ts";
@@ -18,6 +19,7 @@ let currentQuizMode: string;
 let quizWords: Word[] = [];
 let quizIndex: number;
 let quizStart: number;
+let quizLastTick: number; // Для отслеживания дельты времени
 let quizStar: string = "all";
 let quizTopic: string = "all";
 let quizCategory: string = "all";
@@ -298,7 +300,7 @@ export function buildQuizModes() {
     selector.innerHTML = "";
 
     // Group modes by category
-    const grouped: Record<string, typeof modes> = {};
+    const grouped: Record<string, typeof modes> = Object.create(null);
     modes.forEach((m) => {
       if (!grouped[m.category]) grouped[m.category] = [];
       grouped[m.category].push(m);
@@ -488,6 +490,7 @@ export function startQuizMode(mode: string) {
 
   quizIndex = 0;
   quizStart = Date.now();
+  quizLastTick = Date.now();
   quizCorrectCount = 0;
   quizXPGained = 0;
   quizStreak = 0;
@@ -512,12 +515,24 @@ export function startQuizMode(mode: string) {
     quizInterval = null;
   }
   quizInterval = window.setInterval(() => {
+    const now = Date.now();
+    // Если прошло меньше 100мс (защита от дребезга), пропускаем
+    if (now - quizLastTick < 100) return;
+
     if (isQuizPaused) return;
 
     if (!currentConfig || !currentConfig.onTick) return;
 
-    const { gameOver, nextTimer, ui } = currentConfig.onTick(quizTimerValue);
+    // Вычисляем, сколько секунд прошло с прошлого тика (обычно 1, но может быть больше при лагах)
+    const deltaSeconds = Math.round((now - quizLastTick) / 1000);
+    if (deltaSeconds < 1) return; // Ждем накопления полной секунды
+
+    const { gameOver, nextTimer, ui } = currentConfig.onTick(
+      quizTimerValue,
+      deltaSeconds,
+    );
     quizTimerValue = nextTimer;
+    quizLastTick = now;
 
     if (ui) {
       const el = document.getElementById("quiz-timer-display");
@@ -845,9 +860,9 @@ function recordQuizAnswer(isCorrect: boolean, autoAdvance: boolean = true) {
 
       let content = "";
       if (word.synonyms && word.synonyms.trim())
-        content += `<div style="margin-bottom:4px;"><span style="font-weight:bold; color:var(--primary);">≈</span> ${word.synonyms}</div>`;
+        content += `<div style="margin-bottom:4px;"><span style="font-weight:bold; color:var(--primary);">≈</span> ${escapeHtml(word.synonyms)}</div>`;
       if (word.antonyms && word.antonyms.trim())
-        content += `<div><span style="font-weight:bold; color:var(--danger);">≠</span> ${word.antonyms}</div>`;
+        content += `<div><span style="font-weight:bold; color:var(--danger);">≠</span> ${escapeHtml(word.antonyms)}</div>`;
 
       infoEl.innerHTML = content;
       hasExtraInfo = true;
@@ -923,6 +938,7 @@ function recordQuizAnswer(isCorrect: boolean, autoAdvance: boolean = true) {
     setTimeout(() => document.body.classList.remove("wrong-flash"), 700);
     updateComboUI(0);
   }
+  checkAchievements();
   saveAndRender();
   if (currentQuizMode !== "survival" || isCorrect) {
     if (isCorrect && quizStreak > 1) {
@@ -1026,6 +1042,7 @@ function endQuiz(forceEnd: boolean = false) {
       total = quizIndex + 1;
       total = Math.min(total, quizWords.length);
     }
+    checkAchievements();
     showQuizSummaryModal(quizCorrectCount, total, Math.max(0, quizXPGained));
   } else {
     showToast("Тренировка прервана");

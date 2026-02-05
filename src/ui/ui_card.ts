@@ -6,6 +6,9 @@ import {
   showUndoToast,
   playTone,
   getIconForValue,
+  escapeHtml,
+  escapeRegExp,
+  promiseWithTimeout,
 } from "../utils/utils.ts";
 import { scheduleSaveState, recordAttempt } from "../core/db.ts";
 import {
@@ -18,6 +21,7 @@ import { ensureSessionStarted } from "../core/session.ts";
 import { client } from "../core/supabaseClient.ts";
 import { Word } from "../types/index.ts";
 import { collectionsState } from "../core/collections_data.ts";
+import { DB_BUCKETS } from "../core/constants.ts";
 import { openModal, openConfirm, closeModal } from "./ui_modal.ts";
 
 // --- Virtual Scroll Constants (for List View) ---
@@ -32,32 +36,7 @@ let scrollRafId: number | null = null;
 let currentFilteredData: Word[] = [];
 let resizeHandler: (() => void) | null = null;
 
-/**
- * Wraps a promise with a timeout.
- * @param promise The promise to wrap.
- * @param ms The timeout in milliseconds.
- * @param timeoutError The error to throw on timeout.
- * @returns The result of the promise.
- */
-export function promiseWithTimeout<T>(
-  promise: Promise<T>,
-  ms: number,
-  timeoutError = new Error("Promise timed out"),
-): Promise<T> {
-  const timeout = new Promise<never>((_, reject) => {
-    const id = setTimeout(() => {
-      clearTimeout(id);
-      reject(timeoutError);
-    }, ms);
-  });
-  return Promise.race([promise, timeout]);
-}
-
 let counterTimeout: number | null = null;
-
-function escapeRegExp(string: string) {
-  return string.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
 
 export function updateGridCardHeight() {
   // FIX: Устанавливаем фиксированную высоту для карточек в сетке.
@@ -148,6 +127,16 @@ function renderEmptyState(grid: HTMLElement) {
 
 function updateFilteredData() {
   const source = (state.searchResults || state.dataStore || []) as Word[];
+
+  // Optimization: Pre-calculate set of all categorized IDs for O(1) lookup
+  let allCategorizedIds: Set<number> | null = null;
+  if (collectionsState.currentCollectionFilter === "uncategorized") {
+    allCategorizedIds = new Set<number>();
+    Object.values(collectionsState.listItems).forEach((set) => {
+      set.forEach((id) => allCategorizedIds!.add(id));
+    });
+  }
+
   currentFilteredData = source.filter((w) => {
     if (!w) return false;
     if (
@@ -177,9 +166,7 @@ function updateFilteredData() {
     if (collectionsState.currentCollectionFilter) {
       if (collectionsState.currentCollectionFilter === "uncategorized") {
         // Проверяем, входит ли слово хоть в один список
-        const isInAnyList = Object.values(collectionsState.listItems).some(
-          (set) => set.has(w.id as number),
-        );
+        const isInAnyList = allCategorizedIds?.has(w.id as number);
         if (isInAnyList) return false;
       } else if (
         collectionsState.listItems[collectionsState.currentCollectionFilter]
@@ -786,8 +773,8 @@ function createCardFront(item: Word, index: number): HTMLElement {
   const tagsDiv = document.createElement("div");
   tagsDiv.className = "card-tags";
   tagsDiv.innerHTML = `
-      <span class="tag-pill topic">${topicIcon} ${formatBi(topicObj)}</span>
-      <span class="tag-pill category">${catIcon} ${formatBi(catObj)}</span>
+      <span class="tag-pill topic">${topicIcon} ${escapeHtml(formatBi(topicObj))}</span>
+      <span class="tag-pill category">${catIcon} ${escapeHtml(formatBi(catObj))}</span>
   `;
   if (item.isLocal) {
     tagsDiv.innerHTML += `<span class="tag-pill ai">⏳ AI</span>`;
@@ -806,7 +793,7 @@ function createCardBack(item: Word): HTMLElement {
   // 1. Header (Translation) - Fixed at top
   const header = document.createElement("div");
   header.className = "card-back-header";
-  header.innerHTML = `<div class="back-translation">${item.translation}</div>`;
+  header.innerHTML = `<div class="back-translation">${escapeHtml(item.translation || "")}</div>`;
   back.appendChild(header);
 
   // 2. Scrollable Content
@@ -940,7 +927,7 @@ function createCardBack(item: Word): HTMLElement {
           if (item.image_source === "custom" && item.image) {
             const fileName = item.image.split("/").pop()?.split("?")[0];
             if (fileName)
-              await client.storage.from("image-files").remove([fileName]);
+              await client.storage.from(DB_BUCKETS.IMAGES).remove([fileName]);
           }
 
           // Очищаем поле в БД
@@ -1045,15 +1032,21 @@ function createCardBack(item: Word): HTMLElement {
     exBox.style.padding = "12px 12px 12px 16px";
     exBox.style.marginBottom = "16px";
     exBox.style.borderRadius = "8px";
+
+    const safeKr = escapeHtml(item.example_kr);
+    const safeWord = escapeHtml(item.word_kr || "");
     // Highlight the word in the example
-    const highlightedKr = item.example_kr.replace(
-      new RegExp(escapeRegExp(item.word_kr), "gi"),
-      `<span class="highlight">$&</span>`,
-    );
+    const highlightedKr = safeWord
+      ? safeKr.replace(
+          new RegExp(escapeRegExp(safeWord), "gi"),
+          `<span class="highlight">$&</span>`,
+        )
+      : safeKr;
+
     exBox.innerHTML = `
         <div class="section-label" style="color: var(--section-info-border); font-weight: bold; margin-bottom: 4px;">💬 Пример</div>
         <div class="back-example-kr">${highlightedKr}</div>
-        <div class="back-example-ru">${item.example_ru || ""}</div>
+        <div class="back-example-ru">${escapeHtml(item.example_ru || "")}</div>
     `;
     content.appendChild(exBox);
   }
@@ -1073,7 +1066,10 @@ function createCardBack(item: Word): HTMLElement {
             <div class="rel-chips">${item.synonyms
               .split(/[,;]/)
               .filter((s) => s.trim())
-              .map((s) => `<span class="rel-chip syn">${s.trim()}</span>`)
+              .map(
+                (s) =>
+                  `<span class="rel-chip syn">${escapeHtml(s.trim())}</span>`,
+              )
               .join("")}</div>
         </div>
     `;
@@ -1095,7 +1091,10 @@ function createCardBack(item: Word): HTMLElement {
             <div class="rel-chips">${item.antonyms
               .split(/[,;]/)
               .filter((s) => s.trim())
-              .map((s) => `<span class="rel-chip ant">${s.trim()}</span>`)
+              .map(
+                (s) =>
+                  `<span class="rel-chip ant">${escapeHtml(s.trim())}</span>`,
+              )
               .join("")}</div>
         </div>
     `;
@@ -1111,12 +1110,16 @@ function createCardBack(item: Word): HTMLElement {
     colBox.style.padding = "12px 12px 12px 16px";
     colBox.style.marginBottom = "16px";
     colBox.style.borderRadius = "8px";
-    const displayCollocations = item.word_kr
-      ? item.collocations.replace(
-          new RegExp(escapeRegExp(item.word_kr), "gi"),
+
+    const safeCol = escapeHtml(item.collocations);
+    const safeWord = escapeHtml(item.word_kr || "");
+    const displayCollocations = safeWord
+      ? safeCol.replace(
+          new RegExp(escapeRegExp(safeWord), "gi"),
           `<span class="highlight">$&</span>`,
         )
-      : item.collocations;
+      : safeCol;
+
     colBox.innerHTML = `
           <div class="section-label" style="color: var(--section-extra-border); font-weight: bold; margin-bottom: 8px;">🔗 Коллокации</div>
           <div class="info-item">${displayCollocations}</div>
@@ -1135,7 +1138,7 @@ function createCardBack(item: Word): HTMLElement {
     gramBox.style.borderRadius = "8px";
     gramBox.innerHTML = `
           <div class="section-label" style="color: var(--section-extra-border); font-weight: bold; margin-bottom: 8px;">📘 Грамматика</div>
-          <div class="info-item">${item.grammar_info}</div>
+          <div class="info-item">${escapeHtml(item.grammar_info)}</div>
       `;
     content.appendChild(gramBox);
   }
@@ -1149,12 +1152,16 @@ function createCardBack(item: Word): HTMLElement {
     noteBox.style.padding = "12px 12px 12px 16px";
     noteBox.style.marginBottom = "16px";
     noteBox.style.borderRadius = "8px";
-    const displayNotes = item.word_kr
-      ? item.my_notes.replace(
-          new RegExp(escapeRegExp(item.word_kr), "gi"),
+
+    const safeNotes = escapeHtml(item.my_notes);
+    const safeWord = escapeHtml(item.word_kr || "");
+    const displayNotes = safeWord
+      ? safeNotes.replace(
+          new RegExp(escapeRegExp(safeWord), "gi"),
           `<span class="highlight">$&</span>`,
         )
-      : item.my_notes;
+      : safeNotes;
+
     noteBox.innerHTML = `
           <div class="section-label" style="color: var(--section-extra-border); font-weight: bold; margin-bottom: 8px;">📝 Заметки</div>
           <div class="info-item">${displayNotes}</div>
@@ -1382,18 +1389,18 @@ function createListItem(item: Word, index: number): HTMLElement {
   el.appendChild(checkbox);
 
   const hanjaHtml = item.word_hanja
-    ? `<span class="list-hanja">${[...item.word_hanja].map((char) => `<span class="list-hanja-char">${char}</span>`).join("")}</span>`
+    ? `<span class="list-hanja">${[...item.word_hanja].map((char) => `<span class="list-hanja-char">${escapeHtml(char)}</span>`).join("")}</span>`
     : "";
 
   const mainDiv = document.createElement("div");
   mainDiv.className = "list-col-main";
   mainDiv.innerHTML = `
     <div class="list-word-row">
-        <div class="list-word">${item.word_kr}</div>
+        <div class="list-word">${escapeHtml(item.word_kr)}</div>
         ${statusIcon ? `<div class="list-status-icon">${statusIcon}</div>` : ""}
         ${hanjaHtml}
     </div>
-    <div class="list-trans">${item.translation}</div>
+    <div class="list-trans">${escapeHtml(item.translation || "")}</div>
   `;
 
   if (item.word_hanja) {
@@ -1445,15 +1452,20 @@ function createListItem(item: Word, index: number): HTMLElement {
 
   // Example
   if (item.example_kr && item.example_kr.trim()) {
-    const highlighted = item.example_kr.replace(
-      new RegExp(escapeRegExp(item.word_kr), "gi"),
-      `<span class="highlight">$&</span>`,
-    );
+    const safeKr = escapeHtml(item.example_kr);
+    const safeWord = escapeHtml(item.word_kr || "");
+    const highlighted = safeWord
+      ? safeKr.replace(
+          new RegExp(escapeRegExp(safeWord), "gi"),
+          `<span class="highlight">$&</span>`,
+        )
+      : safeKr;
+
     detailsContent += `
         <div class="list-detail-section" style="background: var(--section-info-bg); border-left-color: var(--section-info-border);">
             <div class="list-detail-label">💬 Пример</div>
             <div class="list-detail-text kr">${highlighted}</div>
-            <div class="list-detail-text ru">${item.example_ru || ""}</div>
+            <div class="list-detail-text ru">${escapeHtml(item.example_ru || "")}</div>
         </div>
       `;
   }
@@ -1468,14 +1480,14 @@ function createListItem(item: Word, index: number): HTMLElement {
       detailsContent += `
             <div class="list-detail-section" style="flex:1; background: var(--section-relation-bg); border-left-color: var(--section-relation-border);">
                 <div class="list-detail-label">🔗 Синонимы</div>
-                <div class="list-detail-text">${item.synonyms}</div>
+                <div class="list-detail-text">${escapeHtml(item.synonyms)}</div>
             </div>`;
     }
     if (item.antonyms && item.antonyms.trim()) {
       detailsContent += `
             <div class="list-detail-section" style="flex:1; background: var(--section-relation-bg); border-left-color: var(--section-relation-border);">
                 <div class="list-detail-label">≠ Антонимы</div>
-                <div class="list-detail-text">${item.antonyms}</div>
+                <div class="list-detail-text">${escapeHtml(item.antonyms)}</div>
             </div>`;
     }
     detailsContent += `</div>`;
@@ -1486,7 +1498,10 @@ function createListItem(item: Word, index: number): HTMLElement {
     (item.my_notes && item.my_notes.trim()) ||
     (item.collocations && item.collocations.trim())
   ) {
-    const info = [item.collocations, item.my_notes]
+    const info = [
+      item.collocations ? escapeHtml(item.collocations) : "",
+      item.my_notes ? escapeHtml(item.my_notes) : "",
+    ]
       .filter((s) => s && s.trim())
       .join("<br>");
     detailsContent += `
@@ -1610,6 +1625,7 @@ function markMistake(id: string | number) {
   recordAttempt(id, false);
   state.dirtyWordIds.add(id);
   addXP(-5);
+  checkAchievements();
   saveAndRender();
 }
 
@@ -1629,6 +1645,7 @@ function toggleFavorite(id: string | number, btn?: HTMLElement) {
     showToast("Добавлено в избранное");
   }
   state.dirtyWordIds.add(id);
+  checkAchievements();
   scheduleSaveState();
   if (state.currentStar === "favorites") render();
 }
@@ -1638,6 +1655,7 @@ function resetProgress(id: string | number) {
   state.mistakes.delete(id);
   delete state.wordHistory[id];
   state.dirtyWordIds.add(id);
+  checkAchievements();
   scheduleSaveState();
   saveAndRender();
 }
@@ -1670,7 +1688,7 @@ async function uploadAndSaveImage(
   const fileName = `${item.id}_custom_${Date.now()}.jpg`;
 
   const { error: uploadError } = await client.storage
-    .from("image-files")
+    .from(DB_BUCKETS.IMAGES)
     .upload(fileName, compressedBlob, {
       contentType: "image/jpeg",
       upsert: true,
@@ -1679,7 +1697,7 @@ async function uploadAndSaveImage(
 
   const {
     data: { publicUrl },
-  } = client.storage.from("image-files").getPublicUrl(fileName);
+  } = client.storage.from(DB_BUCKETS.IMAGES).getPublicUrl(fileName);
 
   const { error: dbError } = await client
     .from("vocabulary")

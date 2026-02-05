@@ -1,4 +1,5 @@
 /* eslint-disable no-console, @typescript-eslint/no-explicit-any */
+import type { SupabaseClient } from "@supabase/supabase-js";
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_KEY;
 
@@ -54,7 +55,7 @@ type SupabaseCreateClient = (url: string, key: string, options?: object) => any;
 
 // @ts-ignore - window.supabase загружается через CDN в index.html
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export const client =
+export const client: SupabaseClient =
   SUPABASE_URL &&
   SUPABASE_KEY &&
   window.supabase &&

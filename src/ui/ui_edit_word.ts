@@ -3,6 +3,7 @@ import { client } from "../core/supabaseClient.ts";
 import { openModal, closeModal, openConfirm } from "./ui_modal.ts";
 import { showToast } from "../utils/utils.ts";
 // import { render } from "./ui_card.ts"; // Убираем, чтобы разорвать цикл
+import { DB_TABLES } from "../core/constants.ts";
 import { Word } from "../types/index.ts";
 
 let onUpdateCallback: (() => void) | null = null;
@@ -101,7 +102,7 @@ export async function saveWordChanges() {
 
   // Отправка в базу данных
   const { error } = await client
-    .from("vocabulary")
+    .from(DB_TABLES.VOCABULARY)
     .update(updates)
     .eq("id", id);
 
@@ -145,7 +146,7 @@ export async function deleteWord() {
 
     // Soft delete
     const { error } = await client
-      .from("vocabulary")
+      .from(DB_TABLES.VOCABULARY)
       .update({ deleted_at: new Date().toISOString() })
       .eq("id", id);
     if (error) {

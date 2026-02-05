@@ -1,28 +1,13 @@
-/* eslint-disable no-console, @typescript-eslint/no-explicit-any */
 import { client } from "./supabaseClient.ts";
 import { state, Session, CURRENT_DB_VERSION } from "./state.ts";
 import { showToast, parseBilingualString } from "../utils/utils.ts";
 import { syncGlobalStats } from "./sync.ts";
 import { Scheduler } from "./scheduler.ts";
+import { LS_KEYS, DB_TABLES } from "./constants.ts";
 import { Word } from "../types/index.ts";
 
 let _saveTimer: number | null = null;
 const VOCABULARY_CACHE_VERSION = "v1.1"; // Increment this when DB schema changes
-
-interface UserProgressRow {
-  word_id: string | number;
-  is_learned: boolean;
-  is_mistake: boolean;
-  is_favorite: boolean;
-  attempts: number;
-  correct: number;
-  last_review: string | number | null;
-  sm2_interval: number | null;
-  sm2_repetitions: number | null;
-  sm2_ef: number | null;
-  sm2_next_review: string | number | null;
-  learned_date?: string | number | null;
-}
 
 /**
  * Validates that the vocabulary data has the required columns.
@@ -49,6 +34,7 @@ function validateSchema(data: Word[]) {
  * @param stats The user stats object to validate.
  * @returns True if valid, false otherwise.
  */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 function validateUserStats(stats: any): boolean {
   if (!stats || typeof stats !== "object") return false;
 
@@ -95,35 +81,44 @@ export function immediateSaveState() {
       return;
     }
 
-    localStorage.setItem("db_version", String(CURRENT_DB_VERSION));
-    localStorage.setItem("user_stats_v5", JSON.stringify(state.userStats));
-    localStorage.setItem("learned_v5", JSON.stringify([...state.learned]));
-    localStorage.setItem("mistakes_v5", JSON.stringify([...state.mistakes]));
-    localStorage.setItem("favorites_v5", JSON.stringify([...state.favorites]));
-    localStorage.setItem("word_history_v5", JSON.stringify(state.wordHistory));
-    localStorage.setItem("streak_v5", JSON.stringify(state.streak));
-    localStorage.setItem("sessions_v5", JSON.stringify(state.sessions));
-    localStorage.setItem("achievements_v5", JSON.stringify(state.achievements));
+    localStorage.setItem(LS_KEYS.DB_VERSION, String(CURRENT_DB_VERSION));
+    localStorage.setItem(LS_KEYS.USER_STATS, JSON.stringify(state.userStats));
+    localStorage.setItem(LS_KEYS.LEARNED, JSON.stringify([...state.learned]));
+    localStorage.setItem(LS_KEYS.MISTAKES, JSON.stringify([...state.mistakes]));
     localStorage.setItem(
-      "dirty_ids_v1",
+      LS_KEYS.FAVORITES,
+      JSON.stringify([...state.favorites]),
+    );
+    localStorage.setItem(
+      LS_KEYS.WORD_HISTORY,
+      JSON.stringify(state.wordHistory),
+    );
+    localStorage.setItem(LS_KEYS.STREAK, JSON.stringify(state.streak));
+    localStorage.setItem(LS_KEYS.SESSIONS, JSON.stringify(state.sessions));
+    localStorage.setItem(
+      LS_KEYS.ACHIEVEMENTS,
+      JSON.stringify(state.achievements),
+    );
+    localStorage.setItem(
+      LS_KEYS.DIRTY_IDS,
       JSON.stringify([...state.dirtyWordIds]),
     );
-    localStorage.setItem("custom_words_v1", JSON.stringify(state.customWords));
     localStorage.setItem(
-      "favorite_quotes_v1",
+      LS_KEYS.CUSTOM_WORDS,
+      JSON.stringify(state.customWords),
+    );
+    localStorage.setItem(
+      LS_KEYS.FAVORITE_QUOTES,
       JSON.stringify(state.favoriteQuotes),
     );
     localStorage.setItem(
-      "trash_retention_v1",
+      LS_KEYS.TRASH_RETENTION,
       String(state.trashRetentionDays),
     );
     // Не сжимаем, чтобы избежать ошибок с Unicode
-    localStorage.setItem(
-      "vocabulary_cache_v1",
-      JSON.stringify(state.dataStore),
-    );
-    localStorage.setItem("tts_volume_v1", String(state.ttsVolume));
-    localStorage.setItem("vocabulary_version", VOCABULARY_CACHE_VERSION);
+    localStorage.setItem(LS_KEYS.VOCAB_CACHE, JSON.stringify(state.dataStore));
+    localStorage.setItem(LS_KEYS.TTS_VOLUME, String(state.ttsVolume));
+    localStorage.setItem(LS_KEYS.VOCAB_VERSION, VOCABULARY_CACHE_VERSION);
   } catch (e) {
     console.error("Save error:", e);
   }
@@ -180,7 +175,7 @@ export function updateStreak() {
       }
     }
     state.streak.lastDate = today;
-    localStorage.setItem("streak_v5", JSON.stringify(state.streak));
+    localStorage.setItem(LS_KEYS.STREAK, JSON.stringify(state.streak));
   }
 }
 
@@ -226,9 +221,11 @@ function processVocabularyData(serverData: Word[]) {
   state.dataStore = [...serverData, ...state.customWords];
 
   const uniqueMap = new Map();
-  state.dataStore.forEach((w) => {
+  const data = state.dataStore;
+  for (let i = 0; i < data.length; i++) {
+    const w = data[i];
     if (w.id && !uniqueMap.has(w.id)) uniqueMap.set(w.id, w);
-  });
+  }
   state.dataStore = Array.from(uniqueMap.values());
 
   // Сортировка по умолчанию: Тема -> Категория -> Слово
@@ -244,7 +241,9 @@ function processVocabularyData(serverData: Word[]) {
     return (a.word_kr || "").localeCompare(b.word_kr || "");
   });
 
-  state.dataStore.forEach((w) => {
+  const sortedData = state.dataStore;
+  for (let i = 0; i < sortedData.length; i++) {
+    const w = sortedData[i];
     if (!w.type) w.type = "word";
     w._parsedTopic = parseBilingualString(w.topic || w.topic_ru || w.topic_kr);
     w._parsedCategory = parseBilingualString(
@@ -260,7 +259,7 @@ function processVocabularyData(serverData: Word[]) {
       .filter(Boolean)
       .join(" ")
       .toLowerCase();
-  });
+  }
 
   validateSchema(state.dataStore);
   cleanupInvalidStateIds();
@@ -273,7 +272,7 @@ function processVocabularyData(serverData: Word[]) {
  */
 export async function fetchVocabulary() {
   try {
-    const cachedVersion = localStorage.getItem("vocabulary_version");
+    const cachedVersion = localStorage.getItem(LS_KEYS.VOCAB_VERSION);
     const isCacheValid = cachedVersion === VOCABULARY_CACHE_VERSION;
 
     // 🐌 Проверка скорости: если есть кэш и интернет медленный, пропускаем обновление
@@ -290,15 +289,15 @@ export async function fetchVocabulary() {
     }
 
     if (!isCacheValid && navigator.onLine) {
+      // eslint-disable-next-line no-console
       console.log("🔄 Cache outdated or missing. Forcing refresh...");
-      state.dataStore = []; // Clear in-memory cache to force fetch
     }
 
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 30000);
 
     const { data, error } = await client
-      .from("vocabulary")
+      .from(DB_TABLES.VOCABULARY)
       .select("*")
       .is("deleted_at", null)
       .abortSignal(controller.signal);
@@ -356,7 +355,7 @@ export async function loadFromSupabase(user: { id: string }) {
     }
 
     const { data: globalData } = await client
-      .from("user_global_stats")
+      .from(DB_TABLES.USER_GLOBAL_STATS)
       .select("*")
       .eq("user_id", user.id)
       .single();
@@ -403,32 +402,32 @@ export async function loadFromSupabase(user: { id: string }) {
         const s = globalData.settings;
         if (s.darkMode !== undefined) {
           state.darkMode = s.darkMode;
-          localStorage.setItem("dark_mode_v1", String(state.darkMode));
+          localStorage.setItem(LS_KEYS.DARK_MODE, String(state.darkMode));
         }
         if (s.hanjaMode !== undefined) {
           state.hanjaMode = s.hanjaMode;
-          localStorage.setItem("hanja_mode_v1", String(state.hanjaMode));
+          localStorage.setItem(LS_KEYS.HANJA_MODE, String(state.hanjaMode));
         }
         if (s.audioSpeed !== undefined) {
           state.audioSpeed = s.audioSpeed;
-          localStorage.setItem("audio_speed_v1", String(state.audioSpeed));
+          localStorage.setItem(LS_KEYS.AUDIO_SPEED, String(state.audioSpeed));
         }
         if (s.currentVoice !== undefined) {
           state.currentVoice = s.currentVoice;
-          localStorage.setItem("voice_pref", state.currentVoice);
+          localStorage.setItem(LS_KEYS.VOICE_PREF, state.currentVoice);
         }
         if (s.autoUpdate !== undefined) {
           state.autoUpdate = s.autoUpdate;
-          localStorage.setItem("auto_update_v1", String(state.autoUpdate));
+          localStorage.setItem(LS_KEYS.AUTO_UPDATE, String(state.autoUpdate));
         }
         if (s.autoTheme !== undefined) {
           state.autoTheme = s.autoTheme;
-          localStorage.setItem("auto_theme_v1", String(state.autoTheme));
+          localStorage.setItem(LS_KEYS.AUTO_THEME, String(state.autoTheme));
         }
         if (s.studyGoal !== undefined) {
           state.studyGoal = s.studyGoal;
           localStorage.setItem(
-            "study_goal_v1",
+            LS_KEYS.STUDY_GOAL,
             JSON.stringify(state.studyGoal),
           );
         }
@@ -436,30 +435,30 @@ export async function loadFromSupabase(user: { id: string }) {
           state.userStats.lastDailyReward = s.lastDailyReward;
         if (s.themeColor !== undefined) {
           state.themeColor = s.themeColor;
-          localStorage.setItem("theme_color_v1", state.themeColor);
+          localStorage.setItem(LS_KEYS.THEME_COLOR, state.themeColor);
         }
         if (s.backgroundMusicEnabled !== undefined) {
           state.backgroundMusicEnabled = s.backgroundMusicEnabled;
           localStorage.setItem(
-            "background_music_enabled_v1",
+            LS_KEYS.MUSIC_ENABLED,
             String(state.backgroundMusicEnabled),
           );
         }
         if (s.backgroundMusicVolume !== undefined) {
           state.backgroundMusicVolume = s.backgroundMusicVolume;
           localStorage.setItem(
-            "background_music_volume_v1",
+            LS_KEYS.MUSIC_VOLUME,
             String(state.backgroundMusicVolume),
           );
         }
         if (s.ttsVolume !== undefined) {
           state.ttsVolume = s.ttsVolume;
-          localStorage.setItem("tts_volume_v1", String(state.ttsVolume));
+          localStorage.setItem(LS_KEYS.TTS_VOLUME, String(state.ttsVolume));
         }
         if (s.trashRetentionDays !== undefined) {
           state.trashRetentionDays = s.trashRetentionDays;
           localStorage.setItem(
-            "trash_retention_v1",
+            LS_KEYS.TRASH_RETENTION,
             String(state.trashRetentionDays),
           );
         }
@@ -484,16 +483,17 @@ export async function loadFromSupabase(user: { id: string }) {
     }
 
     const { data: wordData } = await client
-      .from("user_progress")
+      .from(DB_TABLES.USER_PROGRESS)
       .select("*")
       .eq("user_id", user.id);
 
     const validIds = new Set(state.dataStore.map((w) => String(w.id)));
 
     if (wordData) {
-      wordData.forEach((row: UserProgressRow) => {
+      for (let i = 0; i < wordData.length; i++) {
+        const row = wordData[i];
         const id = row.word_id;
-        if (!validIds.has(String(id))) return;
+        if (!validIds.has(String(id))) continue;
 
         if (row.is_learned) state.learned.add(id);
         if (row.is_mistake) state.mistakes.add(id);
@@ -525,7 +525,7 @@ export async function loadFromSupabase(user: { id: string }) {
         //     state.wordHistory[id].learnedDate = state.wordHistory[id].lastReview || Date.now();
         //     state.dirtyWordIds.add(id); // Mark for sync
         // }
-      });
+      }
     }
 
     cleanupInvalidStateIds();
@@ -544,7 +544,7 @@ export async function fetchRandomQuote() {
   try {
     // 1. Узнаем общее количество цитат
     const { count, error: countError } = await client
-      .from("quotes")
+      .from(DB_TABLES.QUOTES)
       .select("*", { count: "exact", head: true });
 
     if (countError || count === null || count === 0) return null;
@@ -554,7 +554,7 @@ export async function fetchRandomQuote() {
 
     // 3. Загружаем одну цитату по этому индексу
     const { data, error } = await client
-      .from("quotes")
+      .from(DB_TABLES.QUOTES)
       .select("*")
       .range(randomIndex, randomIndex)
       .single();
