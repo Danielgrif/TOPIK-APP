@@ -149,9 +149,7 @@ function renderMistakesContent() {
   container.innerHTML = html;
 }
 
-// Expose for inline onclick
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-(window as any).startMistakeQuiz = () => {
+export function startMistakeQuiz() {
   closeModal("mistakes-modal");
   closeModal("stats-modal");
 
@@ -161,4 +159,12 @@ function renderMistakesContent() {
 
   // Open quiz modal
   openModal("quiz-modal");
-};
+}
+
+declare global {
+  interface Window {
+    startMistakeQuiz: typeof startMistakeQuiz;
+  }
+}
+
+window.startMistakeQuiz = startMistakeQuiz;

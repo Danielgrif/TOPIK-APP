@@ -8,6 +8,7 @@ import { openModal, closeModal, openConfirm } from "../ui/ui_modal.ts";
 import { applyTheme, updateVoiceUI } from "../ui/ui_settings.ts";
 import { User } from "../types/index.ts";
 import type { Session } from "@supabase/supabase-js";
+import { LS_KEYS } from "./constants.ts";
 
 export function updateAuthUI(user: User | null) {
   // Keep a reference to the current user in the global state
@@ -258,7 +259,7 @@ async function performLogin(email: string, password: string) {
       password,
     });
     if (error) throw error;
-    await finalizeAuth(data.user);
+    if (data.user) await finalizeAuth(data.user as any);
   } catch (e) {
     handleAuthError(e);
   }
@@ -284,7 +285,7 @@ async function performSignup(email: string, password: string) {
           // Ignore if stats already exist
         }
       }
-      if (data.user) await finalizeAuth(data.user);
+      if (data.user) await finalizeAuth(data.user as any);
     }
   } catch (e) {
     handleAuthError(e);
@@ -392,8 +393,32 @@ export async function handleChangePassword() {
 export async function handleLogout() {
   openConfirm("Вы уверены, что хотите выйти?", async () => {
     showToast("👋 До встречи!");
-    await client.auth.signOut();
-    location.reload();
+    try {
+      await client.auth.signOut();
+    } catch (e) {
+      console.error("Logout error:", e);
+    } finally {
+      const keysToRemove = [
+        LS_KEYS.USER_STATS,
+        LS_KEYS.LEARNED,
+        LS_KEYS.MISTAKES,
+        LS_KEYS.FAVORITES,
+        LS_KEYS.WORD_HISTORY,
+        LS_KEYS.STREAK,
+        LS_KEYS.SESSIONS,
+        LS_KEYS.ACHIEVEMENTS,
+        "daily_challenge_v1",
+        LS_KEYS.DIRTY_IDS,
+        LS_KEYS.CUSTOM_WORDS,
+        LS_KEYS.FAVORITE_QUOTES,
+        LS_KEYS.PURCHASED_ITEMS,
+        LS_KEYS.SEARCH_HISTORY,
+        LS_KEYS.WORD_REQUESTS,
+        LS_KEYS.STUDY_GOAL,
+      ];
+      keysToRemove.forEach((k) => localStorage.removeItem(k));
+      location.reload();
+    }
   });
 }
 

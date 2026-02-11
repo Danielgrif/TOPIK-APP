@@ -38,6 +38,8 @@ export async function syncGlobalStats() {
       ttsVolume: state.ttsVolume,
       streakLastDate: state.streak.lastDate,
       survivalHealth: state.userStats.survivalHealth,
+      lastFreezeDate: state.userStats.lastFreezeDate,
+      settingsUpdatedAt: state.settingsUpdatedAt,
     };
 
     const globalUpdates = {

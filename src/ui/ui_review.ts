@@ -1,7 +1,7 @@
 import { state } from "../core/state.ts";
 import { Scheduler } from "../core/scheduler.ts";
 import { showToast, playTone } from "../utils/utils.ts";
-import { openModal } from "./ui_modal.ts"; // closeModal используется в HTML строке
+import { openModal, closeModal } from "./ui_modal.ts";
 import { ensureSessionStarted } from "./ui.ts";
 import { updateSRSBadge, checkAchievements } from "../core/stats.ts";
 import { scheduleSaveState } from "../core/db.ts";
@@ -34,7 +34,7 @@ function buildReviewModal(queue: Word[]) {
     modalEl.className = "modal";
     modalEl.setAttribute("role", "dialog");
     modalEl.setAttribute("aria-modal", "true");
-    modalEl.innerHTML = `<div class="modal-content"><div class="modal-header"><span>🔁 Режим повторения <span id="review-counter" style="font-size:0.6em; opacity:0.7; margin-left:10px;"></span></span><button class="close-modal" onclick="closeModal('${modalId}')">✕</button></div><div id="review-container"></div></div>`;
+    modalEl.innerHTML = `<div class="modal-content"><div class="modal-header"><span>🔁 Режим повторения <span id="review-counter" style="font-size:0.6em; opacity:0.7; margin-left:10px;"></span></span><button class="close-modal" id="review-close-btn">✕</button></div><div id="review-container"></div></div>`;
     document.body.appendChild(modalEl);
   }
 
@@ -50,6 +50,11 @@ function buildReviewModal(queue: Word[]) {
       if (btn) header.insertBefore(counter, btn);
       else header.appendChild(counter);
     }
+  }
+
+  const closeBtn = modalEl.querySelector("#review-close-btn");
+  if (closeBtn) {
+    (closeBtn as HTMLElement).onclick = () => closeModal(modalId);
   }
 
   const container = modalEl.querySelector("#review-container");
@@ -145,9 +150,14 @@ function buildReviewModal(queue: Word[]) {
                     <div style="background:var(--bg-learned); color:var(--success); padding:15px; border-radius:16px; flex:1; border: 1px solid var(--success);"><div style="font-size:28px; font-weight:900;">${stats.remembered}</div><div style="font-size:13px; font-weight:600;">Вспомнил</div></div>
                     <div style="background:var(--bg-mistake); color:var(--danger); padding:15px; border-radius:16px; flex:1; border: 1px solid var(--danger);"><div style="font-size:28px; font-weight:900;">${stats.forgotten}</div><div style="font-size:13px; font-weight:600;">Забыл</div></div>
                 </div>
-                <button class="btn btn-quiz" style="width:100%; padding:15px; font-size:16px;" onclick="closeModal('${modalId}')">Закрыть</button>
+                <button class="btn btn-quiz" id="review-summary-close" style="width:100%; padding:15px; font-size:16px;">Закрыть</button>
             </div>
         `;
+
+      const summaryClose = container.querySelector("#review-summary-close");
+      if (summaryClose) {
+        (summaryClose as HTMLElement).onclick = () => closeModal(modalId);
+      }
     }
     if (
       stats.remembered > stats.forgotten &&
@@ -164,3 +174,11 @@ function buildReviewModal(queue: Word[]) {
   renderOne();
   openModal(modalId);
 }
+
+declare global {
+  interface Window {
+    openReviewMode: typeof openReviewMode;
+  }
+}
+
+window.openReviewMode = openReviewMode;

@@ -106,6 +106,7 @@ import {
   quitQuiz,
   buildQuizModes,
 } from "./ui/quiz.ts";
+import { canClaimDailyReward, claimDailyReward } from "./ui/ui_shop.ts";
 import { setupTrash } from "./ui/ui_trash.ts";
 import { checkPronunciation } from "./core/speech.ts";
 import { SW_MESSAGES } from "./core/constants.ts";
@@ -236,6 +237,15 @@ function setupGlobalListeners() {
 
     const actionTrigger = target.closest("[data-action]");
     if (actionTrigger) {
+      // FIX: Если это чекбокс или радио-кнопка, игнорируем событие click,
+      // так как оно будет обработано событием change. Это предотвращает двойное переключение.
+      if (
+        actionTrigger.tagName === "INPUT" &&
+        ["checkbox", "radio"].includes((actionTrigger as HTMLInputElement).type)
+      ) {
+        return;
+      }
+
       const action = actionTrigger.getAttribute("data-action");
       const value = actionTrigger.getAttribute("data-value");
       console.log(`⚡ Action detected: ${action}`);
@@ -289,6 +299,9 @@ function setupGlobalListeners() {
         case "sort-topic":
           sortByTopic();
           break;
+        case "sort-level":
+          import("./ui/ui.ts").then((m) => m.sortByLevel());
+          break;
         case "sort-weak":
           sortByWeakWords();
           break;
@@ -304,7 +317,10 @@ function setupGlobalListeners() {
           break;
         case "open-profile":
           openProfileModal();
-          import("./ui/ui_settings.ts").then((m) => m.updateTrashRetentionUI());
+          import("./ui/ui_settings.ts").then((m) => {
+            m.updateTrashRetentionUI();
+            m.updateThemePickerUI();
+          });
           break;
         case "open-mistakes":
           import("./ui/ui_mistakes").then((m) => m.openMistakesModal());
@@ -346,6 +362,9 @@ function setupGlobalListeners() {
             );
           break;
         case "open-add-word-modal":
+          import("./ui/ui_custom_words.ts").then((m) =>
+            m.setupAddWordPreview(),
+          );
           openModal("add-word-modal");
           if (value) {
             const select = document.getElementById(
@@ -467,7 +486,9 @@ function setupGlobalListeners() {
   // Color Preview on Hover
   document.body.addEventListener("mouseover", (e) => {
     const target = e.target as HTMLElement;
-    const trigger = target.closest('[data-action="set-accent"]');
+    const trigger = target.closest(
+      '[data-action="set-accent"], [data-action="preview-theme"]',
+    );
     if (trigger) {
       const val = trigger.getAttribute("data-value");
       if (val) previewAccentColor(val);
@@ -476,7 +497,9 @@ function setupGlobalListeners() {
 
   document.body.addEventListener("mouseout", (e) => {
     const target = e.target as HTMLElement;
-    const trigger = target.closest('[data-action="set-accent"]');
+    const trigger = target.closest(
+      '[data-action="set-accent"], [data-action="preview-theme"]',
+    );
     if (
       trigger &&
       (!e.relatedTarget || !trigger.contains(e.relatedTarget as Node))
@@ -811,6 +834,35 @@ function setupRealtimeUpdates() {
       },
     )
     .subscribe();
+
+  // Слушаем добавление слов в списки (таблица list_items)
+  client
+    .channel("public:list_items")
+    .on(
+      "postgres_changes",
+      { event: "INSERT", schema: "public", table: "list_items" },
+      (payload: { new: any }) => {
+        const newItem = payload.new;
+        if (newItem && newItem.list_id && newItem.word_id) {
+          import("./core/collections_data.ts").then(({ collectionsState }) => {
+            if (!collectionsState.listItems[newItem.list_id]) {
+              collectionsState.listItems[newItem.list_id] = new Set();
+            }
+            collectionsState.listItems[newItem.list_id].add(newItem.word_id);
+
+            // Если мы сейчас смотрим этот список — обновляем экран
+            if (collectionsState.currentCollectionFilter === newItem.list_id) {
+              render();
+            }
+            // Обновляем счетчики в меню коллекций
+            import("./ui/ui_collections.ts").then((m) =>
+              m.updateCollectionUI(),
+            );
+          });
+        }
+      },
+    )
+    .subscribe();
 }
 
 async function init() {
@@ -838,6 +890,11 @@ async function init() {
   console.log("⏳ Fetching vocabulary...");
   await fetchVocabulary();
   console.log("✅ Vocabulary fetched");
+
+  // FIX: Фильтруем удаленные слова, чтобы они не появлялись в списке после перезагрузки
+  if (state.dataStore) {
+    state.dataStore = state.dataStore.filter((w: any) => !w.deleted_at);
+  }
 
   if (!state.dataStore || state.dataStore.length === 0) {
     throw new Error("Не удалось загрузить данные. Проверьте интернет.");
@@ -887,18 +944,15 @@ async function init() {
 
       try {
         if (session?.user) {
-          updateAuthUI(session.user);
           updateAuthUI(session.user as any as User);
           if (event === "SIGNED_IN") {
             cleanAuthUrl();
-            await loadFromSupabase(session.user);
             await loadFromSupabase(session.user as any as User);
             applyTheme();
             updateVoiceUI();
             saveAndRender();
             closeModal("login-modal");
             import("./ui/ui_collections.ts").then((m) => m.loadCollections());
-            showWelcomeScreen(session.user);
             showWelcomeScreen(session.user as any as User);
           }
           if (event === "PASSWORD_RECOVERY") {
@@ -926,13 +980,10 @@ async function init() {
 
   const session = data.session;
   if (session) {
-    updateAuthUI(session.user);
     updateAuthUI(session.user as any as User);
     cleanAuthUrl();
-    await loadFromSupabase(session.user);
     await loadFromSupabase(session.user as any as User);
     import("./ui/ui_collections.ts").then((m) => m.loadCollections());
-    showWelcomeScreen(session.user);
     showWelcomeScreen(session.user as any as User);
   } else {
     updateAuthUI(null);
@@ -948,6 +999,9 @@ async function init() {
   updateSRSBadge();
   updateVoiceUI();
   applyTheme();
+  if (canClaimDailyReward()) {
+    claimDailyReward(); // Автоматически проверяем и выдаем ежедневную награду
+  }
   checkAutoTheme();
   updateDailyChallengeUI();
   checkSuperChallengeNotification();

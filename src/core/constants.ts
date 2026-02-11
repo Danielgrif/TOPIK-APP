@@ -17,6 +17,7 @@ export const LS_KEYS = {
   CUSTOM_WORDS: "custom_words_v1",
   FAVORITE_QUOTES: "favorite_quotes_v1",
   TRASH_RETENTION: "trash_retention_v1",
+  PURCHASED_ITEMS: "purchased_items_v1",
   VOCAB_CACHE: "vocabulary_cache_v1",
   VOCAB_VERSION: "vocabulary_version",
   SEARCH_HISTORY: "search_history_v1",

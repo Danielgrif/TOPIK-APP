@@ -7,7 +7,7 @@ import {
   escapeHtml,
 } from "../utils/utils.ts";
 import { ensureSessionStarted, playAndSpeak, saveAndRender } from "./ui.ts";
-import { closeModal, openModal } from "./ui_modal.ts";
+import { closeModal, openModal, openConfirm } from "./ui_modal.ts";
 import { recordAttempt, scheduleSaveState } from "../core/db.ts";
 import { addXP, checkAchievements } from "../core/stats.ts";
 import { applyBackgroundMusic } from "./ui_settings.ts";
@@ -1049,16 +1049,38 @@ function endQuiz(forceEnd: boolean = false) {
   }
 }
 
-export function quitQuiz() {
-  if (quizInterval) {
-    clearInterval(quizInterval);
-    quizInterval = null;
+export function quitQuiz(skipConfirm: boolean = false) {
+  const doQuit = () => {
+    if (quizInterval) {
+      clearInterval(quizInterval);
+      quizInterval = null;
+    }
+    if (advanceTimer) {
+      clearTimeout(advanceTimer);
+      advanceTimer = null;
+    }
+    endQuiz(true); // FIX: Ручной выход теперь считается принудительным завершением
+  };
+
+  if (skipConfirm) {
+    doQuit();
+    return;
   }
-  if (advanceTimer) {
-    clearTimeout(advanceTimer);
-    advanceTimer = null;
-  }
-  endQuiz(true); // FIX: Ручной выход теперь считается принудительным завершением
+
+  isQuizPaused = true;
+  openConfirm(
+    "Вы уверены, что хотите прервать тренировку?",
+    () => {
+      doQuit();
+    },
+    {
+      confirmText: "Прервать",
+      cancelText: "Продолжить",
+      onCancel: () => {
+        isQuizPaused = false;
+      },
+    },
+  );
 }
 
 export function updateQuizCount() {
@@ -1295,3 +1317,10 @@ function updateComboUI(streak: number | undefined) {
     setTimeout(() => openDailyStatusModal(), 300);
   }
 };
+
+declare global {
+  interface Window {
+    quitQuiz: typeof quitQuiz;
+  }
+}
+window.quitQuiz = quitQuiz;

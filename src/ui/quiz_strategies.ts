@@ -708,7 +708,7 @@ export const QuizStrategies: Record<string, Strategy> = {
       const pairs = findAssociations();
       if (pairs.length < 5) {
         qEl.innerText = "Недостаточно слов для этого режима.";
-        setTimeout(() => window.quitQuiz(), 1500);
+        setTimeout(() => window.quitQuiz(true), 1500);
         return;
       }
 

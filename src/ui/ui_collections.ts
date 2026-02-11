@@ -1,4 +1,5 @@
 /* eslint-disable no-console, @typescript-eslint/no-explicit-any */
+import { state } from "../core/state.ts";
 import { client } from "../core/supabaseClient.ts";
 import { showToast, showUndoToast, escapeHtml } from "../utils/utils.ts";
 import { render } from "./ui_card.ts";
@@ -28,6 +29,35 @@ export async function loadCollections() {
     return;
   }
   collectionsState.userLists = lists || [];
+
+  // Применяем сохраненный порядок сортировки
+  const savedOrder = localStorage.getItem("user_lists_order");
+  if (savedOrder) {
+    try {
+      const order = JSON.parse(savedOrder);
+
+      // Валидация: убеждаемся, что это массив строк
+      if (
+        Array.isArray(order) &&
+        order.every((item) => typeof item === "string")
+      ) {
+        const orderMap = new Map<string, number>(
+          (order as string[]).map((id, index) => [id, index]),
+        );
+        collectionsState.userLists.sort((a, b) => {
+          const ia = orderMap.get(a.id) ?? 9999;
+          const ib = orderMap.get(b.id) ?? 9999;
+          return ia - ib;
+        });
+      } else {
+        console.warn("Invalid list order format in localStorage. Ignoring.");
+        localStorage.removeItem("user_lists_order"); // Очищаем некорректные данные
+      }
+    } catch (e) {
+      console.warn("Failed to parse list order", e);
+      localStorage.removeItem("user_lists_order"); // Очищаем некорректные данные
+    }
+  }
 
   // 2. Загружаем содержимое списков
   // Оптимизация: загружаем только для видимых списков, но пока загрузим всё для простоты
@@ -178,6 +208,9 @@ export function deleteList(listId: string, btn?: HTMLElement) {
       },
       async () => {
         // Commit
+        // Ручная очистка элементов списка перед удалением самого списка (для надежности)
+        await client.from(DB_TABLES.LIST_ITEMS).delete().eq("list_id", listId);
+
         const { error } = await client
           .from(DB_TABLES.USER_LISTS)
           .delete()
@@ -263,30 +296,47 @@ export function updateCollectionUI() {
       const myId = session?.user?.id;
       const lists = collectionsState.userLists || [];
 
+      // Filter lists
+      const myLists = lists.filter((l: UserList) => l.user_id === myId);
+      const publicLists = lists.filter((l: UserList) => l.user_id !== myId);
+
+      // Count custom words (assuming words have user_id)
+      const myCustomWordsCount = state.dataStore.filter(
+        (w: any) => w.user_id === myId,
+      ).length;
+
       let html = "";
 
-      // Добавляем опцию "Без списка" для поиска потерянных слов
-      html += `
-        <div class="collection-item-card" style="background: var(--surface-2); border: 1px dashed var(--border-color); margin-bottom: 10px;">
-            <div onclick="window.setCollectionFilter('uncategorized')" style="flex: 1; display: flex; align-items: center; gap: 10px; min-width: 0; cursor: pointer;" title="Показать слова без списка">
-                <span style="font-size: 24px; flex-shrink: 0;">📦</span>
-                <div style="display: flex; flex-direction: column; min-width: 0;">
-                    <span style="font-weight: bold; font-size: 15px;">Без списка</span>
-                    <span style="font-size: 11px; color: var(--text-sub);">Слова, не входящие ни в одну коллекцию</span>
+      // --- Section: My Content ---
+      html += `<div class="section-title-sm" style="margin-top: 0;">👤 Мои материалы</div>`;
+
+      // 1. My Custom Words (Virtual List)
+      if (myCustomWordsCount > 0) {
+        html += `
+        <div class="collection-item-card special">
+            <div class="collection-word-count">${myCustomWordsCount} слов</div>
+            <div class="collection-info" onclick="window.setCollectionFilter('my-custom', event)" title="Показать мои слова">
+                <div class="collection-icon" style="background: rgba(124, 58, 237, 0.1); color: var(--primary);">✍️</div>
+                <div class="collection-text">
+                    <div class="collection-title" style="color: var(--primary);">Мои слова</div>
+                    <div class="collection-meta">Созданные вами слова</div>
                 </div>
+            </div>
+            <div class="collection-actions">
+                <button class="btn-collection-action" onclick="window.manageMyWords(event)" title="Выбрать несколько" style="background: var(--surface-1); color: var(--primary);">✅</button>
             </div>
         </div>
         `;
+      }
 
-      if (lists.length === 0) {
+      // 2. My Lists
+      if (myLists.length === 0) {
         html +=
-          '<div style="text-align:center; padding:20px; color:var(--text-sub);">У вас пока нет списков</div>';
+          '<div style="text-align:center; padding:15px; color:var(--text-sub); font-size: 13px; background: var(--surface-2); border-radius: 12px; margin-bottom: 15px;">У вас нет личных списков</div>';
       } else {
-        html += lists
+        html += '<div id="my-lists-container">';
+        html += myLists
           .map((list: UserList) => {
-            const isMine = list.user_id === myId;
-            if (!isMine) return ""; // В управлении показываем только свои
-
             // Safe escaping for onclick handlers
             const safeTitle = list.title
               .replace(/\\/g, "\\\\")
@@ -298,25 +348,51 @@ export function updateCollectionUI() {
               .replace(/"/g, "&quot;");
 
             return `
-                <div class="collection-item-card">
-                    <div onclick="window.setCollectionFilter('${list.id}')" style="flex: 1; display: flex; align-items: center; gap: 10px; min-width: 0; cursor: pointer;" title="Открыть список">
-                        <span style="font-size: 24px; flex-shrink: 0;">${escapeHtml(list.icon || "📁")}</span>
-                        <div style="display: flex; flex-direction: column; min-width: 0;">
-                            <span style="font-weight: bold; font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${escapeHtml(list.title)}</span>
-                            <span style="font-size: 11px; color: var(--text-sub); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${list.is_public ? "🌐 Публичный" : "🔒 Личный"} • Слов: ${collectionsState.listItems[list.id]?.size || 0}</span>
+                <div class="collection-item-card" draggable="true" data-list-id="${list.id}">
+                    <div class="collection-word-count">${collectionsState.listItems[list.id]?.size || 0} слов</div>
+                    <div class="collection-info" onclick="window.setCollectionFilter('${list.id}', event)" title="Открыть список">
+                        <div class="collection-icon">${escapeHtml(list.icon || "📁")}</div>
+                        <div class="collection-text">
+                            <div class="collection-title">${escapeHtml(list.title)}</div>
+                            <div class="collection-meta">${list.is_public ? "🌐 Публичный" : "🔒 Личный"}</div>
                         </div>
                     </div>
-                    <div style="display: flex; gap: 8px; flex-shrink: 0;">
-                        <button class="btn-icon" onclick="window.openEditListModal('${list.id}', '${safeTitle}', '${safeIcon}')" title="Редактировать" style="width: 36px; height: 36px; font-size: 16px; background: var(--surface-3);">✏️</button>
-                        <button class="btn-icon" data-action="open-add-word-modal" data-value="${list.id}" title="Добавить слово в этот список" style="width: 36px; height: 36px; font-size: 16px; background: var(--surface-3);">➕</button>
-                        <button class="btn-icon" onclick="window.deleteList('${list.id}', this)" title="Удалить список" style="width: 36px; height: 36px; font-size: 16px; color: var(--danger); background: rgba(255,0,0,0.05);">🗑️</button>
+                    <div class="collection-actions">
+                        <button class="btn-collection-action" onclick="window.openEditListModal('${list.id}', '${safeTitle}', '${safeIcon}')" title="Редактировать">✏️</button>
+                        <button class="btn-collection-action" data-action="open-add-word-modal" data-value="${list.id}" title="Добавить слово">➕</button>
+                        <button class="btn-collection-action delete" onclick="window.deleteList('${list.id}', this)" title="Удалить">🗑️</button>
+                    </div>
+                </div>
+                `;
+          })
+          .join("");
+        html += "</div>";
+      }
+
+      // --- Section: Public Lists ---
+      if (publicLists.length > 0) {
+        html += `<div class="section-title-sm" style="margin-top: 20px;">🌐 Общие списки</div>`;
+        html += publicLists
+          .map((list: UserList) => {
+            // For public lists, we might not allow editing/deleting, just viewing
+            return `
+                <div class="collection-item-card">
+                    <div class="collection-word-count">${collectionsState.listItems[list.id]?.size || 0} слов</div>
+                    <div class="collection-info" onclick="window.setCollectionFilter('${list.id}', event)">
+                        <div class="collection-icon">${escapeHtml(list.icon || "📁")}</div>
+                        <div class="collection-text">
+                            <div class="collection-title">${escapeHtml(list.title)}</div>
+                            <div class="collection-meta">Автор: ${list.user_id ? "Пользователь" : "Система"}</div>
+                        </div>
                     </div>
                 </div>
                 `;
           })
           .join("");
       }
+
       container.innerHTML = html;
+      setupCollectionDragAndDrop(container);
     });
   }
 
@@ -346,33 +422,239 @@ export function updateCollectionUI() {
   if (filterBtn) {
     if (collectionsState.currentCollectionFilter) {
       if (collectionsState.currentCollectionFilter === "uncategorized") {
-        filterBtn.innerHTML = `<span>📦 Без списка</span> <span>✕</span>`;
+        filterBtn.innerHTML = `<span>📦 Без списка</span> <span style="opacity: 0.6;">✕</span>`;
+        filterBtn.onclick = (e) => {
+          e.stopPropagation();
+          setCollectionFilter(null);
+        };
+      } else if (collectionsState.currentCollectionFilter === "my-custom") {
+        filterBtn.innerHTML = `<span>✍️ Мои слова</span> <span style="opacity: 0.6;">✕</span>`;
+        filterBtn.onclick = (e) => {
+          e.stopPropagation();
+          setCollectionFilter(null);
+        };
       } else {
         const list = collectionsState.userLists.find(
           (l: UserList) => l.id === collectionsState.currentCollectionFilter,
         );
-        filterBtn.innerHTML = `<span>${escapeHtml(list?.icon || "📁")} ${escapeHtml(list?.title || "Список")}</span> <span>✕</span>`;
+        const isOwner =
+          list && state.currentUser && list.user_id === state.currentUser.id;
+
+        if (isOwner && list) {
+          filterBtn.innerHTML = `<span onclick="window.editListTitleInline('${list.id}', this, event)" style="cursor: text; border-bottom: 1px dashed var(--text-tertiary); padding-bottom: 1px;" title="Нажмите для переименования">${escapeHtml(list.icon || "📁")} ${escapeHtml(list.title)}</span> <span onclick="window.clearCollectionFilter(event)" style="opacity: 0.6; padding: 4px 8px; cursor: pointer; margin-left: 5px;">✕</span>`;
+          filterBtn.onclick = null;
+        } else {
+          filterBtn.innerHTML = `<span>${escapeHtml(list?.icon || "📁")} ${escapeHtml(list?.title || "Список")}</span> <span style="opacity: 0.6;">✕</span>`;
+          filterBtn.onclick = (e) => {
+            e.stopPropagation();
+            setCollectionFilter(null);
+          };
+        }
       }
-      filterBtn.onclick = (e) => {
-        e.stopPropagation();
-        setStateFilter(null);
-        updateCollectionUI();
-        render();
-      };
     } else {
       filterBtn.innerHTML = `<span>Все слова</span> <span>›</span>`;
-      filterBtn.onclick = () => openModal("collections-modal"); // Или отдельное окно выбора для фильтрации
+      filterBtn.onclick = () => openModal("collections-modal");
     }
   }
 }
 
-export function setCollectionFilter(listId: string) {
-  setStateFilter(listId);
-  updateCollectionUI();
-  render();
-  closeModal("collections-modal");
+export function setCollectionFilter(listId: string | null, e?: Event) {
+  const execute = () => {
+    setStateFilter(listId);
+    updateCollectionUI();
+    render();
+    closeModal("collections-modal");
 
-  if (listId === "uncategorized") {
-    showToast("💡 Нажмите ☑️ чтобы выбрать и удалить слова", 4000);
+    // Custom filter logic for "My Words"
+    if (listId === "my-custom") {
+      client.auth.getUser().then(({ data: { user } }) => {
+        if (user) {
+          showToast("Показаны только ваши слова");
+        }
+      });
+    }
+  };
+
+  if (e) {
+    const card = (e.currentTarget as HTMLElement).closest(
+      ".collection-item-card",
+    );
+    if (card) {
+      card.classList.add("active-selection");
+      // Небольшая задержка для отображения анимации перед закрытием
+      setTimeout(execute, 200);
+      return;
+    }
+  }
+
+  execute();
+}
+
+export function manageMyWords(e: Event) {
+  e.stopPropagation();
+  setCollectionFilter("my-custom");
+  import("./ui_bulk.ts").then((m) => {
+    if (!state.selectMode) m.toggleSelectMode();
+  });
+}
+
+export function clearCollectionFilter(e: Event) {
+  e.stopPropagation();
+  setCollectionFilter(null);
+}
+
+export function editListTitleInline(listId: string, el: HTMLElement, e: Event) {
+  e.stopPropagation();
+  const list = collectionsState.userLists.find((l) => l.id === listId);
+  if (!list) return;
+
+  const currentTitle = list.title;
+  const input = document.createElement("input");
+  input.type = "text";
+  input.value = currentTitle;
+  input.className = "inline-edit-input";
+  input.style.cssText =
+    "width: 120px; padding: 2px 4px; border: 1px solid var(--primary); border-radius: 6px; font-size: inherit; background: var(--surface-1); color: var(--text-main); outline: none;";
+
+  input.onclick = (ev) => ev.stopPropagation();
+
+  const save = async () => {
+    const newTitle = input.value.trim();
+    if (newTitle && newTitle !== currentTitle) {
+      list.title = newTitle;
+      updateCollectionUI();
+
+      const { error } = await client
+        .from(DB_TABLES.USER_LISTS)
+        .update({ title: newTitle })
+        .eq("id", listId);
+
+      if (error) {
+        showToast("Ошибка: " + error.message);
+        list.title = currentTitle;
+        updateCollectionUI();
+      } else {
+        showToast("Список переименован");
+      }
+    } else {
+      updateCollectionUI();
+    }
+  };
+
+  input.onblur = save;
+  input.onkeydown = (ev) => {
+    if (ev.key === "Enter") input.blur();
+  };
+
+  el.replaceWith(input);
+  input.focus();
+}
+
+// --- Drag and Drop Logic ---
+let draggedItem: HTMLElement | null = null;
+
+function setupCollectionDragAndDrop(container: HTMLElement) {
+  const items = container.querySelectorAll(
+    '.collection-item-card[draggable="true"]',
+  );
+  items.forEach((item) => {
+    item.addEventListener("dragstart", handleDragStart);
+    item.addEventListener("dragover", handleDragOver);
+    item.addEventListener("drop", handleDrop);
+    item.addEventListener("dragenter", handleDragEnter);
+    item.addEventListener("dragleave", handleDragLeave);
+    item.addEventListener("dragend", handleDragEnd);
+  });
+}
+
+function handleDragStart(e: Event) {
+  const target = e.target as HTMLElement;
+  draggedItem = target;
+  (e as DragEvent).dataTransfer!.effectAllowed = "move";
+  // Небольшая задержка для визуального эффекта
+  setTimeout(() => target.classList.add("dragging"), 0);
+}
+
+function handleDragOver(e: Event) {
+  e.preventDefault();
+  (e as DragEvent).dataTransfer!.dropEffect = "move";
+  const target = (e.target as HTMLElement).closest(".collection-item-card");
+  if (target && target !== draggedItem) {
+    target.classList.add("drag-over");
   }
 }
+
+function handleDragEnter(e: Event) {
+  e.preventDefault();
+}
+
+function handleDragLeave(e: Event) {
+  const target = (e.target as HTMLElement).closest(".collection-item-card");
+  if (target) {
+    target.classList.remove("drag-over");
+  }
+}
+
+function handleDrop(e: Event) {
+  e.stopPropagation();
+  const target = (e.target as HTMLElement).closest(
+    ".collection-item-card",
+  ) as HTMLElement;
+
+  if (draggedItem && target && target !== draggedItem) {
+    const listId1 = draggedItem.dataset.listId;
+    const listId2 = target.dataset.listId;
+
+    if (listId1 && listId2) {
+      const idx1 = collectionsState.userLists.findIndex(
+        (l) => l.id === listId1,
+      );
+      const idx2 = collectionsState.userLists.findIndex(
+        (l) => l.id === listId2,
+      );
+
+      if (idx1 > -1 && idx2 > -1) {
+        const [moved] = collectionsState.userLists.splice(idx1, 1);
+        collectionsState.userLists.splice(idx2, 0, moved);
+
+        // Сохраняем порядок
+        const ids = collectionsState.userLists.map((l) => l.id);
+        localStorage.setItem("user_lists_order", JSON.stringify(ids));
+
+        updateCollectionUI();
+      }
+    }
+  }
+  return false;
+}
+
+function handleDragEnd(e: Event) {
+  const target = e.target as HTMLElement;
+  target.classList.remove("dragging");
+  document.querySelectorAll(".collection-item-card").forEach((el) => {
+    el.classList.remove("drag-over");
+  });
+  draggedItem = null;
+}
+
+declare global {
+  interface Window {
+    deleteList: typeof deleteList;
+    openEditListModal: typeof openEditListModal;
+    setCollectionFilter: typeof setCollectionFilter;
+    saveListChanges: typeof saveListChanges;
+    createList: typeof createList;
+    manageMyWords: typeof manageMyWords;
+    editListTitleInline: typeof editListTitleInline;
+    clearCollectionFilter: typeof clearCollectionFilter;
+  }
+}
+
+window.deleteList = deleteList;
+window.openEditListModal = openEditListModal;
+window.setCollectionFilter = setCollectionFilter;
+window.saveListChanges = saveListChanges;
+window.createList = createList;
+window.manageMyWords = manageMyWords;
+window.editListTitleInline = editListTitleInline;
+window.clearCollectionFilter = clearCollectionFilter;

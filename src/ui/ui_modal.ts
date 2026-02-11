@@ -112,6 +112,7 @@ export function openConfirm(
     onValidate?: (value: string) => boolean | Promise<boolean>;
     showCopy?: boolean;
     copyText?: string;
+    showCancel?: boolean;
   } = {},
 ) {
   const modal = document.getElementById("confirm-modal");
@@ -138,6 +139,8 @@ export function openConfirm(
   msgEl.innerHTML = message.replace(/\n/g, "<br>");
   yesBtn.textContent = options.confirmText || "Подтвердить";
   noBtn.textContent = options.cancelText || "Отмена";
+
+  noBtn.style.display = options.showCancel === false ? "none" : "";
 
   inputContainer.style.display = options.showInput ? "block" : "none";
   if (options.showInput) {
@@ -179,9 +182,25 @@ export function openConfirm(
   };
 
   openModal("confirm-modal");
-  (options.showInput ? inputEl : yesBtn).focus();
+  if (options.showInput) {
+    inputEl.focus();
+  } else if (options.showCancel !== false) {
+    noBtn.focus();
+  } else {
+    yesBtn.focus();
+  }
 }
 
 export function closeConfirm() {
   closeModal("confirm-modal");
 }
+
+declare global {
+  interface Window {
+    openModal: typeof openModal;
+    closeModal: typeof closeModal;
+  }
+}
+
+window.openModal = openModal;
+window.closeModal = closeModal;

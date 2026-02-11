@@ -108,12 +108,20 @@ export function immediateSaveState() {
       JSON.stringify(state.customWords),
     );
     localStorage.setItem(
+      LS_KEYS.WORD_REQUESTS,
+      JSON.stringify(state.wordRequests),
+    );
+    localStorage.setItem(
       LS_KEYS.FAVORITE_QUOTES,
       JSON.stringify(state.favoriteQuotes),
     );
     localStorage.setItem(
       LS_KEYS.TRASH_RETENTION,
       String(state.trashRetentionDays),
+    );
+    localStorage.setItem(
+      LS_KEYS.PURCHASED_ITEMS,
+      JSON.stringify(state.purchasedItems),
     );
     // Не сжимаем, чтобы избежать ошибок с Unicode
     localStorage.setItem(LS_KEYS.VOCAB_CACHE, JSON.stringify(state.dataStore));
@@ -166,8 +174,21 @@ export function updateStreak() {
 
     if (state.streak.lastDate === yesterday) state.streak.count++;
     else {
-      if (state.userStats.streakFreeze > 0) {
-        state.userStats.streakFreeze--;
+      // Check if freeze was already used today (e.g. by Shop)
+      const lastFreeze = state.userStats.lastFreezeDate
+        ? new Date(state.userStats.lastFreezeDate).toLocaleDateString("en-CA")
+        : null;
+      const freezeUsedToday = lastFreeze === today;
+
+      if (
+        state.streak.count > 0 &&
+        state.streak.lastDate &&
+        (state.userStats.streakFreeze > 0 || freezeUsedToday)
+      ) {
+        if (!freezeUsedToday) {
+          state.userStats.streakFreeze--;
+          state.userStats.lastFreezeDate = Date.now();
+        }
         showToast("❄️ Заморозка спасла серию!");
         state.streak.count++;
       } else {
@@ -175,7 +196,7 @@ export function updateStreak() {
       }
     }
     state.streak.lastDate = today;
-    localStorage.setItem(LS_KEYS.STREAK, JSON.stringify(state.streak));
+    scheduleSaveState();
   }
 }
 
@@ -400,72 +421,84 @@ export async function loadFromSupabase(user: { id: string }) {
 
       if (globalData.settings) {
         const s = globalData.settings;
-        if (s.darkMode !== undefined) {
-          state.darkMode = s.darkMode;
-          localStorage.setItem(LS_KEYS.DARK_MODE, String(state.darkMode));
-        }
-        if (s.hanjaMode !== undefined) {
-          state.hanjaMode = s.hanjaMode;
-          localStorage.setItem(LS_KEYS.HANJA_MODE, String(state.hanjaMode));
-        }
-        if (s.audioSpeed !== undefined) {
-          state.audioSpeed = s.audioSpeed;
-          localStorage.setItem(LS_KEYS.AUDIO_SPEED, String(state.audioSpeed));
-        }
-        if (s.currentVoice !== undefined) {
-          state.currentVoice = s.currentVoice;
-          localStorage.setItem(LS_KEYS.VOICE_PREF, state.currentVoice);
-        }
-        if (s.autoUpdate !== undefined) {
-          state.autoUpdate = s.autoUpdate;
-          localStorage.setItem(LS_KEYS.AUTO_UPDATE, String(state.autoUpdate));
-        }
-        if (s.autoTheme !== undefined) {
-          state.autoTheme = s.autoTheme;
-          localStorage.setItem(LS_KEYS.AUTO_THEME, String(state.autoTheme));
-        }
-        if (s.studyGoal !== undefined) {
-          state.studyGoal = s.studyGoal;
-          localStorage.setItem(
-            LS_KEYS.STUDY_GOAL,
-            JSON.stringify(state.studyGoal),
-          );
-        }
-        if (s.lastDailyReward !== undefined)
-          state.userStats.lastDailyReward = s.lastDailyReward;
-        if (s.themeColor !== undefined) {
-          state.themeColor = s.themeColor;
-          localStorage.setItem(LS_KEYS.THEME_COLOR, state.themeColor);
-        }
-        if (s.backgroundMusicEnabled !== undefined) {
-          state.backgroundMusicEnabled = s.backgroundMusicEnabled;
-          localStorage.setItem(
-            LS_KEYS.MUSIC_ENABLED,
-            String(state.backgroundMusicEnabled),
-          );
-        }
-        if (s.backgroundMusicVolume !== undefined) {
-          state.backgroundMusicVolume = s.backgroundMusicVolume;
-          localStorage.setItem(
-            LS_KEYS.MUSIC_VOLUME,
-            String(state.backgroundMusicVolume),
-          );
-        }
-        if (s.ttsVolume !== undefined) {
-          state.ttsVolume = s.ttsVolume;
-          localStorage.setItem(LS_KEYS.TTS_VOLUME, String(state.ttsVolume));
-        }
-        if (s.trashRetentionDays !== undefined) {
-          state.trashRetentionDays = s.trashRetentionDays;
-          localStorage.setItem(
-            LS_KEYS.TRASH_RETENTION,
-            String(state.trashRetentionDays),
-          );
-        }
-        if (s.streakLastDate !== undefined)
-          state.streak.lastDate = s.streakLastDate;
-        if (s.survivalHealth !== undefined)
-          state.userStats.survivalHealth = s.survivalHealth;
+        const cloudTime = s.settingsUpdatedAt || 0;
+        const localTime = state.settingsUpdatedAt || 0;
+
+        // FIX: Применяем настройки из облака ТОЛЬКО если они новее локальных.
+        // Это решает проблему сброса настроек при перезагрузке, если синхронизация еще не прошла.
+        if (cloudTime >= localTime) {
+          state.settingsUpdatedAt = cloudTime;
+          localStorage.setItem("settings_updated_at", String(cloudTime));
+
+          if (s.darkMode !== undefined) {
+            state.darkMode = s.darkMode;
+            localStorage.setItem(LS_KEYS.DARK_MODE, String(state.darkMode));
+          }
+          if (s.hanjaMode !== undefined) {
+            state.hanjaMode = s.hanjaMode;
+            localStorage.setItem(LS_KEYS.HANJA_MODE, String(state.hanjaMode));
+          }
+          if (s.audioSpeed !== undefined) {
+            state.audioSpeed = s.audioSpeed;
+            localStorage.setItem(LS_KEYS.AUDIO_SPEED, String(state.audioSpeed));
+          }
+          if (s.currentVoice !== undefined) {
+            state.currentVoice = s.currentVoice;
+            localStorage.setItem(LS_KEYS.VOICE_PREF, state.currentVoice);
+          }
+          if (s.autoUpdate !== undefined) {
+            state.autoUpdate = s.autoUpdate;
+            localStorage.setItem(LS_KEYS.AUTO_UPDATE, String(state.autoUpdate));
+          }
+          if (s.autoTheme !== undefined) {
+            state.autoTheme = s.autoTheme;
+            localStorage.setItem(LS_KEYS.AUTO_THEME, String(state.autoTheme));
+          }
+          if (s.studyGoal !== undefined) {
+            state.studyGoal = s.studyGoal;
+            localStorage.setItem(
+              LS_KEYS.STUDY_GOAL,
+              JSON.stringify(state.studyGoal),
+            );
+          }
+          if (s.lastDailyReward !== undefined)
+            state.userStats.lastDailyReward = s.lastDailyReward;
+          if (s.themeColor !== undefined) {
+            state.themeColor = s.themeColor;
+            localStorage.setItem(LS_KEYS.THEME_COLOR, state.themeColor);
+          }
+          if (s.backgroundMusicEnabled !== undefined) {
+            state.backgroundMusicEnabled = s.backgroundMusicEnabled;
+            localStorage.setItem(
+              LS_KEYS.MUSIC_ENABLED,
+              String(state.backgroundMusicEnabled),
+            );
+          }
+          if (s.backgroundMusicVolume !== undefined) {
+            state.backgroundMusicVolume = s.backgroundMusicVolume;
+            localStorage.setItem(
+              LS_KEYS.MUSIC_VOLUME,
+              String(state.backgroundMusicVolume),
+            );
+          }
+          if (s.ttsVolume !== undefined) {
+            state.ttsVolume = s.ttsVolume;
+            localStorage.setItem(LS_KEYS.TTS_VOLUME, String(state.ttsVolume));
+          }
+          if (s.trashRetentionDays !== undefined) {
+            state.trashRetentionDays = s.trashRetentionDays;
+            localStorage.setItem(
+              LS_KEYS.TRASH_RETENTION,
+              String(state.trashRetentionDays),
+            );
+          }
+          if (s.streakLastDate !== undefined)
+            state.streak.lastDate = s.streakLastDate;
+          if (s.survivalHealth !== undefined)
+            state.userStats.survivalHealth = s.survivalHealth;
+          if (s.lastFreezeDate !== undefined)
+            state.userStats.lastFreezeDate = s.lastFreezeDate;
+        } // End of timestamp check
       }
 
       if (globalData.sessions && Array.isArray(globalData.sessions)) {
@@ -529,7 +562,7 @@ export async function loadFromSupabase(user: { id: string }) {
     }
 
     cleanupInvalidStateIds();
-    immediateSaveState();
+    scheduleSaveState();
     showToast("✅ Профиль загружен");
   } catch (e) {
     console.error("Load Error:", e);

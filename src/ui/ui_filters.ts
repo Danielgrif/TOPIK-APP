@@ -31,7 +31,20 @@ function getWordsByType(type: string): Word[] {
 }
 
 export function setupFilterBehavior() {
-  // No specific global click listeners needed for the new modal-based approach
+  setupSortButtons();
+}
+
+function setupSortButtons() {
+  const container = document.querySelector(".sort-actions");
+  if (!container) return;
+
+  if (!container.querySelector('[data-action="sort-level"]')) {
+    const btn = document.createElement("div");
+    btn.className = "sort-btn";
+    btn.setAttribute("data-action", "sort-level");
+    btn.innerHTML = `<span class="sort-icon">⭐</span><span>По сложности</span>`;
+    container.appendChild(btn);
+  }
 }
 
 export function toggleFilterPanel() {

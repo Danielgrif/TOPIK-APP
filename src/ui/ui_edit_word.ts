@@ -64,6 +64,55 @@ export function openEditWordModal(id: string | number, onUpdate?: () => void) {
   if (topicInput) topicInput.value = topic;
   if (catInput) catInput.value = category;
 
+  // Inject Level Selector if not present
+  let levelSelect = document.getElementById(
+    "edit-word-level",
+  ) as HTMLSelectElement;
+  if (!levelSelect && catInput) {
+    const container = document.createElement("div");
+    container.style.marginTop = "15px";
+    container.innerHTML = `
+      <label style="display:block; font-size:12px; font-weight:bold; color:var(--text-tertiary); margin-bottom:5px;">УРОВЕНЬ СЛОЖНОСТИ</label>
+      <select id="edit-word-level" class="auth-input" style="width:100%;">
+        <option value="★☆☆">Высокий (★)</option>
+        <option value="★★☆">Средний (★★)</option>
+        <option value="★★★">Начальный (★★★)</option>
+      </select>
+    `;
+    catInput.parentNode?.insertBefore(container, catInput.nextSibling);
+    levelSelect = document.getElementById(
+      "edit-word-level",
+    ) as HTMLSelectElement;
+  }
+
+  if (levelSelect) {
+    // Default to 'High' (★☆☆) if not set, or match existing
+    // Logic: 1 star = High, 3 stars = Low
+    levelSelect.value = word.level || "★☆☆";
+  }
+
+  // Inject Grammar Info if not present
+  let grammarInput = document.getElementById(
+    "edit-word-grammar",
+  ) as HTMLTextAreaElement;
+  if (!grammarInput && catInput && catInput.parentNode) {
+    const container = document.createElement("div");
+    container.style.marginTop = "15px";
+    container.innerHTML = `
+      <label style="display:block; font-size:12px; font-weight:bold; color:var(--text-tertiary); margin-bottom:5px;">ГРАММАТИКА / ИНФО</label>
+      <textarea id="edit-word-grammar" class="auth-input" style="width:100%; min-height:80px; resize:vertical; font-family:inherit;"></textarea>
+    `;
+    const ref = levelSelect ? levelSelect.parentNode : catInput;
+    if (ref) ref.parentNode?.insertBefore(container, ref.nextSibling);
+    grammarInput = document.getElementById(
+      "edit-word-grammar",
+    ) as HTMLTextAreaElement;
+  }
+
+  if (grammarInput) {
+    grammarInput.value = word.grammar_info || "";
+  }
+
   populateSuggestions();
   openModal("edit-word-modal");
 }
@@ -78,6 +127,12 @@ export async function saveWordChanges() {
   const catInput = document.getElementById(
     "edit-word-category",
   ) as HTMLInputElement;
+  const levelSelect = document.getElementById(
+    "edit-word-level",
+  ) as HTMLSelectElement;
+  const grammarInput = document.getElementById(
+    "edit-word-grammar",
+  ) as HTMLTextAreaElement;
 
   const id = idInput.value;
   const updates: Partial<Word> = {
@@ -85,6 +140,8 @@ export async function saveWordChanges() {
     translation: ruInput.value.trim(),
     topic: topicInput.value.trim(),
     category: catInput.value.trim(),
+    level: levelSelect ? levelSelect.value : "★☆☆",
+    grammar_info: grammarInput ? grammarInput.value.trim() : undefined,
   };
 
   if (!updates.word_kr || !updates.translation) {
@@ -159,3 +216,15 @@ export async function deleteWord() {
     }
   });
 }
+
+declare global {
+  interface Window {
+    openEditWordModal: typeof openEditWordModal;
+    saveWordChanges: typeof saveWordChanges;
+    deleteWord: typeof deleteWord;
+  }
+}
+
+window.openEditWordModal = openEditWordModal;
+window.saveWordChanges = saveWordChanges;
+window.deleteWord = deleteWord;

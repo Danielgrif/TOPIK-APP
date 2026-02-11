@@ -1,10 +1,16 @@
 import { state } from "../core/state.ts";
+import { scheduleSaveState } from "../core/db.ts";
 import { escapeHtml } from "../utils/utils.ts";
 
 export function addFailedRequest(word: string, error: string) {
   // Avoid duplicates
   if (state.wordRequests.some((r) => r.word === word && r.status === "error"))
     return;
+
+  // Deduplication: Check if word is already in the dictionary
+  if (state.dataStore.some((w) => w.word_kr === word)) {
+    return;
+  }
 
   state.wordRequests.push({
     id: Date.now(),
@@ -13,6 +19,7 @@ export function addFailedRequest(word: string, error: string) {
     error,
     timestamp: Date.now(),
   });
+  scheduleSaveState();
   renderRequestErrors();
 }
 
@@ -29,6 +36,18 @@ export function renderRequestErrors() {
     } else {
       return;
     }
+  }
+
+  // Cleanup resolved requests (if word appeared in dataStore)
+  const initialLength = state.wordRequests.length;
+  state.wordRequests = state.wordRequests.filter((req) => {
+    if (req.status !== "error") return true;
+    const exists = state.dataStore.some((w) => w.word_kr === req.word);
+    return !exists;
+  });
+
+  if (state.wordRequests.length !== initialLength) {
+    scheduleSaveState();
   }
 
   const errors = state.wordRequests.filter((r) => r.status === "error");

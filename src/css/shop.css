@@ -1,0 +1,212 @@
+.shop-modal-content {
+  max-width: 800px;
+  width: 95%;
+  padding: 0;
+  background-color: var(--surface-1);
+  border-radius: 16px;
+  overflow: hidden;
+}
+
+/* Daily Reward Section */
+#daily-reward-section {
+  padding: 20px 24px;
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--border-color);
+}
+
+.daily-reward-header {
+  font-size: 18px;
+  font-weight: bold;
+  margin-bottom: 16px;
+  color: var(--text-main);
+}
+
+.daily-reward-calendar {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 20px;
+}
+
+.reward-day {
+  flex: 1;
+  padding: 12px 8px;
+  border-radius: 12px;
+  text-align: center;
+  border: 2px solid transparent;
+  background: var(--surface-1);
+  transition: all 0.2s ease;
+  position: relative;
+}
+
+.reward-day.future { opacity: 0.5; }
+
+.shop-header {
+  padding: 20px 24px;
+  border-bottom: 1px solid var(--border-color);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: var(--surface-2);
+}
+
+.shop-header h2 {
+  margin: 0;
+  font-size: 22px;
+  color: var(--text-main);
+}
+
+.shop-points {
+  font-size: 16px;
+  font-weight: bold;
+  color: var(--primary);
+  background: var(--primary-light);
+  padding: 8px 16px;
+  border-radius: 20px;
+}
+
+.shop-tabs {
+  display: flex;
+  padding: 12px 24px;
+  gap: 10px;
+  border-bottom: 1px solid var(--border-color);
+  background: var(--surface-1);
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+.shop-tab {
+  padding: 8px 16px;
+  border-radius: 20px;
+  cursor: pointer;
+  font-weight: 500;
+  transition: all 0.2s ease;
+  border: 1px solid transparent;
+  background-color: var(--surface-2);
+  color: var(--text-sub);
+}
+
+.shop-tab:hover {
+  background-color: var(--surface-3);
+  color: var(--text-main);
+}
+
+.shop-tab.active {
+  background-color: var(--primary);
+  color: white;
+  border-color: var(--primary);
+  font-weight: bold;
+}
+
+.shop-items-container {
+  padding: 24px;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 20px;
+  max-height: 65vh;
+  overflow-y: auto;
+}
+
+.shop-item-card {
+  background: var(--surface-2);
+  border-radius: 12px;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  border: 1px solid var(--border-color);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.shop-item-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.08);
+}
+
+.shop-item-card.disabled {
+  opacity: 0.6;
+  filter: grayscale(50%);
+}
+
+.shop-item-icon {
+  font-size: 48px;
+  margin-bottom: 12px;
+  line-height: 1;
+}
+
+.shop-item-name {
+  font-size: 16px;
+  font-weight: bold;
+  color: var(--text-main);
+  margin-bottom: 8px;
+}
+
+.shop-item-desc {
+  font-size: 13px;
+  color: var(--text-sub);
+  flex-grow: 1;
+  margin-bottom: 16px;
+}
+
+.shop-item-buy-btn {
+  width: 100%;
+  font-size: 15px;
+  font-weight: bold;
+}
+
+.shop-item-buy-btn.purchased {
+  background-color: var(--success);
+  border-color: var(--success);
+  color: var(--text-inverse);
+  cursor: default;
+}
+.shop-item-buy-btn.purchased:hover {
+  background-color: var(--success);
+  border-color: var(--success);
+}
+
+.reward-day .day-number {
+  font-size: 12px;
+  font-weight: bold;
+  color: var(--text-sub);
+  margin-bottom: 8px;
+}
+
+.reward-day .day-icon {
+  font-size: 28px;
+  line-height: 1;
+  margin-bottom: 8px;
+}
+
+.reward-day .day-amount {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-main);
+}
+
+/* States */
+.reward-day.claimed {
+  opacity: 0.6;
+  background: var(--surface-3);
+}
+.reward-day.claimed::after {
+  content: '✓';
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  font-size: 14px;
+  color: var(--success);
+  font-weight: bold;
+}
+
+.reward-day.available {
+  border-color: var(--primary);
+  cursor: pointer;
+  transform: scale(1.05);
+  box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+}
+.reward-day.available:hover { transform: scale(1.1); }
+
+#next-reward-timer { text-align: center; color: var(--text-sub); font-size: 14px; margin-top: 16px; }

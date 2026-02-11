@@ -37,6 +37,21 @@ body.wrong-flash { background: #fee2e2 !important; }
 body.damage-flash { animation: damage-vignette 0.6s cubic-bezier(0.1, 0, 0.2, 1); }
 
 /* Focus Mode */
+
+/* --- Dark Theme Shop Overrides --- */
+body.dark-mode .shop-item-card:hover {
+    /* A subtle glow effect for dark mode */
+    box-shadow: 0 0 20px rgba(167, 139, 250, 0.15), 0 0 0 1px var(--primary);
+}
+
+body.dark-mode .reward-day.available {
+    box-shadow: 0 0 15px rgba(167, 139, 250, 0.3); /* --primary color with alpha */
+}
+
+body.dark-mode .shop-item-buy-btn.purchased {
+    /* Dark text on light green for better contrast */
+    color: var(--bg); 
+}
 body.focus-mode .virtual-scroll-container {
     scroll-snap-type: y mandatory;
 }

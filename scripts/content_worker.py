@@ -175,6 +175,25 @@ try:
 except Exception as e:
     logging.warning(f"⚠️ Проверка бакета изображений: {e}")
 
+# Списки для стандартизации вывода AI
+valid_topics = [
+    "Daily Life (Повседневная жизнь)", "Economics (Экономика)", "Politics (Политика)", 
+    "Society (Общество)", "Culture (Культура)", "Health (Здоровье)", 
+    "Environment (Природа/Экология)", "Science (Наука)", "Education (Образование)", 
+    "History (История)", "Art (Искусство)", "Sports (Спорт)", "Weather (Погода)", 
+    "Shopping (Покупки)", "Travel (Путешествия)", "Food (Еда)", "Work (Работа)", 
+    "Feelings (Чувства)", "Personality (Характер)", "Appearance (Внешность)", 
+    "Hobbies (Хобби)", "Other (Другое)"
+]
+
+valid_categories = [
+    "Noun (Существительное)", "Verb (Глагол)", "Adjective (Прилагательное)", 
+    "Adverb (Наречие)", "Particle (Частица)", "Suffix (Суффикс)", 
+    "Pronoun (Местоимение)", "Number (Числительное)", "Interjection (Междометие)", 
+    "Grammar (Грамматика)"
+]
+
+
 # Настройка Gemini
 if GEMINI_API_KEY:
     genai.configure(api_key=GEMINI_API_KEY)
@@ -664,27 +683,42 @@ async def process_word_request(request):
             items_to_process.append(manual_item)
         else:
             # 1. Запрос к Gemini для получения данных
-            prompt = f"""
-            Analyze the Korean word '{word_kr}'.
-            1. Check for typos. If the input looks like a typo (e.g. 'gkrry' -> '학교', or '안영' -> '안녕'), use the CORRECTED word for analysis.
-            If it has multiple distinct meanings (homonyms), return a JSON ARRAY of objects.
-            If it has a single meaning, return a single JSON object.
+            prompt = f"""You are an expert Korean language teacher for Russian speakers.
+Analyze the input: '{word_kr}'.
 
-            Each object must have the following fields:
-            - word_kr: the CORRECTED word itself
-            - translation: Russian translation (concise)
-            - word_hanja: Hanja characters (if applicable, else empty string)
-            - topic: A relevant topic category in format "Topic (Тема)" (e.g. "School (Школа)")
-            - category: Part of speech in format "Noun (Существительное)" etc.
-            - level: TOPIK level (e.g. "★☆☆", "★★☆", "★★★") based on difficulty
-            - example_kr: A simple Korean example sentence using the word
-            - example_ru: Russian translation of the example
-            - synonyms: Comma-separated synonyms (Korean)
-            - antonyms: Comma-separated antonyms (Korean)
-            - type: "word" or "grammar" (usually "word")
-            
-            Ensure the response is valid JSON.
-            """
+### 1. Identification & Correction
+- Detect if the input is Korean, a typo (e.g. 'gks' -> '한'), or Romanization (e.g. 'annyeong' -> '안녕').
+- Use the **corrected Korean word** for analysis.
+- If the input is gibberish or not a valid Korean word, return: {{"error": "Invalid input"}}
+
+### 2. Analysis Rules
+- If the word has multiple distinct meanings (homonyms), return a JSON ARRAY of objects (max 3 most common).
+- If it has a single meaning, return a single JSON object.
+- **Strictly** follow the JSON structure below. Do NOT use Markdown formatting (no ```json).
+
+### 3. JSON Structure
+Each object must have:
+- "word_kr": string (The corrected Korean word)
+- "translation": string (Concise Russian translation, 1-3 words)
+- "word_hanja": string (Hanja characters ONLY if applicable. Empty string if native Korean)
+- "topic": string (One from: {', '.join(valid_topics)})
+- "category": string (One from: {', '.join(valid_categories)})
+- "level": string (One of: "★★★" (Beginner), "★★☆" (Intermediate), "★☆☆" (Advanced))
+- "example_kr": string (A simple, natural Korean sentence using the word in **polite informal style (해요체)**)
+- "example_ru": string (Russian translation of the example)
+- "synonyms": string (Comma-separated Korean synonyms **matching this specific meaning**, max 3. Empty if none)
+- "antonyms": string (Comma-separated Korean antonyms **matching this specific meaning**, max 3. Empty if none)
+- "collocations": string (Common word pairings, e.g. "make friends", max 3)
+- "grammar_info": string (Brief usage note, conjugation tip, or Hanja meaning breakdown. E.g. "Irregular verb" or "學(learn) 校(school)")
+- "type": string ("word" or "grammar")
+
+### 4. Constraints
+- Topic/Category MUST be exactly from the provided lists. If unsure, use "Other (Другое)".
+- Examples should be suitable for the word's difficulty level.
+- Output ONLY the JSON string.
+
+Input: '{word_kr}'
+"""
             
             # Список моделей для перебора (Fallback стратегия)
             models_to_try = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-flash-latest']
@@ -723,6 +757,14 @@ async def process_word_request(request):
             except json.JSONDecodeError:
                 logging.error(f"❌ Ошибка парсинга JSON для {word_kr}")
                 supabase.table(DB_TABLES['WORD_REQUESTS']).update({'status': WORD_REQUEST_STATUS['ERROR'], 'my_notes': 'Invalid JSON'}).eq('id', req_id).execute()
+                return
+
+            if isinstance(parsed_data, dict) and parsed_data.get("error") == "Invalid input":
+                logging.warning(f"⚠️ AI rejected input '{word_kr}': Invalid input")
+                supabase.table(DB_TABLES['WORD_REQUESTS']).update({
+                    'status': WORD_REQUEST_STATUS['ERROR'],
+                    'my_notes': 'AI: Invalid input'
+                }).eq('id', req_id).execute()
                 return
 
             if isinstance(parsed_data, list):
@@ -768,6 +810,7 @@ async def process_word_request(request):
                 allowed_keys = {
                     'word_kr', 'translation', 'word_hanja', 'topic', 'category', 
                     'level', 'type', 'example_kr', 'example_ru', 'synonyms', 'antonyms',
+                    'collocations', 'grammar_info',
                     'user_id' # Добавляем поле владельца
                 }
                 # Если есть user_id в запросе, добавляем его в данные для вставки

@@ -163,6 +163,21 @@ export function sortByTopic() {
 }
 
 /**
+ * Sorts the word list by Level (Stars).
+ */
+export function sortByLevel() {
+  state.dataStore.sort((a, b) => {
+    const la = a.level || "★☆☆";
+    const lb = b.level || "★☆☆";
+    // Сортировка по строкам работает корректно для звезд: ★☆☆ (меньше) -> ★★★ (больше)
+    // Если нужно от сложного к простому (1 звезда -> 3 звезды), используем localeCompare
+    if (la !== lb) return la.localeCompare(lb);
+    return (a.word_kr || "").localeCompare(b.word_kr || "");
+  });
+  render();
+}
+
+/**
  * Sorts the word list by accuracy (weakest first).
  */
 export function sortByWeakWords() {

@@ -1,4 +1,5 @@
 export interface Word {
+  user_id: string;
   id: string | number;
   word_kr: string;
   translation: string;
@@ -40,6 +41,7 @@ export interface Achievement {
 }
 
 export interface UserStats {
+  lastFreezeDate: any;
   user_id?: string;
   xp: number;
   level: number;
@@ -48,6 +50,7 @@ export interface UserStats {
   streakFreeze: number;
   coins: number;
   lastDailyReward: number | null;
+  dailyRewardStreak: number;
   achievements: Achievement[]; // Массив объектов достижений
   survivalHealth: number;
 }
@@ -101,6 +104,16 @@ export interface Quote {
   literal_translation?: string;
   explanation?: string;
   audio_url?: string;
+}
+
+export interface ShopItem {
+  id: string;
+  name: string;
+  description: string;
+  price: number;
+  type: "theme" | "feature";
+  value: string;
+  icon: string;
 }
 
 // Minimal Supabase User interface to avoid full dependency

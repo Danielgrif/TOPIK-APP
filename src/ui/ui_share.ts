@@ -179,3 +179,11 @@ export async function shareStats(themeOverride?: string) {
     showToast("Ошибка экспорта");
   }
 }
+
+declare global {
+  interface Window {
+    shareStats: typeof shareStats;
+  }
+}
+
+window.shareStats = shareStats;

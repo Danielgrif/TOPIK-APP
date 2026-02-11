@@ -1,8 +1,7 @@
 import { state } from "./state.ts";
 import { showToast } from "../utils/utils.ts";
-import { updateStreak } from "./db.ts";
+import { updateStreak, scheduleSaveState } from "./db.ts";
 import { calculateOverallAccuracy, checkAchievements } from "./stats.ts";
-import { LS_KEYS } from "./constants.ts";
 
 let idleTimer: number | null = null;
 const IDLE_TIMEOUT = 5 * 60 * 1000; // 5 минут бездействия для паузы
@@ -90,8 +89,8 @@ export function endSession() {
   state.sessions.push(sessionData);
   if (state.sessions.length > 1000)
     state.sessions = state.sessions.slice(-1000);
-  localStorage.setItem(LS_KEYS.SESSIONS, JSON.stringify(state.sessions));
   checkAchievements();
+  scheduleSaveState();
   showToast(`✅ Сессия завершена! ${state.sessionSeconds}с`);
   if (idleTimer) clearTimeout(idleTimer);
 }

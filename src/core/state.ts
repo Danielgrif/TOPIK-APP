@@ -49,6 +49,7 @@ export interface AppState {
   selectMode: boolean;
   selectedWords: Set<string | number>;
   wordRequests: WordRequestState[];
+  purchasedItems: string[];
 
   currentStar: string;
   currentTopic: string[];
@@ -81,6 +82,7 @@ export interface AppState {
   sessionInterval: number | null;
   sessionWordsReviewed: number;
   currentUser: User | null;
+  settingsUpdatedAt: number;
 }
 
 export const CURRENT_DB_VERSION = 9;
@@ -96,8 +98,10 @@ export const state: AppState = {
     coins: 0,
     streakFreeze: 0,
     lastDailyReward: null,
+    dailyRewardStreak: 0,
     achievements: [],
     survivalHealth: 0,
+    lastFreezeDate: null,
   },
   learned: new Set(),
   mistakes: new Set(),
@@ -116,6 +120,7 @@ export const state: AppState = {
   selectMode: false,
   selectedWords: new Set(),
   wordRequests: [],
+  purchasedItems: [],
 
   currentStar: "all",
   currentTopic: ["all"],
@@ -173,6 +178,7 @@ export const state: AppState = {
   sessionInterval: null,
   sessionWordsReviewed: 0,
   currentUser: null,
+  settingsUpdatedAt: 0,
 };
 
 try {
@@ -377,6 +383,9 @@ try {
   state.searchHistory = load(LS_KEYS.SEARCH_HISTORY, []);
   state.customWords = load(LS_KEYS.CUSTOM_WORDS, []);
   state.wordRequests = load(LS_KEYS.WORD_REQUESTS, []);
+  state.purchasedItems = load(LS_KEYS.PURCHASED_ITEMS, []);
+  state.settingsUpdatedAt =
+    Number(localStorage.getItem("settings_updated_at")) || 0;
 
   // Загрузка сжатого словаря
   const cachedVocab = localStorage.getItem(LS_KEYS.VOCAB_CACHE);
@@ -428,6 +437,8 @@ try {
     state.userStats.streakFreeze = 0;
   if (state.userStats.lastDailyReward === undefined)
     state.userStats.lastDailyReward = null;
+  if (state.userStats.dailyRewardStreak === undefined)
+    state.userStats.dailyRewardStreak = 0;
   if (state.userStats.survivalHealth === undefined)
     state.userStats.survivalHealth = 0;
 } catch (e) {

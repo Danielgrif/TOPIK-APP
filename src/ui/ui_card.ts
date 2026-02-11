@@ -168,6 +168,9 @@ function updateFilteredData() {
         // Проверяем, входит ли слово хоть в один список
         const isInAnyList = allCategorizedIds?.has(w.id as number);
         if (isInAnyList) return false;
+      } else if (collectionsState.currentCollectionFilter === "my-custom") {
+        if (!state.currentUser || w.user_id !== state.currentUser.id)
+          return false;
       } else if (
         collectionsState.listItems[collectionsState.currentCollectionFilter]
       ) {
@@ -718,7 +721,7 @@ function createCardFront(item: Word, index: number): HTMLElement {
     mainContent.appendChild(hanjaContainer);
   }
 
-  if (item.type === "grammar" && item.grammar_info) {
+  if (item.grammar_info) {
     const grammarBadge = document.createElement("div");
     grammarBadge.className = "grammar-badge";
     grammarBadge.textContent = "📘 Грамматика";
@@ -1392,12 +1395,17 @@ function createListItem(item: Word, index: number): HTMLElement {
     ? `<span class="list-hanja">${[...item.word_hanja].map((char) => `<span class="list-hanja-char">${escapeHtml(char)}</span>`).join("")}</span>`
     : "";
 
+  const grammarIcon = item.grammar_info
+    ? `<span style="font-size: 14px; margin-left: 4px;" title="Грамматика">📘</span>`
+    : "";
+
   const mainDiv = document.createElement("div");
   mainDiv.className = "list-col-main";
   mainDiv.innerHTML = `
     <div class="list-word-row">
         <div class="list-word">${escapeHtml(item.word_kr)}</div>
         ${statusIcon ? `<div class="list-status-icon">${statusIcon}</div>` : ""}
+        ${grammarIcon}
         ${hanjaHtml}
     </div>
     <div class="list-trans">${escapeHtml(item.translation || "")}</div>
@@ -1496,11 +1504,17 @@ function createListItem(item: Word, index: number): HTMLElement {
   // Notes
   if (
     (item.my_notes && item.my_notes.trim()) ||
-    (item.collocations && item.collocations.trim())
+    (item.collocations && item.collocations.trim()) ||
+    (item.grammar_info && item.grammar_info.trim())
   ) {
     const info = [
-      item.collocations ? escapeHtml(item.collocations) : "",
-      item.my_notes ? escapeHtml(item.my_notes) : "",
+      item.collocations
+        ? `<b>Коллокации:</b> ${escapeHtml(item.collocations)}`
+        : "",
+      item.grammar_info
+        ? `<b>Грамматика:</b> ${escapeHtml(item.grammar_info)}`
+        : "",
+      item.my_notes ? `<b>Заметки:</b> ${escapeHtml(item.my_notes)}` : "",
     ]
       .filter((s) => s && s.trim())
       .join("<br>");

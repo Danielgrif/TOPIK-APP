@@ -4,10 +4,13 @@ import {
   showToast,
   showUndoToast,
   promiseWithTimeout,
+  debounce,
+  escapeHtml,
 } from "../utils/utils.ts";
-import { closeModal } from "./ui_modal.ts";
+import { closeModal, openConfirm } from "./ui_modal.ts";
 import { state } from "../core/state.ts";
 import { immediateSaveState } from "../core/db.ts";
+import { addFailedRequest } from "./ui_retry.ts";
 import { render } from "./ui_card.ts";
 import { toKorean } from "../utils/hangul.ts";
 import { DB_TABLES, WORD_REQUEST_STATUS } from "../core/constants.ts";
@@ -25,7 +28,11 @@ let cancellationToken: CancellationToken | null = null;
 // New state for tracking progress of each word
 const requestProgress = new Map<
   string | number,
-  { status: "pending" | "ai" | "audio" | "done"; word: string }
+  {
+    status: "pending" | "ai" | "audio" | "done" | "error";
+    word: string;
+    error?: string;
+  }
 >();
 
 export async function submitWordRequest() {
@@ -44,6 +51,31 @@ export async function submitWordRequest() {
     "new-word-category",
   ) as HTMLInputElement;
   const formView = document.getElementById("add-word-form-view");
+
+  // Inject Level Selector if not present
+  let levelSelect = document.getElementById(
+    "new-word-level",
+  ) as HTMLSelectElement;
+  if (!levelSelect && categoryInput && categoryInput.parentNode) {
+    const container = document.createElement("div");
+    container.className = "form-group";
+    container.innerHTML = `
+      <label for="new-word-level" class="form-label">УРОВЕНЬ СЛОЖНОСТИ</label>
+      <div class="custom-select-wrapper">
+        <select id="new-word-level" class="custom-select">
+            <option value="★☆☆">Высокий (★)</option>
+            <option value="★★☆">Средний (★★)</option>
+            <option value="★★★" selected>Начальный (★★★)</option>
+        </select>
+        <span class="select-arrow">▼</span>
+      </div>
+    `;
+    categoryInput.parentNode.insertBefore(container, categoryInput.nextSibling);
+    levelSelect = document.getElementById(
+      "new-word-level",
+    ) as HTMLSelectElement;
+  }
+
   const progressView = document.getElementById("add-word-progress-view");
 
   console.log("👀 Elements found:", {
@@ -88,6 +120,7 @@ export async function submitWordRequest() {
   };
 
   let keepButtonDisabled = false; // Флаг для передачи управления кнопкой в trackProgress
+  const validWords: string[] = [];
 
   try {
     if (!input) {
@@ -142,7 +175,6 @@ export async function submitWordRequest() {
     if (rawWords.length === 0) return;
 
     // --- Валидация и Авто-исправление ---
-    const validWords: string[] = [];
     const corrections: { original: string; corrected: string }[] = [];
     // Разрешаем: Корейский, Английский, Цифры, пробелы, дефис, знаки препинания.
     const VALID_PATTERN =
@@ -308,6 +340,7 @@ export async function submitWordRequest() {
       target_list_id: targetListId || null,
       topic: customTopic,
       category: customCategory,
+      level: levelSelect ? levelSelect.value : "★★★",
     }));
 
     updateButtonText("Сохранение...", false); // Отключаем отмену на последнем шаге
@@ -358,8 +391,29 @@ export async function submitWordRequest() {
       }
     }
   } catch (e: any) {
+    const isOffline = !navigator.onLine;
+    const isNetworkError =
+      e.message?.includes("Failed to fetch") ||
+      e.message?.includes("network error") ||
+      e.message?.includes("timed out") ||
+      e.message?.includes("Время ожидания");
+
     if (e.message === "Cancelled by user") {
       showToast("🚫 Отменено");
+    } else if (isOffline || isNetworkError) {
+      console.warn("Offline submission:", { validWords, e });
+      validWords.forEach((word: string) => {
+        addFailedRequest(
+          word,
+          "Вы были оффлайн. Нажмите 'Повторить', когда появится интернет.",
+        );
+      });
+      showToast("Вы оффлайн. Заявка сохранена для повторной отправки.");
+      input.value = "";
+      if (listSelect) listSelect.value = "";
+      if (topicInput) topicInput.value = "";
+      if (categoryInput) categoryInput.value = "";
+      closeModal("add-word-modal");
     } else {
       console.error("❌ Error in submitWordRequest:", e);
       showToast("Ошибка: " + (e.message || "Не удалось отправить"));
@@ -372,6 +426,136 @@ export async function submitWordRequest() {
       btn.innerHTML = originalContent || "Отправить заявку";
     }
   }
+}
+
+export function setupAddWordPreview() {
+  const container = document.querySelector(
+    "#add-word-modal .modal-body-container",
+  );
+  if (!container) return;
+
+  // 1. Инъекция селектора уровня, если его нет (для корректного отображения в превью)
+  const categoryInput = document.getElementById("new-word-category");
+  if (
+    categoryInput &&
+    categoryInput.parentNode &&
+    !document.getElementById("new-word-level")
+  ) {
+    const div = document.createElement("div");
+    div.className = "form-group";
+    div.innerHTML = `
+      <label for="new-word-level" class="form-label">УРОВЕНЬ СЛОЖНОСТИ</label>
+      <div class="custom-select-wrapper">
+        <select id="new-word-level" class="custom-select">
+            <option value="★☆☆">Высокий (★)</option>
+            <option value="★★☆">Средний (★★)</option>
+            <option value="★★★" selected>Начальный (★★★)</option>
+        </select>
+        <span class="select-arrow">▼</span>
+      </div>
+    `;
+    categoryInput.parentNode.insertBefore(div, categoryInput.nextSibling);
+  }
+
+  // 2. Создание контейнера превью
+  let previewWrapper = document.getElementById("add-word-preview-wrapper");
+  if (!previewWrapper) {
+    previewWrapper = document.createElement("div");
+    previewWrapper.id = "add-word-preview-wrapper";
+    previewWrapper.style.marginBottom = "24px";
+    // Вставляем в начало формы
+    container.insertBefore(previewWrapper, container.firstChild);
+  }
+
+  // Контейнер для предупреждения о дубликатах
+  let warningWrapper = document.getElementById("add-word-warning-wrapper");
+  if (!warningWrapper) {
+    warningWrapper = document.createElement("div");
+    warningWrapper.id = "add-word-warning-wrapper";
+    warningWrapper.style.marginTop = "-10px";
+    warningWrapper.style.marginBottom = "20px";
+    // Вставляем после контейнера с превью
+    previewWrapper.insertAdjacentElement("afterend", warningWrapper);
+  }
+
+  // 3. Настройка слушателей
+  const input = document.getElementById(
+    "new-word-input",
+  ) as HTMLTextAreaElement;
+  // Подсказка браузеру переключить клавиатуру на корейский (работает на мобильных/некоторых ОС)
+  if (input) input.setAttribute("lang", "ko");
+
+  const levelSelect = document.getElementById(
+    "new-word-level",
+  ) as HTMLSelectElement;
+
+  const checkWordExistence = debounce((...args: unknown[]) => {
+    const word = args[0] as string;
+    const warningEl = document.getElementById("add-word-warning-wrapper");
+    if (!warningEl) return;
+    if (!word) {
+      warningEl.innerHTML = "";
+      return;
+    }
+    const existing = state.dataStore.filter((w) => w.word_kr === word);
+    if (existing.length > 0) {
+      const translations = existing.map((e) => e.translation).join(", ");
+      warningEl.innerHTML = `<div style="padding: 10px 14px; background: rgba(217, 119, 6, 0.1); border: 1px solid rgba(217, 119, 6, 0.3); border-radius: 12px; font-size: 13px; color: var(--warning);"><b>⚠️ Внимание:</b> Слово <b>${escapeHtml(word)}</b> уже есть в словаре с переводом: "${escapeHtml(translations)}".</div>`;
+    } else {
+      warningEl.innerHTML = "";
+    }
+  }, 300);
+
+  const update = () => {
+    const text = input
+      ? input.value
+          .trim()
+          .split(/[\n,;]/)[0]
+          .trim()
+      : "";
+    const level = levelSelect ? levelSelect.value : "★★★";
+    renderPreview(previewWrapper!, text, level);
+    checkWordExistence(text);
+  };
+
+  if (input && !input.dataset.previewInitialized) {
+    input.addEventListener("input", update);
+    input.dataset.previewInitialized = "true";
+  }
+  if (levelSelect && !levelSelect.dataset.previewInitialized) {
+    levelSelect.addEventListener("change", update);
+    levelSelect.dataset.previewInitialized = "true";
+  }
+
+  // Первичный рендер
+  update();
+}
+
+function renderPreview(container: HTMLElement, word: string, level: string) {
+  const isSkeleton = !word;
+  const displayWord = word || "";
+
+  container.innerHTML = `
+    <div class="card" style="height: 180px; pointer-events: none; transform: none; box-shadow: var(--shadow-sm);">
+        <div class="card-inner">
+            <div class="card-front" style="background: var(--surface-2); border: 1px solid var(--border-color);">
+                <div class="card-main" style="justify-content: center; padding: 15px;">
+                    <div class="card-level-stars" style="font-size: 24px; margin-bottom: 8px;">${level}</div>
+                    ${
+                      isSkeleton
+                        ? `<div class="skeleton-pulse" style="height: 32px; width: 60%; border-radius: 8px; margin: 0 auto;"></div>`
+                        : `<div class="word" style="font-size: 32px; margin-bottom: 0;">${escapeHtml(displayWord)}</div>`
+                    }
+                    <div class="card-tags" style="margin-top: 12px; opacity: 0.7;">
+                        <span class="tag-pill topic">🏷️ Тема</span>
+                        <span class="tag-pill category">🔹 Категория</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div style="text-align: center; font-size: 11px; color: var(--text-tertiary); margin-top: 8px; text-transform: uppercase; letter-spacing: 1px;">Предпросмотр</div>
+  `;
 }
 
 function trackProgress(
@@ -388,7 +572,93 @@ function trackProgress(
   const total = requests.length;
   const progressBar = document.getElementById("word-request-progress-bar");
   const statusText = document.getElementById("word-request-status-text");
+  const progressViewContainer =
+    progressView.querySelector(".modal-body-container") || progressView;
   let errorCount = 0;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let vocabChannel: any = null;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let requestChannel: any = null;
+  let safetyTimeout: number | null = null;
+  let observer: MutationObserver | null = null;
+  let workerWarningTimeout: number | null = null;
+
+  // Очистка старых элементов UI прогресса (чтобы избежать дублирования при повторном использовании)
+  const oldDetails = document.getElementById("word-request-details");
+  if (oldDetails) oldDetails.remove();
+  const oldToggle = document.getElementById("toggle-details-btn");
+  if (oldToggle) oldToggle.remove();
+  const oldRetry = document.getElementById("retry-all-errors-btn");
+  if (oldRetry) oldRetry.remove();
+  document.querySelectorAll(".worker-warning").forEach((el) => el.remove());
+
+  // Создаем контейнер для детального списка
+  const detailsList = document.createElement("div");
+  detailsList.id = "word-request-details";
+  detailsList.className = "progress-details-list";
+
+  if (total > 5) {
+    const toggleBtn = document.createElement("button");
+    toggleBtn.id = "toggle-details-btn";
+    toggleBtn.className = "btn-text";
+    toggleBtn.style.cssText =
+      "margin: 10px auto; display: block; font-size: 13px; color: var(--text-sub); cursor: pointer;";
+    toggleBtn.textContent = `▼ Показать список (${total})`;
+
+    detailsList.style.display = "none";
+
+    toggleBtn.onclick = () => {
+      const isHidden = detailsList.style.display === "none";
+      detailsList.style.display = isHidden ? "flex" : "none";
+      toggleBtn.textContent = isHidden
+        ? "▲ Скрыть список"
+        : `▼ Показать список (${total})`;
+    };
+
+    if (statusText) {
+      statusText.insertAdjacentElement("afterend", toggleBtn);
+      toggleBtn.insertAdjacentElement("afterend", detailsList);
+    } else {
+      progressViewContainer.appendChild(toggleBtn);
+      progressViewContainer.appendChild(detailsList);
+    }
+  } else {
+    if (statusText) statusText.insertAdjacentElement("afterend", detailsList);
+    else progressViewContainer.appendChild(detailsList);
+  }
+
+  const cleanup = () => {
+    if (safetyTimeout) clearTimeout(safetyTimeout);
+    if (workerWarningTimeout) clearTimeout(workerWarningTimeout);
+    if (vocabChannel) client.removeChannel(vocabChannel);
+    if (requestChannel) client.removeChannel(requestChannel);
+    if (observer) {
+      observer.disconnect();
+      observer = null;
+    }
+  };
+
+  const resetUIState = () => {
+    input.value = "";
+    if (listSelect) listSelect.value = "";
+    if (topicInput) topicInput.value = "";
+    if (categoryInput) categoryInput.value = "";
+
+    formView.style.display = "block";
+    progressView.style.display = "none";
+    if (progressBar) progressBar.style.width = "0%";
+
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = originalBtnContent || "Отправить заявку";
+    }
+    render();
+  };
+
+  const resetFormAndClose = () => {
+    closeModal("add-word-modal");
+    resetUIState();
+  };
 
   // Initialize progress state for each request
   requestProgress.clear();
@@ -398,6 +668,49 @@ function trackProgress(
       word: req.word,
     });
   });
+
+  const renderDetails = () => {
+    if (!detailsList) return;
+    detailsList.innerHTML = Array.from(requestProgress.values())
+      .map((item) => {
+        let icon =
+          '<div class="spinner-tiny" style="border-color: var(--text-tertiary); border-top-color: var(--primary);"></div>';
+        let text = "Ожидание...";
+        let cssClass = "status-pending";
+        let extraAttrs = "";
+
+        if (item.status === "ai") {
+          icon = "🤖";
+          text = "AI генерирует контент...";
+          cssClass = "status-processing";
+        } else if (item.status === "audio") {
+          icon = "🔊";
+          text = "Создание озвучки...";
+          cssClass = "status-processing";
+        } else if (item.status === "done") {
+          icon = "✅";
+          text = "Готово";
+          cssClass = "status-done";
+        } else if (item.status === "error") {
+          icon = "❌";
+          text = "Ошибка";
+          cssClass = "status-error";
+          const safeError = escapeHtml(item.error || "Неизвестная ошибка");
+          extraAttrs = `onclick="window.showRequestError('${safeError}')" style="cursor: pointer;" title="Нажмите, чтобы увидеть детали"`;
+        }
+
+        return `
+            <div class="progress-item ${cssClass}" ${extraAttrs}>
+                <div class="progress-word">${escapeHtml(item.word)}</div>
+                <div class="progress-state">
+                    <span class="progress-icon">${icon}</span>
+                    <span class="progress-text">${text}</span>
+                </div>
+            </div>
+        `;
+      })
+      .join("");
+  };
 
   const updateUIWithStages = () => {
     const doneCount = Array.from(requestProgress.values()).filter(
@@ -423,18 +736,119 @@ function trackProgress(
       statusText.textContent = `${currentAction} (${doneCount}/${total})`;
     }
 
+    renderDetails();
+
+    // --- Retry Button Logic ---
+    const errorEntries = Array.from(requestProgress.entries()).filter(
+      ([_, p]) => p.status === "error",
+    );
+
+    // Автоматически разворачиваем список, если есть ошибки
+    if (
+      errorEntries.length > 0 &&
+      detailsList &&
+      detailsList.style.display === "none"
+    ) {
+      const toggleBtn = document.getElementById("toggle-details-btn");
+      if (toggleBtn) {
+        detailsList.style.display = "flex";
+        toggleBtn.textContent = "▲ Скрыть список";
+      }
+    }
+
+    let retryBtn = document.getElementById("retry-all-errors-btn");
+
+    if (errorEntries.length > 0) {
+      if (!retryBtn) {
+        retryBtn = document.createElement("button");
+        retryBtn.id = "retry-all-errors-btn";
+        retryBtn.className = "btn";
+        retryBtn.style.cssText =
+          "width: 100%; margin-top: 15px; background: var(--warning); color: white; font-weight: bold; border: none; border-radius: 12px; padding: 12px; cursor: pointer; transition: transform 0.2s;";
+        retryBtn.innerHTML = `↻ Повторить сбойные (${errorEntries.length})`;
+        retryBtn.onmousedown = () =>
+          (retryBtn!.style.transform = "scale(0.98)");
+        retryBtn.onmouseup = () => (retryBtn!.style.transform = "scale(1)");
+
+        retryBtn.onclick = async () => {
+          const btn = document.getElementById(
+            "retry-all-errors-btn",
+          ) as HTMLButtonElement;
+          if (btn) {
+            btn.disabled = true;
+            btn.innerHTML = '<div class="spinner-tiny"></div> Отправка...';
+          }
+
+          const ids = errorEntries.map(([id]) => id);
+
+          const { error } = await client
+            .from(DB_TABLES.WORD_REQUESTS)
+            .update({ status: WORD_REQUEST_STATUS.PENDING, my_notes: null })
+            .in("id", ids);
+
+          if (error) {
+            showToast("Ошибка: " + error.message);
+            if (btn) {
+              btn.disabled = false;
+              btn.innerHTML = `↻ Повторить сбойные (${errorEntries.length})`;
+            }
+          } else {
+            // Optimistic update
+            ids.forEach((id) => {
+              const item = requestProgress.get(id);
+              if (item) {
+                item.status = "pending";
+                item.error = undefined;
+              }
+            });
+            if (btn) btn.remove();
+            updateUIWithStages();
+          }
+        };
+
+        if (detailsList && detailsList.parentNode) {
+          detailsList.parentNode.insertBefore(
+            retryBtn,
+            detailsList.nextSibling,
+          );
+        }
+      } else {
+        retryBtn.innerHTML = `↻ Повторить сбойные (${errorEntries.length})`;
+      }
+    } else {
+      if (retryBtn) retryBtn.remove();
+    }
+
     if (doneCount === total) {
       cleanup(); // Останавливаем прослушку и таймер
       if (errorCount > 0) {
         showToast(`⚠️ Готово, но с ошибками: ${errorCount}`);
       } else {
         showToast("✅ Готово! Слова добавлены.");
+        // Wait a bit before closing to show "Готово!"
+        setTimeout(resetFormAndClose, 3000);
       }
-
-      // Wait a bit before closing to show "Готово!"
-      setTimeout(resetFormAndClose, 1200);
     }
   };
+
+  // Detect if modal is closed externally (e.g. by user clicking X or overlay)
+  const modal = document.getElementById("add-word-modal");
+  if (modal) {
+    observer = new MutationObserver((mutations) => {
+      for (const mutation of mutations) {
+        if (
+          mutation.type === "attributes" &&
+          mutation.attributeName === "class" &&
+          !modal.classList.contains("active")
+        ) {
+          // Modal was closed, cleanup listeners
+          cleanup();
+          resetUIState();
+        }
+      }
+    });
+    observer.observe(modal, { attributes: true, attributeFilter: ["class"] });
+  }
 
   // Set initial stage to 'ai' to start the progress
   requestProgress.forEach(
@@ -442,10 +856,22 @@ function trackProgress(
   );
   updateUIWithStages();
 
-  // --- Realtime Listeners ---
+  // Таймер предупреждения о воркере (если через 8 сек ничего не изменилось)
+  workerWarningTimeout = window.setTimeout(() => {
+    const anyProgress = Array.from(requestProgress.values()).some(
+      (p) => p.status !== "pending" && p.status !== "ai",
+    );
+    if (!anyProgress && detailsList) {
+      const warning = document.createElement("div");
+      warning.className = "worker-warning";
+      warning.innerHTML =
+        "⚠️ Сервер долго не отвечает. Возможно, очередь перегружена.";
+      detailsList.insertAdjacentElement("beforebegin", warning);
+    }
+  }, 8000);
 
-  // 1. Listen for vocabulary INSERTs (marks 'audio' stage)
-  const vocabChannel = client
+  // --- Realtime Listeners ---
+  vocabChannel = client
     .channel("public:vocabulary:custom-words")
     .on(
       "postgres_changes",
@@ -467,10 +893,13 @@ function trackProgress(
         }
       },
     )
-    .subscribe();
+    .subscribe((status) => {
+      if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
+        console.warn(`Vocab channel error: ${status}`);
+      }
+    });
 
-  // 2. Listen for word_requests UPDATE (marks 'done' stage)
-  const requestChannel = client
+  requestChannel = client
     .channel("word_requests_tracker")
     .on(
       "postgres_changes",
@@ -483,23 +912,34 @@ function trackProgress(
       (payload: RealtimePostgresChangesPayload<any>) => {
         const updated = payload.new as any;
         const progress = requestProgress.get(updated.id);
-        if (progress && progress.status !== "done") {
-          if (
-            updated.status === WORD_REQUEST_STATUS.PROCESSED ||
-            updated.status === WORD_REQUEST_STATUS.ERROR
-          ) {
-            console.log(`🏁 Realtime request update: ${progress.word}`);
-            if (updated.status === "error") errorCount++;
+        if (
+          progress &&
+          progress.status !== "done" &&
+          progress.status !== "error"
+        ) {
+          if (updated.status === WORD_REQUEST_STATUS.PROCESSED) {
             progress.status = "done";
+            updateUIWithStages();
+          } else if (updated.status === WORD_REQUEST_STATUS.ERROR) {
+            errorCount++;
+            progress.status = "error";
+            progress.error = updated.my_notes || "Неизвестная ошибка";
             updateUIWithStages();
           }
         }
       },
     )
-    .subscribe();
+    .subscribe((status) => {
+      if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
+        console.warn(`Request channel error: ${status}`);
+        showToast(
+          "⚠️ Проблема с подключением. Обновления могут задерживаться.",
+        );
+      }
+    });
 
   // Safety Timeout: Если через 45 секунд ничего не произошло, разблокируем интерфейс
-  const safetyTimeout = setTimeout(() => {
+  safetyTimeout = window.setTimeout(() => {
     const doneCount = Array.from(requestProgress.values()).filter(
       (p) => p.status === "done",
     ).length;
@@ -514,34 +954,6 @@ function trackProgress(
       resetFormAndClose();
     }
   }, 90000); // Увеличено до 90 секунд
-
-  const resetFormAndClose = () => {
-    closeModal("add-word-modal");
-    // Сброс формы
-    input.value = "";
-    if (listSelect) listSelect.value = "";
-    if (topicInput) topicInput.value = "";
-    if (categoryInput) categoryInput.value = "";
-
-    // Возвращаем вид формы для следующего раза
-    formView.style.display = "block";
-    progressView.style.display = "none";
-    if (progressBar) progressBar.style.width = "0%";
-
-    if (btn) {
-      btn.disabled = false;
-      btn.innerHTML = originalBtnContent || "Отправить заявку";
-    }
-
-    // Обновляем список слов на экране
-    render();
-  };
-
-  const cleanup = () => {
-    clearTimeout(safetyTimeout);
-    client.removeChannel(vocabChannel);
-    client.removeChannel(requestChannel);
-  };
 
   const cancelBtn = document.getElementById("cancel-word-request-btn");
   if (cancelBtn) {
@@ -597,4 +1009,18 @@ export async function deleteCustomWord(id: string | number) {
       immediateSaveState();
     },
   );
+}
+
+export function showRequestError(error: string) {
+  openConfirm(`Детали ошибки:\n\n${error}`, () => {}, { showCancel: false });
+}
+
+declare global {
+  interface Window {
+    showRequestError: typeof showRequestError;
+  }
+}
+
+if (typeof window.showRequestError === "undefined") {
+  window.showRequestError = showRequestError;
 }

@@ -2,10 +2,9 @@
 import { state } from "../core/state.ts";
 import { showToast } from "../utils/utils.ts";
 import { render } from "./ui_card.ts";
-import { scheduleSaveState, immediateSaveState } from "../core/db.ts";
-import { openConfirm } from "./ui_modal.ts";
+import { scheduleSaveState } from "../core/db.ts";
+import { openConfirm, closeModal } from "./ui_modal.ts";
 import { LS_KEYS } from "../core/constants.ts";
-import { syncGlobalStats } from "../core/sync.ts";
 
 const THEME_PALETTES: Record<
   string,
@@ -41,9 +40,9 @@ const THEME_PALETTES: Record<
     hover: "#1d4ed8",
     light: "rgba(37, 99, 235, 0.15)",
     accent: "#60a5fa",
-    bg: "#e0f2fe",
-    surface: "#ffffff",
-    surface2: "#dbeafe",
+    bg: "linear-gradient(180deg, #f0f9ff 0%, #e0f2fe 100%)",
+    surface: "rgba(255, 255, 255, 0.8)",
+    surface2: "rgba(239, 246, 255, 0.7)",
     border: "#bfdbfe",
     textMain: "#172554",
     textSub: "#1e40af",
@@ -54,9 +53,9 @@ const THEME_PALETTES: Record<
     hover: "#047857",
     light: "rgba(5, 150, 105, 0.15)",
     accent: "#34d399",
-    bg: "#f0fdf4",
-    surface: "#ffffff",
-    surface2: "#dcfce7",
+    bg: "linear-gradient(180deg, #f0fdf4 0%, #dcfce7 100%)",
+    surface: "rgba(255, 255, 255, 0.8)",
+    surface2: "rgba(240, 253, 244, 0.7)",
     border: "#bbf7d0",
     textMain: "#022c22",
     textSub: "#047857",
@@ -67,9 +66,9 @@ const THEME_PALETTES: Record<
     hover: "#c2410c",
     light: "rgba(234, 88, 12, 0.15)",
     accent: "#fb923c",
-    bg: "#fff7ed",
-    surface: "#ffffff",
-    surface2: "#ffedd5",
+    bg: "linear-gradient(180deg, #fffbeb 0%, #fff7ed 100%)",
+    surface: "rgba(255, 255, 255, 0.8)",
+    surface2: "rgba(255, 247, 237, 0.7)",
     border: "#fed7aa",
     textMain: "#431407",
     textSub: "#c2410c",
@@ -80,9 +79,9 @@ const THEME_PALETTES: Record<
     hover: "#be185d",
     light: "rgba(219, 39, 119, 0.15)",
     accent: "#f472b6",
-    bg: "#fdf2f8",
-    surface: "#ffffff",
-    surface2: "#fce7f3",
+    bg: "linear-gradient(180deg, #fdf2f8 0%, #fce7f3 100%)",
+    surface: "rgba(255, 255, 255, 0.8)",
+    surface2: "rgba(252, 231, 243, 0.7)",
     border: "#fbcfe8",
     textMain: "#500724",
     textSub: "#be185d",
@@ -124,9 +123,9 @@ const THEME_PALETTES_DARK: Record<
     hover: "#3b82f6",
     light: "rgba(96, 165, 250, 0.15)",
     accent: "#93c5fd",
-    bg: "#172554",
-    surface: "#1e3a8a",
-    surface2: "#1d4ed8",
+    bg: "linear-gradient(180deg, #0c2a4d 0%, #172554 100%)",
+    surface: "rgba(30, 58, 138, 0.7)",
+    surface2: "rgba(30, 64, 175, 0.6)",
     border: "#2563eb",
     textMain: "#dbeafe",
     textSub: "#60a5fa",
@@ -137,9 +136,9 @@ const THEME_PALETTES_DARK: Record<
     hover: "#10b981",
     light: "rgba(52, 211, 153, 0.15)",
     accent: "#6ee7b7",
-    bg: "#064e3b",
-    surface: "#065f46",
-    surface2: "#047857",
+    bg: "linear-gradient(180deg, #042f2e 0%, #064e3b 100%)",
+    surface: "rgba(4, 78, 57, 0.7)",
+    surface2: "rgba(5, 117, 87, 0.6)",
     border: "#059669",
     textMain: "#d1fae5",
     textSub: "#34d399",
@@ -150,9 +149,9 @@ const THEME_PALETTES_DARK: Record<
     hover: "#f97316",
     light: "rgba(251, 146, 60, 0.15)",
     accent: "#fdba74",
-    bg: "#431407",
-    surface: "#7c2d12",
-    surface2: "#9a3412",
+    bg: "linear-gradient(180deg, #431407 0%, #7c2d12 100%)",
+    surface: "rgba(124, 45, 18, 0.7)",
+    surface2: "rgba(154, 52, 18, 0.6)",
     border: "#c2410c",
     textMain: "#ffedd5",
     textSub: "#fb923c",
@@ -163,15 +162,20 @@ const THEME_PALETTES_DARK: Record<
     hover: "#ec4899",
     light: "rgba(244, 114, 182, 0.15)",
     accent: "#f9a8d4",
-    bg: "#701a75",
-    surface: "#86198f",
-    surface2: "#9d174d",
+    bg: "linear-gradient(180deg, #581c87 0%, #701a75 100%)",
+    surface: "rgba(134, 25, 143, 0.7)",
+    surface2: "rgba(157, 23, 77, 0.6)",
     border: "#be185d",
     textMain: "#fce7f3",
     textSub: "#f472b6",
     textTertiary: "#ec4899",
   },
 };
+
+function updateSettingsTimestamp() {
+  state.settingsUpdatedAt = Date.now();
+  localStorage.setItem("settings_updated_at", String(state.settingsUpdatedAt));
+}
 
 /**
  * Toggles Hanja display mode.
@@ -181,8 +185,8 @@ export function toggleHanjaMode(el: HTMLInputElement) {
   state.hanjaMode = el.checked;
   localStorage.setItem(LS_KEYS.HANJA_MODE, String(state.hanjaMode));
   render();
-  immediateSaveState();
-  syncGlobalStats();
+  updateSettingsTimestamp();
+  scheduleSaveState();
 }
 
 /**
@@ -195,8 +199,8 @@ export function toggleVoice() {
   showToast(
     `Голос: ${state.currentVoice === "female" ? "Женский" : "Мужской"}`,
   );
-  immediateSaveState();
-  syncGlobalStats();
+  updateSettingsTimestamp();
+  scheduleSaveState();
 }
 
 /**
@@ -218,6 +222,7 @@ export function setAudioSpeed(val: string | number) {
   localStorage.setItem(LS_KEYS.AUDIO_SPEED, String(state.audioSpeed));
   const el = document.getElementById("speed-val");
   if (el) el.textContent = state.audioSpeed + "x";
+  updateSettingsTimestamp();
   scheduleSaveState();
 }
 
@@ -230,6 +235,7 @@ export function setTtsVolume(val: string | number) {
   localStorage.setItem(LS_KEYS.TTS_VOLUME, String(state.ttsVolume));
   const el = document.getElementById("tts-volume-val");
   if (el) el.textContent = `${Math.round(state.ttsVolume * 100)}%`;
+  updateSettingsTimestamp();
   scheduleSaveState();
 }
 
@@ -244,8 +250,8 @@ export function toggleAutoTheme(el: HTMLInputElement) {
     checkAutoTheme();
   }
   showToast(`Авто-тема: ${state.autoTheme ? "ВКЛ" : "ВЫКЛ"}`);
-  immediateSaveState();
-  syncGlobalStats();
+  updateSettingsTimestamp();
+  scheduleSaveState();
 }
 
 export function checkAutoTheme() {
@@ -267,8 +273,8 @@ export function toggleDarkMode() {
   state.darkMode = !state.darkMode;
   localStorage.setItem(LS_KEYS.DARK_MODE, String(state.darkMode));
   applyTheme();
-  immediateSaveState();
-  syncGlobalStats();
+  updateSettingsTimestamp();
+  scheduleSaveState();
 }
 
 /**
@@ -279,8 +285,8 @@ export function toggleAutoUpdate(el: HTMLInputElement) {
   state.autoUpdate = el.checked;
   localStorage.setItem(LS_KEYS.AUTO_UPDATE, String(state.autoUpdate));
   showToast(`Автообновление: ${state.autoUpdate ? "ВКЛ" : "ВЫКЛ"}`);
-  immediateSaveState();
-  syncGlobalStats();
+  updateSettingsTimestamp();
+  scheduleSaveState();
 }
 
 /**
@@ -334,11 +340,21 @@ export function applyTheme() {
  */
 export function setAccentColor(colorKey: string) {
   if (!Object.keys(THEME_PALETTES).includes(colorKey)) return;
+
+  // Проверка прав на тему
+  if (colorKey !== "purple") {
+    const shopId = `theme_${colorKey}`;
+    if (!state.purchasedItems.includes(shopId)) {
+      showToast("Эта тема доступна в магазине");
+      return;
+    }
+  }
+
   state.themeColor = colorKey;
   localStorage.setItem(LS_KEYS.THEME_COLOR, state.themeColor);
   applyAccentColor();
-  immediateSaveState();
-  syncGlobalStats();
+  updateSettingsTimestamp();
+  scheduleSaveState();
 }
 
 /**
@@ -352,8 +368,8 @@ export function applyAccentColor() {
     palette = THEME_PALETTES_DARK[colorKey] || THEME_PALETTES_DARK.purple;
   }
 
-  // Use document.body to ensure we override body.dark-mode CSS variables
-  const target = document.body.style;
+  // Use documentElement to apply background gradients to the whole page
+  const target = document.documentElement.style;
 
   target.setProperty("--primary", palette.main);
   target.setProperty("--primary-hover", palette.hover);
@@ -392,7 +408,7 @@ export function previewAccentColor(colorKey: string) {
     palette = THEME_PALETTES_DARK[colorKey] || THEME_PALETTES_DARK.purple;
   }
 
-  const target = document.body.style;
+  const target = document.documentElement.style;
 
   target.setProperty("--primary", palette.main);
   target.setProperty("--primary-hover", palette.hover);
@@ -410,6 +426,53 @@ export function previewAccentColor(colorKey: string) {
 }
 
 /**
+ * Updates the theme picker UI to lock unpurchased themes.
+ */
+export function updateThemePickerUI() {
+  const buttons = document.querySelectorAll(".color-option, .stats-color-btn");
+  buttons.forEach((btn) => {
+    const el = btn as HTMLElement;
+    const color = el.getAttribute("data-value");
+    if (!color) return;
+
+    const isDefault = color === "purple";
+    const shopId = `theme_${color}`;
+    const isPurchased = state.purchasedItems.includes(shopId);
+
+    if (isDefault || isPurchased) {
+      el.classList.remove("locked");
+      el.style.pointerEvents = "";
+      el.style.opacity = "";
+      el.style.filter = "";
+      const lock = el.querySelector(".lock-icon");
+      if (lock) lock.remove();
+    } else {
+      el.classList.add("locked");
+      el.style.pointerEvents = "auto"; // Разрешаем клики для кнопки покупки
+      el.style.opacity = "0.6";
+      el.style.filter = "grayscale(0.8)";
+
+      // Добавляем кнопку "Купить", если ее еще нет
+      if (!el.querySelector(".buy-theme-btn")) {
+        const buyBtn = document.createElement("button");
+        buyBtn.className = "buy-theme-btn";
+        buyBtn.innerHTML = "💰";
+        buyBtn.title = "Купить в магазине";
+        buyBtn.onclick = (e) => {
+          e.stopPropagation();
+          closeModal("profile-modal");
+          import("./ui_shop.ts").then((shop) => {
+            shop.openShopModal();
+            setTimeout(() => shop.switchShopTab("theme"), 100);
+          });
+        };
+        el.appendChild(buyBtn);
+      }
+    }
+  });
+}
+
+/**
  * Toggles focus mode.
  */
 export function toggleFocusMode() {
@@ -417,6 +480,7 @@ export function toggleFocusMode() {
   applyFocusMode();
   showToast(`Режим фокусировки: ${state.focusMode ? "ВКЛ" : "ВЫКЛ"}`);
   applyBackgroundMusic();
+  updateSettingsTimestamp();
 
   // Перерисовываем сетку, чтобы применить новую высоту карточек
   if (state.viewMode !== "list") {
@@ -467,8 +531,8 @@ export function toggleBackgroundMusic(el?: HTMLInputElement) {
   );
   applyBackgroundMusic();
   showToast(`Музыка: ${state.backgroundMusicEnabled ? "ВКЛ" : "ВЫКЛ"}`);
-  immediateSaveState();
-  syncGlobalStats();
+  updateSettingsTimestamp();
+  scheduleSaveState();
 }
 
 let activePlayerId = "a";
@@ -689,6 +753,7 @@ export function setBackgroundMusicVolume(val: string | number) {
   if (el) el.textContent = `${Math.round(state.backgroundMusicVolume * 100)}%`;
   // FIX: Передаем true, чтобы музыка включилась, если была выключена, но громкость меняют
   applyBackgroundMusic(true);
+  updateSettingsTimestamp();
   scheduleSaveState();
 }
 
@@ -728,7 +793,10 @@ export function resetAllSettings() {
       backgroundMusicVolume: 0.3,
       focusMode: false,
       viewMode: "grid",
+      settingsUpdatedAt: Date.now(),
     });
+
+    scheduleSaveState(50);
 
     showToast("⚙️ Настройки сброшены. Перезагрузка...");
     setTimeout(() => location.reload(), 800);
@@ -746,8 +814,8 @@ export function setTrashRetention(days: string | number) {
   showToast(
     `Срок хранения в корзине: ${retentionDays === 365 ? "1 год" : `${retentionDays} дн.`}`,
   );
-  immediateSaveState();
-  syncGlobalStats();
+  updateSettingsTimestamp();
+  scheduleSaveState();
 }
 
 export function updateTrashRetentionUI() {
@@ -767,3 +835,41 @@ export function resetOnboarding() {
   showToast("🎓 Обучение сброшено. Перезагрузка...");
   setTimeout(() => location.reload(), 800);
 }
+
+declare global {
+  interface Window {
+    toggleHanjaMode: typeof toggleHanjaMode;
+    toggleVoice: typeof toggleVoice;
+    setAudioSpeed: typeof setAudioSpeed;
+    setTtsVolume: typeof setTtsVolume;
+    toggleAutoTheme: typeof toggleAutoTheme;
+    toggleDarkMode: typeof toggleDarkMode;
+    toggleAutoUpdate: typeof toggleAutoUpdate;
+    setAccentColor: typeof setAccentColor;
+    previewAccentColor: typeof previewAccentColor;
+    toggleFocusMode: typeof toggleFocusMode;
+    updateThemePickerUI: typeof updateThemePickerUI;
+    toggleBackgroundMusic: typeof toggleBackgroundMusic;
+    setBackgroundMusicVolume: typeof setBackgroundMusicVolume;
+    resetAllSettings: typeof resetAllSettings;
+    setTrashRetention: typeof setTrashRetention;
+    resetOnboarding: typeof resetOnboarding;
+  }
+}
+
+window.toggleHanjaMode = toggleHanjaMode;
+window.toggleVoice = toggleVoice;
+window.setAudioSpeed = setAudioSpeed;
+window.setTtsVolume = setTtsVolume;
+window.toggleAutoTheme = toggleAutoTheme;
+window.toggleDarkMode = toggleDarkMode;
+window.toggleAutoUpdate = toggleAutoUpdate;
+window.setAccentColor = setAccentColor;
+window.previewAccentColor = previewAccentColor;
+window.toggleFocusMode = toggleFocusMode;
+window.updateThemePickerUI = updateThemePickerUI;
+window.toggleBackgroundMusic = toggleBackgroundMusic;
+window.setBackgroundMusicVolume = setBackgroundMusicVolume;
+window.resetAllSettings = resetAllSettings;
+window.setTrashRetention = setTrashRetention;
+window.resetOnboarding = resetOnboarding;

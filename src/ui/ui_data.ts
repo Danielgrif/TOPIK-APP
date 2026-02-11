@@ -2,7 +2,7 @@ import { state } from "../core/state.ts";
 import { client } from "../core/supabaseClient.ts";
 import { showToast } from "../utils/utils.ts";
 import { LS_KEYS } from "../core/constants.ts";
-import { immediateSaveState } from "../core/db.ts";
+import { scheduleSaveState } from "../core/db.ts";
 import { createLocalBackup } from "../core/backup.ts";
 import {
   updateStats,
@@ -40,8 +40,10 @@ export async function resetAllProgress() {
       coins: 0,
       streakFreeze: 0,
       lastDailyReward: null,
+      dailyRewardStreak: 0,
       achievements: [],
       survivalHealth: 0,
+      lastFreezeDate: null,
     };
     state.learned = new Set();
     state.mistakes = new Set();
@@ -60,29 +62,12 @@ export async function resetAllProgress() {
         .from("user_progress")
         .delete()
         .eq("user_id", data.session.user.id);
-      await client
-        .from("user_global_stats")
-        .delete()
-        .eq("user_id", data.session.user.id);
-      await client.from("user_global_stats").insert([
-        {
-          user_id: data.session.user.id,
-          xp: 0,
-          level: 1,
-          coins: 0,
-          streak_freeze: 0,
-          sprint_record: 0,
-          survival_record: 0,
-          achievements: [],
-          sessions: [],
-        },
-      ]);
     }
 
     const shopBalance = document.getElementById("shop-balance");
     if (shopBalance) shopBalance.innerText = "0";
 
-    immediateSaveState();
+    scheduleSaveState();
     invalidateTopicMasteryCache();
     updateStats();
     updateXPUI();
