@@ -24,7 +24,7 @@ export function openMistakesModal() {
             <button class="btn btn-icon close-modal-btn" data-close-modal="${modalId}">✕</button>
           </div>
         </div>
-        <div id="mistakes-content" class="modal-body-container"></div>
+        <div id="mistakes-content"></div>
       </div>
     `;
     document.body.appendChild(modal);
@@ -37,6 +37,7 @@ export function openMistakesModal() {
 function renderMistakesContent() {
   const container = document.getElementById("mistakes-content");
   if (!container) return;
+  container.scrollTop = 0;
 
   // Optimization: O(N) scan instead of O(N*M)
   const words = state.dataStore.filter((w) => state.mistakes.has(w.id));

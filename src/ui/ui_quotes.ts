@@ -6,6 +6,7 @@ export function renderFavoriteQuotes() {
   const container = document.getElementById("quotes-list");
   if (!container) return;
 
+  container.scrollTop = 0;
   container.innerHTML = "";
 
   if (!state.favoriteQuotes || state.favoriteQuotes.length === 0) {
@@ -17,9 +18,10 @@ export function renderFavoriteQuotes() {
   // Отображаем новые сверху
   const quotes = [...state.favoriteQuotes].reverse();
 
-  quotes.forEach((quote) => {
+  quotes.forEach((quote, index) => {
     const el = document.createElement("div");
     el.className = "quote-card";
+    el.style.animation = `fadeInUpList 0.3s ease-out ${index * 0.05}s backwards`;
     el.innerHTML = `
       <div class="quote-content">
         <div class="quote-kr">${escapeHtml(quote.quote_kr)}</div>

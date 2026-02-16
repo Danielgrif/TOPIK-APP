@@ -58,3 +58,25 @@ body {
     -moz-osx-font-smoothing: grayscale;
     line-height: 1.6; /* Improved readability */
 }
+
+/* --- Custom Scrollbar --- */
+::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+::-webkit-scrollbar-track {
+    background: transparent;
+}
+::-webkit-scrollbar-thumb {
+    background: var(--surface-3);
+    border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+    background: var(--text-tertiary);
+}
+
+/* --- Selection Color --- */
+::selection {
+    background: var(--primary-light);
+    color: var(--primary);
+}

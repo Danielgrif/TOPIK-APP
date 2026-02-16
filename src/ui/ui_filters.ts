@@ -179,9 +179,7 @@ export function populateFilters() {
     // --- Virtual Scroll Setup ---
     const listContainer = document.createElement("div");
     listContainer.className = "multiselect-scroll-container";
-    // Increase height for modal view
-    listContainer.style.maxHeight = "60vh";
-    listContainer.style.height = "400px";
+    // Height is now handled by CSS flexbox
 
     const sizer = document.createElement("div");
     const virtualContent = document.createElement("div");
@@ -240,6 +238,7 @@ export function populateFilters() {
     listContainer.onscroll = renderVisibleItems;
     sizer.style.height = `${searchFilteredItems.length * VIRTUAL_ITEM_HEIGHT}px`;
     renderVisibleItems();
+    listContainer.scrollTop = 0; // Reset scroll on open
   }
 
   populateCategoryFilter();
@@ -322,8 +321,7 @@ function populateCategoryFilter() {
     // --- Virtual Scroll Setup ---
     const listContainer = document.createElement("div");
     listContainer.className = "multiselect-scroll-container";
-    listContainer.style.maxHeight = "60vh";
-    listContainer.style.height = "400px";
+    // Height is now handled by CSS flexbox
 
     const sizer = document.createElement("div");
     const virtualContent = document.createElement("div");
@@ -380,6 +378,7 @@ function populateCategoryFilter() {
     listContainer.onscroll = renderVisibleItems;
     sizer.style.height = `${searchFilteredItems.length * VIRTUAL_ITEM_HEIGHT}px`;
     renderVisibleItems();
+    listContainer.scrollTop = 0; // Reset scroll on open
   }
 }
 

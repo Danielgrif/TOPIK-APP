@@ -263,16 +263,32 @@ export function checkAutoTheme() {
     state.darkMode = isNight;
     localStorage.setItem(LS_KEYS.DARK_MODE, String(state.darkMode));
     applyTheme();
+
+    // Обновляем чекбокс в настройках, если он есть в DOM
+    const checkbox = document.querySelector(
+      'input[onchange*="toggleDarkMode"]',
+    ) as HTMLInputElement;
+    if (checkbox) checkbox.checked = state.darkMode;
   }
 }
 
 /**
  * Toggles dark mode on and off.
+ * @param {HTMLInputElement} [el] - The checkbox element.
  */
-export function toggleDarkMode() {
-  state.darkMode = !state.darkMode;
+export function toggleDarkMode(el?: HTMLInputElement) {
+  state.darkMode = el && el.type === "checkbox" ? el.checked : !state.darkMode;
   localStorage.setItem(LS_KEYS.DARK_MODE, String(state.darkMode));
   applyTheme();
+
+  // Синхронизируем чекбокс, если переключение вызвано не им (например, кнопкой в хедере)
+  if (!el || el.type !== "checkbox") {
+    const checkbox = document.querySelector(
+      'input[onchange*="toggleDarkMode"]',
+    ) as HTMLInputElement;
+    if (checkbox) checkbox.checked = state.darkMode;
+  }
+
   updateSettingsTimestamp();
   scheduleSaveState();
 }

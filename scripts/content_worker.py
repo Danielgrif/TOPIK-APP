@@ -1,5 +1,5 @@
 # Перед запуском установите необходимые библиотеки командой:
-# pip install supabase python-dotenv requests idna edge-tts pillow google-generativeai
+# pip install -r ../requirements.txt
 
 import os
 import re
@@ -8,6 +8,7 @@ import time
 import hashlib
 import random
 import logging
+import threading
 import asyncio
 import argparse
 from http.server import BaseHTTPRequestHandler, HTTPServer
@@ -17,6 +18,11 @@ import json
 import warnings
 
 warnings.simplefilter(action='ignore', category=FutureWarning)
+
+# Принудительная установка кодировки для консоли (Windows fix)
+if sys.platform == 'win32':
+    try: sys.stdout.reconfigure(encoding='utf-8')
+    except AttributeError: pass
 
 # Настройка логирования в файл log.txt
 logging.basicConfig(
@@ -28,6 +34,11 @@ logging.basicConfig(
     format='%(asctime)s - %(levelname)s - %(message)s'
 )
 
+# Отключаем шум от HTTP-клиентов, оставляя только ошибки
+logging.getLogger("httpx").setLevel(logging.WARNING)
+logging.getLogger("httpcore").setLevel(logging.WARNING)
+logging.getLogger("urllib3").setLevel(logging.WARNING)
+
 # Добавляем путь к пользовательским пакетам (на случай, если Python их не видит)
 import site
 try:
@@ -37,7 +48,7 @@ except AttributeError: pass
 try:
     import requests
     import aiohttp
-    from supabase import create_client
+    from supabase import create_client, create_async_client
     from dotenv import load_dotenv
     import edge_tts # type: ignore
     from PIL import Image
@@ -45,7 +56,9 @@ try:
 except ImportError as e:
     logging.error(f"❌ Ошибка импорта библиотек: {e}")
     logging.error("Вероятно, файлы библиотек повреждены. Попробуйте выполнить эту команду для исправления:")
-    logging.error(f'"{sys.executable}" -m pip install --force-reinstall requests idna urllib3 chardet certifi aiohttp edge-tts supabase pillow google-generativeai')
+    # Формируем путь к requirements.txt относительно скрипта
+    req_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "requirements.txt")
+    logging.error(f'"{sys.executable}" -m pip install --force-reinstall -r "{req_path}"')
     sys.exit(1)
 
 # Пытаемся загрузить .env (стандарт) или env (если файл назван без точки)
@@ -90,13 +103,16 @@ WORD_REQUEST_STATUS = {
     "ERROR": "error",
 }
 
+# Глобальные флаги состояния схемы
+HAS_GRAMMAR_INFO = True
+
 if not SUPABASE_URL or not SUPABASE_KEY:
     logging.error("❌ ОШИБКА: Не найдены переменные окружения SUPABASE_URL или SUPABASE_SERVICE_KEY (или их VITE_ аналоги).")
     logging.error("Убедитесь, что файл .env создан и содержит эти ключи.")
     sys.exit(1)
 
 # Настройка аргументов командной строки
-parser = argparse.ArgumentParser(description="Генератор контента для TOPIK APP")
+parser = argparse.ArgumentParser(description="Фоновый воркер TOPIK APP: обработка заявок и генерация контента")
 parser.add_argument("--topic", type=str, help="Обработать только слова из конкретной темы (фильтр по колонке 'topic')")
 parser.add_argument("--word", type=str, help="Обработать только конкретное слово (фильтр по 'word_kr')")
 parser.add_argument("--force-images", action="store_true", help="Принудительно обновить изображения (перезаписать старые)")
@@ -104,17 +120,18 @@ parser.add_argument("--force-audio", action="store_true", help="Принудит
 parser.add_argument("--force-quotes", action="store_true", help="Принудительно обновить аудио только для цитат")
 parser.add_argument("--check", action="store_true", help="Запустить проверку целостности файлов и ссылок (удаление битых)")
 parser.add_argument("--retry-errors", action="store_true", help="Сбросить статус ошибочных заявок на 'pending' для повторной обработки")
+parser.add_argument("--exit-after-maintenance", action="store_true", help="Завершить работу после выполнения задач обслуживания")
 parser.add_argument("--concurrency", type=int, default=0, help="Количество одновременных потоков (0 = авто-подбор, по умолчанию 0)")
 args = parser.parse_args()
 
 # Исправление предупреждения "Storage endpoint URL should have a trailing slash"
 if not SUPABASE_URL.endswith("/"):
-    SUPABASE_URL += "/"
+    SUPABASE_URL += "/" # type: ignore
 
 # Патч для исправления ошибки "Storage endpoint URL should have a trailing slash"
 try:
     StorageClient = None
-    # Пробуем прямой импорт, который работает в большинстве версий supabase-py
+    # Пробуем прямой импорт, который работает в большинстве версий supabase-py v1
     try:
         from storage3.utils import StorageClient # type: ignore
     except ImportError:
@@ -147,6 +164,31 @@ except Exception as e:
     logging.error(f"❌ Критическая ошибка при инициализации Supabase: {e}")
     logging.error("Проверьте URL и KEY в файле .env")
     sys.exit(1)
+
+def _execute_with_retry(executable):
+    """Выполняет синхронный запрос к Supabase с логикой повторных попыток."""
+    max_retries = 4
+    base_delay = 1.5
+    for attempt in range(max_retries):
+        try:
+            return executable.execute()
+        except Exception as e:
+            err_str = str(e).lower()
+            is_network_error = 'getaddrinfo failed' in err_str or '10054' in err_str or 'timed out' in err_str or 'connection' in err_str or '10051' in err_str
+            if is_network_error and attempt < max_retries - 1:
+                delay = base_delay * (2 ** attempt) + random.uniform(0, 1)
+                # Логируем только первую попытку ретрая, чтобы не спамить в консоль при микро-разрывах
+                if attempt == 0 or attempt == max_retries - 2:
+                    logging.warning(f"🌐 Сетевая ошибка Supabase ({e}). Попытка {attempt + 2}/{max_retries} через {delay:.1f}с...")
+                time.sleep(delay)
+            else:
+                raise e
+
+async def execute_supabase_query(executable):
+    """Асинхронная обертка для выполнения запросов к Supabase с повторными попытками."""
+    loop = asyncio.get_running_loop()
+    # Запускаем блокирующий вызов в отдельном потоке, чтобы не замораживать asyncio
+    return await loop.run_in_executor(None, _execute_with_retry, executable)
 
 # 1.1 Проверка и создание бакета (автоматическая настройка)
 try:
@@ -208,6 +250,10 @@ if args.retry_errors:
         logging.info(f"✅ Сброшено заявок: {count}")
     except Exception as e:
         logging.error(f"❌ Ошибка сброса заявок: {e}")
+    
+    if args.exit_after_maintenance:
+        logging.info("🏁 Обслуживание завершено. Выход.")
+        sys.exit(0)
 
 def clean_query_for_pixabay(text):
     """Очищает текст перевода для лучшего поиска картинок."""
@@ -258,29 +304,30 @@ def cleanup_temp_files():
     except Exception as e:
         logging.warning(f"⚠️ Ошибка очистки временных файлов: {e}")
 
-async def generate_edge_tts(text, filepath, voice="ko-KR-SunHiNeural"):
-    """Генерация аудио через Microsoft Edge TTS (бесплатно, высокое качество)"""
+async def generate_audio_bytes(text, voice="ko-KR-SunHiNeural") -> bytes:
+    """Генерация аудио в память через Microsoft Edge TTS"""
     clean_text = clean_text_for_tts(text)
-    if not clean_text: return False
+    if not clean_text: return None
 
     for i in range(3): # 3 попытки при ошибке сети
         try:
             communicate = edge_tts.Communicate(clean_text, voice)
-            await communicate.save(filepath)
+            audio_data = b""
+            async for chunk in communicate.stream():
+                if chunk["type"] == "audio":
+                    audio_data += chunk["data"]
             
-            # Проверка: файл должен быть больше 0 байт
-            if os.path.getsize(filepath) < MIN_FILE_SIZE:
-                logging.warning(f"⚠️ Файл слишком мал ({os.path.getsize(filepath)}b): {text}")
-                return False
-                
-            return True
+            if len(audio_data) < MIN_FILE_SIZE:
+                logging.warning(f"⚠️ Аудио слишком короткое: {text}")
+                return None
+            return audio_data
         except Exception as e:
             if i == 2: logging.warning(f"⚠️ Ошибка Edge TTS: {e}")
             await asyncio.sleep(1)
-    return False
+    return None
 
-async def generate_dialogue_audio(text, filepath):
-    """Генерация диалога с двумя голосами (A/B или 가/나) через SSML с паузами"""
+async def generate_dialogue_bytes(text) -> bytes:
+    """Генерация диалога в память"""
     lines = text.replace('\r\n', '\n').split('\n')
     
     voice_female = "ko-KR-SunHiNeural"
@@ -309,7 +356,7 @@ async def generate_dialogue_audio(text, filepath):
             
             if not line: continue
             
-            # Добавляем паузу 500мс перед репликой (кроме первой)
+            # Добавляем паузу 500мс перед репликой
             if has_content:
                  ssml_parts.append('<break time="500ms"/>')
                  
@@ -321,22 +368,23 @@ async def generate_dialogue_audio(text, filepath):
             
         ssml_parts.append('</speak>')
         
-        if not has_content: return False
+        if not has_content: return None
         
         ssml_string = "".join(ssml_parts)
         
-        # Отправляем SSML в edge-tts
         communicate = edge_tts.Communicate(ssml_string, voice_female)
-        await communicate.save(filepath)
+        audio_data = b""
+        async for chunk in communicate.stream():
+            if chunk["type"] == "audio":
+                audio_data += chunk["data"]
         
-        if os.path.getsize(filepath) < MIN_FILE_SIZE:
+        if len(audio_data) < MIN_FILE_SIZE:
              logging.warning(f"⚠️ Диалог слишком мал: {text[:20]}...")
-             return False
-             
-        return True
+             return None
+        return audio_data
     except Exception as e:
         logging.warning(f"⚠️ Ошибка диалога (SSML): {e}")
-        return False
+        return None
 
 def check_integrity(bucket_name, table_name='vocabulary'):
     """Проверка целостности файлов и ссылок в БД."""
@@ -460,41 +508,22 @@ async def upload_to_supabase(bucket, path, data, content_type):
 
     await loop.run_in_executor(None, _do_upload)
 
-async def update_db_record(row_id, updates, table='vocabulary'):
-    """Асинхронная обертка для обновления БД"""
-    loop = asyncio.get_running_loop()
-    
-    def _do_update():
-        for i in range(3):
-            try:
-                return supabase.table(DB_TABLES.get(table.upper(), table)).update(updates).eq("id", row_id).execute()
-            except Exception as e:
-                if "10035" in str(e) or "10054" in str(e): time.sleep(1); continue
-                raise e
-
-    await loop.run_in_executor(None, _do_update)
-
 async def handle_main_audio(session, row, word, word_hash, force_audio=False):
     """Обработка основного аудио (Женский голос - SunHi)"""
     if row.get('audio_url') and not force_audio: return {}
     
     audio_filename = f"{word_hash}.mp3"
-    filepath = f"temp_{audio_filename}"
     
-    # Используем EdgeTTS (SunHi - Женский)
-    if await generate_edge_tts(word, filepath, "ko-KR-SunHiNeural"):
-        try:
-            if row.get('audio_url'):
-                await delete_old_file(DB_BUCKETS['AUDIO'], row.get('audio_url'))
-            with open(filepath, 'rb') as f:
-                await upload_to_supabase(DB_BUCKETS['AUDIO'], audio_filename, f, "audio/mpeg")
-            url = supabase.storage.from_(DB_BUCKETS['AUDIO']).get_public_url(audio_filename)
-            logging.info(f"✅ Audio Female: {word}")
-            return {'audio_url': url}
-        finally:
-            try:
-                if os.path.exists(filepath): os.remove(filepath)
-            except Exception: pass # Игнорируем ошибки удаления (WinError 32), почистим позже
+    audio_data = await generate_audio_bytes(word, "ko-KR-SunHiNeural")
+    
+    if audio_data:
+        if row.get('audio_url'):
+            await delete_old_file(DB_BUCKETS['AUDIO'], row.get('audio_url'))
+        
+        await upload_to_supabase(DB_BUCKETS['AUDIO'], audio_filename, BytesIO(audio_data), "audio/mpeg")
+        url = supabase.storage.from_(DB_BUCKETS['AUDIO']).get_public_url(audio_filename)
+        logging.info(f"✅ Audio Female: {word}")
+        return {'audio_url': url}
 
     return {}
 
@@ -503,21 +532,17 @@ async def handle_male_audio(row, word, word_hash, force_audio=False):
     if row.get('audio_male') and not force_audio: return {}
     
     male_filename = f"{word_hash}_M.mp3"
-    filepath = f"temp_{male_filename}"
     
-    if await generate_edge_tts(word, filepath, "ko-KR-InJoonNeural"):
-        try:
-            if row.get('audio_male'):
-                await delete_old_file(DB_BUCKETS['AUDIO'], row.get('audio_male'))
-            with open(filepath, 'rb') as f:
-                await upload_to_supabase(DB_BUCKETS['AUDIO'], male_filename, f, "audio/mpeg")
-            url = supabase.storage.from_(DB_BUCKETS['AUDIO']).get_public_url(male_filename)
-            logging.info(f"✅ Audio Male: {word}")
-            return {'audio_male': url}
-        finally:
-            try:
-                if os.path.exists(filepath): os.remove(filepath)
-            except Exception: pass
+    audio_data = await generate_audio_bytes(word, "ko-KR-InJoonNeural")
+    
+    if audio_data:
+        if row.get('audio_male'):
+            await delete_old_file(DB_BUCKETS['AUDIO'], row.get('audio_male'))
+        
+        await upload_to_supabase(DB_BUCKETS['AUDIO'], male_filename, BytesIO(audio_data), "audio/mpeg")
+        url = supabase.storage.from_(DB_BUCKETS['AUDIO']).get_public_url(male_filename)
+        logging.info(f"✅ Audio Male: {word}")
+        return {'audio_male': url}
 
     return {}
 
@@ -528,28 +553,21 @@ async def handle_example_audio(row, example, force_audio=False):
     
     ex_hash = hashlib.md5(example.encode('utf-8')).hexdigest()
     ex_filename = f"ex_{ex_hash}.mp3"
-    filepath = f"temp_{ex_filename}"
-    ex_downloaded = False
+    audio_data = None
     
     is_dialogue = re.search(r'(^|\n)[AaBb가나]\s*:', example)
     if is_dialogue:
-        if await generate_dialogue_audio(example, filepath): ex_downloaded = True
+        audio_data = await generate_dialogue_bytes(example)
     else:
-        if await generate_edge_tts(example, filepath, "ko-KR-SunHiNeural"): ex_downloaded = True
+        audio_data = await generate_audio_bytes(example, "ko-KR-SunHiNeural")
     
-    if ex_downloaded:
-        try:
-            if row.get('example_audio'):
-                await delete_old_file(DB_BUCKETS['AUDIO'], row.get('example_audio'))
-            with open(filepath, 'rb') as f:
-                await upload_to_supabase(DB_BUCKETS['AUDIO'], ex_filename, f, "audio/mpeg")
-            url = supabase.storage.from_(DB_BUCKETS['AUDIO']).get_public_url(ex_filename)
-            logging.info(f"✅ Example: {example[:10]}...")
-            return {'example_audio': url}
-        finally:
-            try:
-                if os.path.exists(filepath): os.remove(filepath)
-            except Exception: pass
+    if audio_data:
+        if row.get('example_audio'):
+            await delete_old_file(DB_BUCKETS['AUDIO'], row.get('example_audio'))
+        await upload_to_supabase(DB_BUCKETS['AUDIO'], ex_filename, BytesIO(audio_data), "audio/mpeg")
+        url = supabase.storage.from_(DB_BUCKETS['AUDIO']).get_public_url(ex_filename)
+        logging.info(f"✅ Example: {example[:10]}...")
+        return {'example_audio': url}
 
     return {}
 
@@ -600,6 +618,19 @@ async def handle_image(session, row, translation, word_hash, force_images):
         logging.warning(f"⚠️ Ошибка вызова Edge Function для {translation}: {e}")
         return {}
 
+async def reset_failed_requests():
+    """Сбрасывает статус ошибочных заявок на 'pending' для повторной обработки."""
+    try:
+        # Пытаемся обновить статус ERROR -> PENDING
+        builder = supabase.table(DB_TABLES['WORD_REQUESTS']).update({'status': WORD_REQUEST_STATUS['PENDING']}).eq('status', WORD_REQUEST_STATUS['ERROR'])
+        res = await execute_supabase_query(builder)
+        
+        count = len(res.data) if res and res.data else 0
+        if count > 0:
+            logging.info(f"♻️ Авто-сброс: {count} ошибочных заявок возвращено в очередь.")
+    except Exception as e:
+        logging.warning(f"⚠️ Ошибка при авто-сбросе заявок: {e}")
+
 async def _generate_content_for_word(session, row):
     """Генерация контента для слова (аудио, картинки)"""
     word = row.get('word_kr')
@@ -644,7 +675,8 @@ async def process_word(sem, session, row, error_counter):
             updates_to_make = await _generate_content_for_word(session, row)
             
             if updates_to_make:
-                await update_db_record(row_id, updates_to_make)
+                builder = supabase.table(DB_TABLES['VOCABULARY']).update(updates_to_make).eq("id", row_id)
+                await execute_supabase_query(builder)
                 return None # Успех
             else:
                 return row_id
@@ -652,7 +684,7 @@ async def process_word(sem, session, row, error_counter):
             _handle_processing_error(e, word, error_counter)
             return row_id
 
-async def process_word_request(request):
+async def process_word_request(request, session=None):
     """Обработка заявки на добавление слова через AI"""
     req_id = request.get('id')
     word_kr = request.get('word_kr')
@@ -666,11 +698,11 @@ async def process_word_request(request):
 
     if not has_manual_data and not GEMINI_API_KEY:
         logging.warning(f"⚠️ Пропуск {word_kr}: нет ключа Gemini и нет ручных данных.")
-        # FIX: Явно обновляем статус на ошибку, чтобы клиент не ждал вечно
-        supabase.table(DB_TABLES['WORD_REQUESTS']).update({
+        builder = supabase.table(DB_TABLES['WORD_REQUESTS']).update({
             'status': WORD_REQUEST_STATUS['ERROR'], 
             'my_notes': 'Server Error: Missing Gemini API Key'
-        }).eq('id', req_id).execute()
+        }).eq('id', req_id)
+        await execute_supabase_query(builder)
         return
 
     logging.info(f"🤖 Обработка запроса: {word_kr} (Ручные данные: {has_manual_data})")
@@ -743,7 +775,8 @@ Input: '{word_kr}'
             
             if not text_response:
                 logging.error(f"❌ Все модели AI недоступны для {word_kr}. Ошибка: {last_error}")
-                supabase.table(DB_TABLES['WORD_REQUESTS']).update({'status': WORD_REQUEST_STATUS['ERROR'], 'my_notes': f'All AI models failed: {last_error}'}).eq('id', req_id).execute()
+                builder = supabase.table(DB_TABLES['WORD_REQUESTS']).update({'status': WORD_REQUEST_STATUS['ERROR'], 'my_notes': f'All AI models failed: {last_error}'}).eq('id', req_id)
+                await execute_supabase_query(builder)
                 return
             
             # Очистка от markdown ```json ... ```
@@ -756,15 +789,17 @@ Input: '{word_kr}'
                 parsed_data = json.loads(text_response.strip())
             except json.JSONDecodeError:
                 logging.error(f"❌ Ошибка парсинга JSON для {word_kr}")
-                supabase.table(DB_TABLES['WORD_REQUESTS']).update({'status': WORD_REQUEST_STATUS['ERROR'], 'my_notes': 'Invalid JSON'}).eq('id', req_id).execute()
+                builder = supabase.table(DB_TABLES['WORD_REQUESTS']).update({'status': WORD_REQUEST_STATUS['ERROR'], 'my_notes': 'Invalid JSON'}).eq('id', req_id)
+                await execute_supabase_query(builder)
                 return
 
             if isinstance(parsed_data, dict) and parsed_data.get("error") == "Invalid input":
                 logging.warning(f"⚠️ AI rejected input '{word_kr}': Invalid input")
-                supabase.table(DB_TABLES['WORD_REQUESTS']).update({
+                builder = supabase.table(DB_TABLES['WORD_REQUESTS']).update({
                     'status': WORD_REQUEST_STATUS['ERROR'],
                     'my_notes': 'AI: Invalid input'
-                }).eq('id', req_id).execute()
+                }).eq('id', req_id)
+                await execute_supabase_query(builder)
                 return
 
             if isinstance(parsed_data, list):
@@ -773,15 +808,18 @@ Input: '{word_kr}'
                 items_to_process = [parsed_data]
             else:
                 logging.error(f"❌ Неверный формат ответа AI для {word_kr}")
-                supabase.table(DB_TABLES['WORD_REQUESTS']).update({'status': WORD_REQUEST_STATUS['ERROR']}).eq('id', req_id).execute()
+                builder = supabase.table(DB_TABLES['WORD_REQUESTS']).update({'status': WORD_REQUEST_STATUS['ERROR']}).eq('id', req_id)
+                await execute_supabase_query(builder)
                 return
         
         if not items_to_process:
              logging.error(f"❌ Нет данных для обработки {word_kr}")
-             supabase.table(DB_TABLES['WORD_REQUESTS']).update({'status': WORD_REQUEST_STATUS['ERROR']}).eq('id', req_id).execute()
+             builder = supabase.table(DB_TABLES['WORD_REQUESTS']).update({'status': WORD_REQUEST_STATUS['ERROR']}).eq('id', req_id)
+             await execute_supabase_query(builder)
              return
 
         # Обработка каждого элемента (значения слова)
+        success_count = 0
         for data in items_to_process:
             if not data.get('word_kr'):
                 continue
@@ -793,8 +831,8 @@ Input: '{word_kr}'
 
             # 2. Проверка на дубликаты в vocabulary
             # Проверяем не только по слову, но и по переводу, чтобы различать омонимы
-            existing = supabase.table(DB_TABLES['VOCABULARY']).select('id, translation').eq('word_kr', data.get('word_kr')).execute()
-            existing_rows = getattr(existing, 'data', []) or []
+            builder = supabase.table(DB_TABLES['VOCABULARY']).select('id, translation').eq('word_kr', data.get('word_kr'))
+            existing_rows = (await execute_supabase_query(builder)).data or []
             
             word_id = None
             
@@ -802,6 +840,7 @@ Input: '{word_kr}'
             for row in existing_rows:
                 if row.get('translation') == data.get('translation'):
                     word_id = row['id']
+                    success_count += 1
                     logging.info(f"ℹ️ Слово {data.get('word_kr')} ({data.get('translation')}) уже есть в базе.")
                     break
             
@@ -818,23 +857,40 @@ Input: '{word_kr}'
                 
                 clean_data = {k: v for k, v in data.items() if k in allowed_keys}
                 
-                insert_res = supabase.table(DB_TABLES['VOCABULARY']).insert(clean_data).execute()
-                insert_data = getattr(insert_res, 'data', None)
+                # Если колонки grammar_info нет в базе, удаляем её из данных перед вставкой
+                if not HAS_GRAMMAR_INFO and 'grammar_info' in clean_data:
+                    del clean_data['grammar_info']
+                
+                try:
+                    builder = supabase.table(DB_TABLES['VOCABULARY']).insert(clean_data)
+                    insert_data = (await execute_supabase_query(builder)).data
+                except Exception as e:
+                    logging.error(f"❌ Ошибка вставки в БД: {e}")
+                    insert_data = None
                 
                 if insert_data and isinstance(insert_data, list) and len(insert_data) > 0:
                     word_id = insert_data[0]['id']
+                    success_count += 1
                     logging.info(f"✅ Слово {data.get('word_kr')} ({data.get('translation')}) добавлено.")
                     
                     # Генерируем медиа для нового слова сразу
-                    async with aiohttp.ClientSession() as session:
+                    if session:
                         updates = await _generate_content_for_word(session, insert_data[0])
-                        if updates:
-                            await update_db_record(word_id, updates)
+                    else:
+                        async with aiohttp.ClientSession() as local_session:
+                            updates = await _generate_content_for_word(local_session, insert_data[0])
+                    
+                    if updates:
+                        update_builder = supabase.table(DB_TABLES['VOCABULARY']).update(updates).eq("id", word_id)
+                        await execute_supabase_query(update_builder)
+                else:
+                    logging.error(f"❌ Не удалось вставить слово '{data.get('word_kr')}'. Ответ БД пуст (возможно, ошибка прав доступа RLS).")
 
             # Опционально: Добавить слово в "Изучаемые" пользователя, который его запросил
             if word_id and user_id:
                  try:
-                     supabase.table(DB_TABLES['USER_PROGRESS']).upsert({'user_id': user_id, 'word_id': word_id, 'is_learned': False}).execute()
+                     builder = supabase.table(DB_TABLES['USER_PROGRESS']).upsert({'user_id': user_id, 'word_id': word_id, 'is_learned': False})
+                     await execute_supabase_query(builder)
                  except Exception as e:
                      logging.warning(f"Не удалось добавить в прогресс пользователя: {e}")
 
@@ -842,21 +898,35 @@ Input: '{word_kr}'
             target_list_id = request.get('target_list_id')
             if word_id and target_list_id:
                 try:
-                    supabase.table(DB_TABLES['LIST_ITEMS']).upsert({'list_id': target_list_id, 'word_id': word_id}).execute()
+                    builder = supabase.table(DB_TABLES['LIST_ITEMS']).upsert({'list_id': target_list_id, 'word_id': word_id})
+                    await execute_supabase_query(builder)
                     logging.info(f"✅ Слово добавлено в список {target_list_id}")
                 except Exception as e:
                     logging.warning(f"⚠️ Ошибка добавления в список: {e}")
 
         # 4. Обновление статуса заявки (после обработки всех вариантов)
-        supabase.table(DB_TABLES['WORD_REQUESTS']).update({'status': WORD_REQUEST_STATUS['PROCESSED']}).eq('id', req_id).execute()
+        final_status = WORD_REQUEST_STATUS['PROCESSED']
+        notes = None
+        
+        if success_count == 0:
+             final_status = WORD_REQUEST_STATUS['ERROR']
+             notes = "System: Failed to insert/find word in DB (RLS or Unknown Error)"
+        
+        update_payload = {'status': final_status}
+        if notes: update_payload['my_notes'] = notes
+        
+        builder = supabase.table(DB_TABLES['WORD_REQUESTS']).update(update_payload).eq('id', req_id)
+        await execute_supabase_query(builder)
 
     except asyncio.TimeoutError:
         logging.error(f"❌ Timeout AI для {word_kr}")
-        supabase.table(DB_TABLES['WORD_REQUESTS']).update({'status': WORD_REQUEST_STATUS['ERROR'], 'my_notes': 'AI Timeout'}).eq('id', req_id).execute()
+        builder = supabase.table(DB_TABLES['WORD_REQUESTS']).update({'status': WORD_REQUEST_STATUS['ERROR'], 'my_notes': 'AI Timeout'}).eq('id', req_id)
+        await execute_supabase_query(builder)
 
     except Exception as e:
         logging.error(f"❌ Ошибка AI обработки для {word_kr}: {e}")
-        supabase.table(DB_TABLES['WORD_REQUESTS']).update({'status': WORD_REQUEST_STATUS['ERROR']}).eq('id', req_id).execute()
+        builder = supabase.table(DB_TABLES['WORD_REQUESTS']).update({'status': WORD_REQUEST_STATUS['ERROR']}).eq('id', req_id)
+        await execute_supabase_query(builder)
 
 async def handle_quote_audio(row, force_audio=False):
     """Обработка аудио для цитаты (EdgeTTS)"""
@@ -868,22 +938,17 @@ async def handle_quote_audio(row, force_audio=False):
     # Генерируем хеш от текста цитаты для имени файла
     quote_hash = hashlib.md5(text.encode('utf-8')).hexdigest()
     filename = f"quote_{quote_hash}.mp3"
-    filepath = f"temp_{filename}"
     
     # Используем тот же голос, что и для слов (SunHi)
-    if await generate_edge_tts(text, filepath, "ko-KR-SunHiNeural"):
-        try:
-            if row.get('audio_url'):
-                await delete_old_file(DB_BUCKETS['AUDIO'], row.get('audio_url'))
-            with open(filepath, 'rb') as f:
-                await upload_to_supabase(DB_BUCKETS['AUDIO'], filename, f, "audio/mpeg")
-            url = supabase.storage.from_(DB_BUCKETS['AUDIO']).get_public_url(filename)
-            logging.info(f"✅ Quote Audio: {text[:15]}...")
-            return {'audio_url': url}
-        finally:
-            try:
-                if os.path.exists(filepath): os.remove(filepath)
-            except Exception: pass
+    audio_data = await generate_audio_bytes(text, "ko-KR-SunHiNeural")
+    
+    if audio_data:
+        if row.get('audio_url'):
+            await delete_old_file(DB_BUCKETS['AUDIO'], row.get('audio_url'))
+        await upload_to_supabase(DB_BUCKETS['AUDIO'], filename, BytesIO(audio_data), "audio/mpeg")
+        url = supabase.storage.from_(DB_BUCKETS['AUDIO']).get_public_url(filename)
+        logging.info(f"✅ Quote Audio: {text[:15]}...")
+        return {'audio_url': url}
 
     return {}
 
@@ -894,7 +959,8 @@ async def process_quote(sem, session, row):
         try:
             updates = await handle_quote_audio(row, args.force_audio or args.force_quotes)
             if updates:
-                await update_db_record(row_id, updates, table=DB_TABLES['QUOTES'])
+                builder = supabase.table(DB_TABLES['QUOTES']).update(updates).eq('id', row_id)
+                await execute_supabase_query(builder)
         except Exception as e:
             logging.error(f"❌ Ошибка цитаты {row_id}: {e}")
 
@@ -925,22 +991,104 @@ async def measure_network_quality():
         logging.warning(f"⚠️ Не удалось измерить скорость ({e}). Использую значение по умолчанию (5).")
         return 5
 
-async def user_requests_loop():
+async def check_internet_connection():
+    """Проверяет доступность интернета перед подключением к Realtime"""
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get("https://www.google.com", timeout=2) as resp:
+                return resp.status == 200
+    except:
+        return False
+
+async def realtime_loop(trigger_event: asyncio.Event):
+    """Асинхронный цикл для Realtime подписки (требует async client)"""
+
+    def on_insert_callback(payload):
+        logging.info("🔔 Realtime: Получена новая заявка!")
+        trigger_event.set()
+        
+    retry_delay = 5
+
+    while True:
+        try:
+            # Проверка сети перед попыткой подключения, чтобы не ловить getaddrinfo failed
+            if not await check_internet_connection():
+                logging.warning(f"🌐 Нет интернета. Ожидание {retry_delay} сек перед подключением к Realtime...")
+                await asyncio.sleep(retry_delay)
+                retry_delay = min(retry_delay * 1.5, 60)
+                continue
+
+            logging.info("🟢 Инициализация Async Realtime клиента...")
+            # Создаем отдельный асинхронный клиент только для Realtime
+            async_client = await create_async_client(SUPABASE_URL, SUPABASE_KEY)
+
+            channel = async_client.channel('worker-db-changes')
+            
+            channel.on_postgres_changes(
+                event="INSERT",
+                schema="public",
+                table="word_requests",
+                callback=on_insert_callback
+            )
+            
+            logging.info("🟢 Realtime Listener: Подписка...")
+            await channel.subscribe()
+            logging.info("🟢 Realtime Listener: Подписка активна.")
+            
+            # Сброс задержки при успешном подключении
+            retry_delay = 5
+            
+            # FIX: Вместо вечного ожидания используем цикл с таймаутом (Watchdog)
+            # Перезапускаем соединение каждый час, чтобы избежать "молчаливых" зависаний сокета
+            for _ in range(60): # 60 минут
+                await asyncio.sleep(60)
+            
+            logging.info("♻️ Плановый перезапуск Realtime соединения (TTL)...")
+            await channel.unsubscribe()
+                
+        except AttributeError as e:
+            if "has no attribute" in str(e):
+                logging.error(f"❌ Ошибка версии библиотеки Realtime ({e}). Попробуйте: pip install --upgrade supabase")
+                logging.warning("⚠️ Переход в режим Polling (опрос раз в 30 сек).")
+                return 
+        except Exception as e:
+            logging.warning(f"⚠️ Ошибка Realtime: {e}. Реконнект через {retry_delay} сек...")
+            await asyncio.sleep(retry_delay)
+            retry_delay = min(retry_delay * 1.5, 60)
+
+async def user_requests_loop(trigger_event):
     """Приоритетный цикл для обработки заявок пользователей"""
     logging.info("👀 Запущен мониторинг пользовательских заявок (Приоритетный поток)...")
+    
+    # Настройки Backoff (умного ожидания)
+    min_sleep = 2
+    max_sleep = 30
+    current_sleep = min_sleep
+
     while True:
         try:
             # Всегда проверяем заявки
-            reqs = supabase.table(DB_TABLES['WORD_REQUESTS']).select("*").eq('status', WORD_REQUEST_STATUS['PENDING']).limit(5).execute()
-            if reqs.data:
+            builder = supabase.table(DB_TABLES['WORD_REQUESTS']).select("*").eq('status', WORD_REQUEST_STATUS['PENDING']).limit(5)
+            reqs = await execute_supabase_query(builder)
+            if reqs and reqs.data:
                 logging.info(f"⚡ Найдено {len(reqs.data)} новых заявок от пользователей.")
-                for req in reqs.data:
-                    await process_word_request(req)
-                # Если были задачи, проверяем снова почти сразу
-                await asyncio.sleep(0.5)
+                async with aiohttp.ClientSession() as session:
+                    for req in reqs.data:
+                        await process_word_request(req, session=session)
+                # Если были задачи, сбрасываем таймер и проверяем снова быстро
+                current_sleep = min_sleep
+                await asyncio.sleep(0.1)
             else:
-                # Если пусто, спим 2 секунды (достаточно часто для отзывчивости)
-                await asyncio.sleep(2)
+                # Ждем события от Realtime ИЛИ истечения таймера (Backoff)
+                try:
+                    await asyncio.wait_for(trigger_event.wait(), timeout=current_sleep)
+                    trigger_event.clear() # Сбрасываем событие
+                    logging.info("⚡ Воркер разбужен событием Realtime!")
+                    current_sleep = min_sleep # Сразу сбрасываем сон для быстрой реакции
+                except asyncio.TimeoutError:
+                    # Если событие не пришло за время current_sleep, увеличиваем время сна
+                    current_sleep = min(current_sleep * 1.5, max_sleep)
+                    
         except Exception as e:
             logging.error(f"❌ Ошибка в цикле заявок: {e}")
             await asyncio.sleep(5)
@@ -949,12 +1097,24 @@ async def background_tasks_loop(initial_concurrency):
     """Фоновый цикл для обслуживания контента (цитаты, пропуски)"""
     concurrency = initial_concurrency
     logging.info(f"🛠 Запущены фоновые задачи (Начальных потоков: {concurrency})...")
+    
+    last_reset_time = 0
 
     # Локальный кэш игнорируемых ID (чтобы не долбить одни и те же ошибки)
     ignore_ids = set()
 
+    # Настройки Backoff
+    min_sleep = 5
+    max_sleep = 120 # До 2 минут простоя, если нет задач
+    current_sleep = min_sleep
+
     while True:
         try:
+            # Автоматический сброс ошибок каждые 10 минут (600 сек)
+            if time.time() - last_reset_time > 600:
+                await reset_failed_requests()
+                last_reset_time = time.time()
+
             cleanup_temp_files()
             
             # 0.5. Обработка цитат (Quotes)
@@ -966,8 +1126,8 @@ async def background_tasks_loop(initial_concurrency):
                 
                 # FIX: Ограничиваем лимит цитат за раз, чтобы чаще проверять заявки пользователей
                 q_query = q_query.limit(5)
-                q_res = q_query.execute()
-                quotes = q_res.data or []
+                q_res = await execute_supabase_query(q_query)
+                quotes = q_res.data if q_res else []
                 
                 if quotes:
                     logging.info(f"📜 Найдено {len(quotes)} цитат для озвучки.")
@@ -995,8 +1155,8 @@ async def background_tasks_loop(initial_concurrency):
                     if args.word:
                         query = query.eq("word_kr", args.word)
 
-                    response = query.execute()
-                    words = response.data or []
+                    response = await execute_supabase_query(query)
+                    words = response.data if response else []
                     # Фильтруем слова, которые уже пытались обработать и не смогли
                     words = [w for w in words if isinstance(w, dict) and w.get('id') not in ignore_ids]
             except Exception as e:
@@ -1008,12 +1168,17 @@ async def background_tasks_loop(initial_concurrency):
                     logging.info("🏁 Обработка цитат завершена.")
                     break
                 elif not args.force_images and not args.force_audio:
-                    logging.info("💤 Нет новых слов. Жду 5 сек...")
-                    await asyncio.sleep(5)
+                    if current_sleep < max_sleep:
+                        logging.info(f"💤 Нет новых слов. Сплю {current_sleep:.1f} сек...")
+                    await asyncio.sleep(current_sleep)
+                    current_sleep = min(current_sleep * 1.5, max_sleep)
                 else:
                     logging.info("🏁 Обработка завершена (force mode).")
                     break
                 continue
+            
+            # Если задачи найдены - сбрасываем таймер сна
+            current_sleep = min_sleep
 
             logging.info(f"🔥 Запуск обработки {len(words)} слов... (Потоков: {concurrency})")
             
@@ -1055,26 +1220,62 @@ async def background_tasks_loop(initial_concurrency):
             await asyncio.sleep(60)
 
 def check_schema_health():
-    """Проверяет наличие необходимых колонок в таблице vocabulary."""
+    """Проверяет наличие необходимых колонок в ключевых таблицах."""
+    global HAS_GRAMMAR_INFO
     logging.info("🔍 Проверка схемы базы данных...")
-    expected_columns = [
-        'id', 'word_kr', 'translation', 'image', 'image_source', 
-        'audio_url', 'audio_male', 'example_audio', 'type'
-    ]
     
+    schemas_to_check = {
+        DB_TABLES['VOCABULARY']: [
+            'id', 'word_kr', 'translation', 'image', 'image_source', 
+            'audio_url', 'audio_male', 'example_audio', 'type',
+            'grammar_info' # Добавлено для проверки
+        ],
+        DB_TABLES['WORD_REQUESTS']: [
+            'id', 'word_kr', 'status', 'my_notes', 'target_list_id', 'user_id', 'translation'
+        ],
+        DB_TABLES['QUOTES']: [
+            'id', 'quote_kr', 'audio_url'
+        ]
+    }
+    
+    all_ok = True
+    for table, columns in schemas_to_check.items():
+        try:
+            # Используем синхронный вызов, так как это разовая проверка при старте
+            _execute_with_retry(supabase.table(table).select(",".join(columns)).limit(1))
+            logging.info(f"✅ Схема таблицы '{table}' корректна.")
+        except Exception as e:
+            all_ok = False
+            err_msg = str(e)
+            match = re.search(r"Could not find the '([^']+)' column", err_msg)
+            if match:
+                missing = match.group(1)
+                if missing == 'grammar_info':
+                    HAS_GRAMMAR_INFO = False
+                    logging.warning(f"⚠️ ПРЕДУПРЕЖДЕНИЕ: В таблице '{table}' нет колонки '{missing}'. Данные грамматики не будут сохраняться.")
+                    all_ok = True # Не считаем это критической ошибкой
+                else:
+                    logging.error(f"🚨 ОШИБКА СХЕМЫ: В таблице '{table}' нет колонки '{missing}'")
+            else:
+                logging.error(f"🚨 ОШИБКА СХЕМЫ: Не удалось проверить таблицу '{table}': {e}")
+    
+    if not all_ok:
+        logging.error(f"❌ Воркер не сможет работать корректно. Пожалуйста, примените SQL-миграции.")
+    
+    return all_ok
+
+def validate_gemini_key():
+    """Проверяет валидность ключа Gemini API."""
+    if not GEMINI_API_KEY:
+        return
+    
+    logging.info("🤖 Проверка ключа Gemini API...")
     try:
-        # Делаем запрос к колонкам, чтобы проверить их существование
-        supabase.table(DB_TABLES['VOCABULARY']).select(",".join(expected_columns)).limit(1).execute()
-        logging.info("✅ Схема таблицы vocabulary корректна.")
-        return True
+        model = genai.GenerativeModel('gemini-2.5-flash')
+        model.generate_content("Test")
+        logging.info("✅ Ключ Gemini API валиден.")
     except Exception as e:
-        err_msg = str(e)
-        match = re.search(r"Could not find the '([^']+)' column", err_msg)
-        if match:
-            missing = match.group(1)
-            logging.error(f"🚨 ОШИБКА СХЕМЫ: В таблице vocabulary нет колонки '{missing}'")
-            logging.error(f"❌ Воркер не сможет работать корректно. Пожалуйста, примените SQL-миграции.")
-        return False
+        logging.error(f"❌ Ошибка проверки ключа Gemini API: {e}")
 
 async def main_loop():
     logging.info("🚀 Воркер запущен (Parallel Mode).")
@@ -1085,12 +1286,23 @@ async def main_loop():
         logging.info(f"⚡ Автоматически установлено потоков для фона: {concurrency}")
     
     # Проверка схемы перед запуском
-    check_schema_health()
+    if not check_schema_health():
+        sys.exit(1)
+        
+    # Проверка ключа AI
+    validate_gemini_key()
+    
+    # Сброс ошибок при старте
+    await reset_failed_requests()
+    
+    # Событие для пробуждения воркера
+    request_trigger = asyncio.Event()
     
     # Запускаем оба цикла параллельно
     await asyncio.gather(
-        user_requests_loop(),
-        background_tasks_loop(concurrency)
+        user_requests_loop(request_trigger),
+        background_tasks_loop(concurrency),
+        realtime_loop(request_trigger)
     )
 
 if __name__ == "__main__":

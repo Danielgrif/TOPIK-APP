@@ -380,6 +380,7 @@ export function renderAchievements() {
   const container = document.getElementById("achievements-list");
   const header = document.getElementById("achievements-header");
   if (!container) return;
+  container.scrollTop = 0;
 
   container.innerHTML = "";
   const defs = getAchievementDefinitions();
@@ -389,17 +390,24 @@ export function renderAchievements() {
 
   if (header) {
     header.innerHTML = `
-            <div style="font-size: 14px; color: var(--text-sub); margin-bottom: 8px;">Открыто ${unlockedCount} из ${totalCount}</div>
-            <div class="xp-bar-container" style="height: 8px; max-width: 300px; margin: 0 auto;">
-                <div class="xp-bar-fill" style="width: ${(unlockedCount / totalCount) * 100}%; background: var(--gold);"></div>
+            <div style="font-size: 14px; color: var(--text-sub); margin-bottom: 10px; font-weight: 500; text-align: center;">Открыто ${unlockedCount} из ${totalCount}</div>
+            <div class="xp-bar-container" style="height: 10px; max-width: 100%; margin: 0 auto; background: var(--surface-2); border-radius: 5px; overflow: hidden;">
+                <div id="ach-progress-fill" class="xp-bar-fill" style="width: 0%; background: var(--gold); height: 100%; transition: width 1s cubic-bezier(0.4, 0, 0.2, 1); box-shadow: 0 0 10px rgba(255, 215, 0, 0.3);"></div>
             </div>
         `;
+
+    // Trigger animation after a brief delay
+    requestAnimationFrame(() => {
+      const fill = document.getElementById("ach-progress-fill");
+      if (fill) fill.style.width = `${(unlockedCount / totalCount) * 100}%`;
+    });
   }
 
-  defs.forEach((ach) => {
+  defs.forEach((ach, index) => {
     const isUnlocked = unlockedIds.has(ach.id);
     const card = document.createElement("div");
     card.className = "achievement-card";
+    card.style.animation = `fadeInUpList 0.3s ease-out ${index * 0.05}s backwards`;
     if (isUnlocked) card.classList.add("unlocked");
     else card.classList.add("locked");
 
@@ -538,6 +546,12 @@ function getLast7DaysActivity() {
 export function renderDetailedStats() {
   const container = document.getElementById("stats-details");
   if (!container) return;
+
+  // Reset scroll on the parent container (modal body)
+  const scrollParent = container.closest(".modal-body-container");
+  if (scrollParent) {
+    scrollParent.scrollTop = 0;
+  }
 
   // Проверяем наличие Chart.js
   if (typeof window.Chart === "undefined") {

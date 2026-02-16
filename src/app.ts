@@ -44,6 +44,7 @@ import {
   renderSkeletons,
   resetSearchHandler,
   setupGridEffects,
+  restoreScroll,
 } from "./ui/ui_card.ts";
 import {
   openModal,
@@ -829,7 +830,11 @@ function setupRealtimeUpdates() {
           console.log("🔥 Realtime: New word added", newWord.word_kr);
           state.dataStore.unshift(newWord); // Добавляем в начало списка
           showToast(`✨ Готово: ${newWord.word_kr}`); // Уведомляем пользователя
+
+          const grid = document.getElementById("vocabulary-grid");
+          const savedScroll = grid ? grid.scrollTop : 0;
           render(); // Обновляем экран
+          if (grid) grid.scrollTop = savedScroll;
         }
       },
     )
@@ -852,7 +857,10 @@ function setupRealtimeUpdates() {
 
             // Если мы сейчас смотрим этот список — обновляем экран
             if (collectionsState.currentCollectionFilter === newItem.list_id) {
+              const grid = document.getElementById("vocabulary-grid");
+              const savedScroll = grid ? grid.scrollTop : 0;
               render();
+              if (grid) grid.scrollTop = savedScroll;
             }
             // Обновляем счетчики в меню коллекций
             import("./ui/ui_collections.ts").then((m) =>
@@ -1007,6 +1015,7 @@ async function init() {
   checkSuperChallengeNotification();
 
   render();
+  restoreScroll();
 
   const startMusicOnInteraction = () => {
     applyBackgroundMusic(true);
@@ -1063,7 +1072,7 @@ async function init() {
 
         const handleUpdate = (worker: ServiceWorker) => {
           if (state.autoUpdate) {
-            worker.postMessage({ type: "SKIP_WAITING" });
+            worker.postMessage({ type: SW_MESSAGES.SKIP_WAITING });
           } else {
             showUpdateNotification(worker);
           }

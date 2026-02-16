@@ -31,6 +31,7 @@ const AUDIO_CACHE_NAME = "topik-audio-v1";
 const MAX_AUDIO_ITEMS = 200;
 const FONT_CACHE_NAME = "font-cache-v1";
 const IMAGE_CACHE_NAME = "topik-images-v1";
+const STATIC_CACHE_NAME = "static-resources-v1";
 
 // Кэширование шрифтов с CDN
 registerRoute(
@@ -44,6 +45,22 @@ registerRoute(
       new ExpirationPlugin({
         maxAgeSeconds: 60 * 60 * 24 * 365, // 1 год
         maxEntries: 30,
+      }),
+    ],
+  }),
+);
+
+// Кэширование локальных статических ресурсов (иконки, манифест)
+registerRoute(
+  ({ url }) =>
+    url.origin === self.location.origin &&
+    /\.(png|jpg|jpeg|svg|ico|json|webmanifest)$/i.test(url.pathname),
+  new StaleWhileRevalidate({
+    cacheName: STATIC_CACHE_NAME,
+    plugins: [
+      new ExpirationPlugin({
+        maxEntries: 50,
+        maxAgeSeconds: 30 * 24 * 60 * 60, // 30 дней
       }),
     ],
   }),

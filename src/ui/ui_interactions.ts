@@ -10,8 +10,8 @@ export function showUpdateNotification(worker: ServiceWorker) {
     el = document.createElement("div");
     el.id = "update-notification";
     el.innerHTML = `
-            <div style="font-weight:bold; font-size:14px;">🚀 Доступна новая версия</div>
-            <button class="btn btn-quiz" id="update-btn" style="padding: 6px 14px; font-size:12px; border-radius:20px;">Обновить</button>
+            <div style="font-weight:700; font-size:14px; color:var(--text-main);">🚀 Доступна новая версия</div>
+            <button class="btn btn-quiz" id="update-btn" style="padding: 6px 14px; font-size:12px; border-radius:20px; min-height: 32px;">Обновить</button>
         `;
     document.body.appendChild(el);
     const btn = document.getElementById("update-btn");
@@ -19,7 +19,7 @@ export function showUpdateNotification(worker: ServiceWorker) {
       btn.onclick = () =>
         worker.postMessage({ type: SW_MESSAGES.SKIP_WAITING });
   }
-  setTimeout(() => el!.classList.add("show"), 500);
+  setTimeout(() => el!.classList.add("show"), 100);
 }
 
 export function setupGestures() {
@@ -62,7 +62,18 @@ function handleGesture(
 
   const activeModal = document.querySelector(".modal.active");
   if (activeModal && target instanceof Node && activeModal.contains(target)) {
-    const content = activeModal.querySelector(".modal-content");
+    let content = activeModal.querySelector(".modal-content") as HTMLElement;
+
+    // FIX: Для модальных окон с фиксированным хедером (где .modal-content имеет overflow:hidden),
+    // нужно проверять скролл на внутреннем контейнере.
+    const scrollableChild = activeModal.querySelector(
+      "#collections-list, #review-container, #trash-list, #mistakes-content, #grammar-content, #hanja-list, #achievements-list, #profile-scroll-container, .modal-body-container, #shop-scroll-container, #quotes-list, #image-picker-grid, .multiselect-scroll-container, #add-to-list-content",
+    );
+
+    if (scrollableChild) {
+      content = scrollableChild as HTMLElement;
+    }
+
     if (
       diffY > minSwipe &&
       absY > absX * 1.5 &&
@@ -96,17 +107,42 @@ function handleGesture(
 
 export function setupScrollBehavior() {
   const header = document.getElementById("main-header");
-  if (!header) return;
+  const scrollContainer = document.getElementById("vocabulary-grid");
+  if (!header || !scrollContainer) return;
 
-  let lastScrollY = window.scrollY;
+  // --- Back to Top Button ---
+  let backToTopBtn = document.getElementById("back-to-top-btn");
+  if (!backToTopBtn) {
+    backToTopBtn = document.createElement("button");
+    backToTopBtn.id = "back-to-top-btn";
+    backToTopBtn.className = "back-to-top-btn";
+    backToTopBtn.innerHTML = "↑";
+    backToTopBtn.title = "Наверх";
+    backToTopBtn.onclick = () => {
+      scrollContainer.scrollTo({ top: 0, behavior: "smooth" });
+    };
+    document.body.appendChild(backToTopBtn);
+  }
 
-  window.addEventListener(
+  let lastScrollY = scrollContainer.scrollTop;
+
+  scrollContainer.addEventListener(
     "scroll",
     () => {
-      const currentScrollY = window.scrollY;
+      const currentScrollY = scrollContainer.scrollTop;
+
+      // Header visibility
       if (currentScrollY > lastScrollY && currentScrollY > 50)
         header.classList.add("hidden");
       else header.classList.remove("hidden");
+
+      // Back to Top visibility
+      if (currentScrollY > 400) {
+        backToTopBtn?.classList.add("visible");
+      } else {
+        backToTopBtn?.classList.remove("visible");
+      }
+
       lastScrollY = currentScrollY;
     },
     { passive: true },

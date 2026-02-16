@@ -13,6 +13,7 @@ export default defineConfig({
       registerType: 'autoUpdate',
       injectRegister: false,
       scope: '/',
+      includeAssets: ['app-logo.svg'],
       manifest: {
         name: 'TOPIK II Master Pro',
         short_name: 'TOPIK Pro',

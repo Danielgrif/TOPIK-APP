@@ -97,3 +97,13 @@
     animation: spin 1s ease-in-out infinite;
     margin: 0 auto;
 }
+
+@keyframes pulse-btn {
+    0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(108, 92, 231, 0.7); }
+    70% { transform: scale(1.05); box-shadow: 0 0 0 10px rgba(108, 92, 231, 0); }
+    100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(108, 92, 231, 0); }
+}
+
+.pulse-btn {
+    animation: pulse-btn 2s infinite;
+}

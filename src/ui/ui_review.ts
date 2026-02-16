@@ -34,7 +34,7 @@ function buildReviewModal(queue: Word[]) {
     modalEl.className = "modal";
     modalEl.setAttribute("role", "dialog");
     modalEl.setAttribute("aria-modal", "true");
-    modalEl.innerHTML = `<div class="modal-content"><div class="modal-header"><span>🔁 Режим повторения <span id="review-counter" style="font-size:0.6em; opacity:0.7; margin-left:10px;"></span></span><button class="close-modal" id="review-close-btn">✕</button></div><div id="review-container"></div></div>`;
+    modalEl.innerHTML = `<div class="modal-content"><div class="modal-header"><h3>🔁 Повторение <span id="review-counter" style="font-size:0.6em; opacity:0.7; margin-left:10px;"></span></h3><button class="btn btn-icon close-modal-btn" id="review-close-btn">✕</button></div><div id="review-container"></div></div>`;
     document.body.appendChild(modalEl);
   }
 
@@ -46,7 +46,7 @@ function buildReviewModal(queue: Word[]) {
       counter.id = "review-counter";
       (counter as HTMLElement).style.cssText =
         "font-size:0.6em; opacity:0.7; margin-left:10px;";
-      const btn = header.querySelector(".close-modal");
+      const btn = header.querySelector(".close-modal-btn");
       if (btn) header.insertBefore(counter, btn);
       else header.appendChild(counter);
     }
@@ -59,6 +59,7 @@ function buildReviewModal(queue: Word[]) {
 
   const container = modalEl.querySelector("#review-container");
   if (!container) return;
+  container.scrollTop = 0;
   container.innerHTML = "";
   let idx = 0;
   const stats = { remembered: 0, forgotten: 0 };

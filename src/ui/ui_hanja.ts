@@ -10,6 +10,7 @@ export function openHanjaModal(char: string) {
 
   title.textContent = `Иероглиф "${char}"`;
   container.innerHTML = "";
+  container.scrollTop = 0;
 
   const relatedWords = state.dataStore.filter(
     (w: Word) => w.word_hanja && w.word_hanja.includes(char),
@@ -19,6 +20,7 @@ export function openHanjaModal(char: string) {
     container.innerHTML =
       '<div style="grid-column: 1/-1; text-align:center; padding:20px; color:var(--text-sub);">Нет других слов с этим иероглифом.</div>';
   } else {
+    const fragment = document.createDocumentFragment();
     relatedWords.forEach((w: Word) => {
       const el = document.createElement("div");
       el.className = "hanja-word-card";
@@ -40,8 +42,9 @@ export function openHanjaModal(char: string) {
                 <div class="hanja-card-hanja">${hanjaHtml}</div>
                 <div class="hanja-card-trans">${escapeHtml(w.translation)}</div>
             `;
-      container.appendChild(el);
+      fragment.appendChild(el);
     });
+    container.appendChild(fragment);
   }
 
   openModal("hanja-modal");

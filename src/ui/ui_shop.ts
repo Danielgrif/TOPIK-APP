@@ -32,22 +32,24 @@ function createShopModal() {
 
   modal.innerHTML = `
         <div class="modal-content shop-modal-content">
-            <div class="shop-header">
-                <h2>Магазин</h2>
-                <div style="display: flex; align-items: center; gap: 10px;">
+            <div class="modal-header">
+                <h3>Магазин</h3>
+                <div style="display: flex; align-items: center; gap: 10px; margin-left: auto;">
                     <div class="shop-points" id="shop-user-points">💰 ${state.userStats.coins || 0}</div>
                     <button class="btn-icon" onclick="window.closeModal('shop-modal')" style="width: 32px; height: 32px; font-size: 16px; background: var(--surface-2);">✕</button>
                 </div>
             </div>
-            <!-- Daily Reward Section -->
-            <div id="daily-reward-section"></div>
-            <div class="shop-tabs">
-                <button class="shop-tab active" onclick="window.switchShopTab('all')">Все</button>
-                <button class="shop-tab" onclick="window.switchShopTab('theme')">Темы</button>
-                <button class="shop-tab" onclick="window.switchShopTab('feature')">Улучшения</button>
-            </div>
-            <div class="shop-items-container" id="shop-items-container">
-                <!-- Items will be rendered here -->
+            <div class="modal-body-container" id="shop-scroll-container">
+                <!-- Daily Reward Section -->
+                <div id="daily-reward-section"></div>
+                <div class="shop-tabs">
+                    <button class="shop-tab active" onclick="window.switchShopTab('all')">Все</button>
+                    <button class="shop-tab" onclick="window.switchShopTab('theme')">Темы</button>
+                    <button class="shop-tab" onclick="window.switchShopTab('feature')">Улучшения</button>
+                </div>
+                <div class="shop-items-container" id="shop-items-container">
+                    <!-- Items will be rendered here -->
+                </div>
             </div>
         </div>
     `;
@@ -57,6 +59,11 @@ export function openShopModal() {
   createShopModal();
   renderDailyRewardUI();
   updateShopUI();
+
+  // Reset scroll position when opening
+  const container = document.getElementById("shop-scroll-container");
+  if (container) container.scrollTop = 0;
+
   openModal("shop-modal");
 }
 
@@ -71,6 +78,12 @@ export function switchShopTab(tab: string) {
     }
   });
   updateShopUI();
+
+  // Reset scroll position to top when switching tabs
+  const container = document.getElementById("shop-scroll-container");
+  if (container) {
+    container.scrollTop = 0;
+  }
 }
 
 export function updateShopUI() {
@@ -91,7 +104,7 @@ export function updateShopUI() {
   }
 
   container.innerHTML = itemsToRender
-    .map((item) => {
+    .map((item, index) => {
       const isPurchased = state.purchasedItems.includes(item.id);
       const isConsumable = item.value === "streak_freeze"; // Особая логика для заморозки
       const canAfford = (state.userStats.coins || 0) >= item.price;
@@ -131,7 +144,7 @@ export function updateShopUI() {
               isTheme
                 ? `data-action="preview-theme" data-value="${item.value}"`
                 : ""
-            }>
+            } style="animation: popIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275) ${index * 0.05}s backwards;">
                 <div class="shop-item-icon">${item.icon}</div>
                 <h3 class="shop-item-name">${item.name}</h3>
                 <p class="shop-item-desc">${item.description}</p>

@@ -364,6 +364,12 @@ export async function submitWordRequest() {
         console.log("🔄 Switching to Progress View");
         formView.style.display = "none";
         progressView.style.display = "block";
+
+        const container = document.querySelector(
+          "#add-word-modal .modal-body-container",
+        );
+        if (container) container.scrollTop = 0;
+
         keepButtonDisabled = true; // Передаем управление кнопкой в trackProgress
         // Запускаем отслеживание
         trackProgress(
@@ -433,6 +439,8 @@ export function setupAddWordPreview() {
     "#add-word-modal .modal-body-container",
   );
   if (!container) return;
+
+  container.scrollTop = 0;
 
   // 1. Инъекция селектора уровня, если его нет (для корректного отображения в превью)
   const categoryInput = document.getElementById("new-word-category");
@@ -652,7 +660,11 @@ function trackProgress(
       btn.disabled = false;
       btn.innerHTML = originalBtnContent || "Отправить заявку";
     }
+
+    const grid = document.getElementById("vocabulary-grid");
+    const savedScroll = grid ? grid.scrollTop : 0;
     render();
+    if (grid) grid.scrollTop = savedScroll;
   };
 
   const resetFormAndClose = () => {
@@ -993,7 +1005,10 @@ export async function deleteCustomWord(id: string | number) {
   if (state.searchResults)
     state.searchResults = state.searchResults.filter((w) => w.id !== id);
 
+  const grid = document.getElementById("vocabulary-grid");
+  const savedScroll = grid ? grid.scrollTop : 0;
   render();
+  if (grid) grid.scrollTop = savedScroll;
 
   showUndoToast(
     "Заявка удалена",

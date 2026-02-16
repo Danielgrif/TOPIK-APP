@@ -5,7 +5,7 @@
       <h3>✏️ Редактировать слово</h3>
       <button class="btn-icon close-modal-btn" data-close-modal="edit-word-modal">✕</button>
     </div>
-    <div class="modal-body">
+    <div class="modal-body-container">
       <form id="edit-word-form" onsubmit="return false;">
         <input type="hidden" id="edit-word-id">
         <div class="input-group">
@@ -49,7 +49,7 @@
             <h3>➕ Добавить слова</h3>
             <button class="btn-icon close-modal-btn" data-close-modal="add-word-modal">✕</button>
         </div>
-        <div class="modal-body">
+        <div class="modal-body-container">
             <div id="add-word-form-view">
                 <p style="font-size: 14px; color: var(--text-sub); margin-bottom: 15px;">
                     Вставьте одно или несколько слов (каждое с новой строки или через запятую).
@@ -86,4 +86,15 @@
             </div>
         </div>
     </div>
+</div>
+
+<!-- Add To List Modal -->
+<div id="add-to-list-modal" class="modal">
+  <div class="modal-content">
+    <div class="modal-header">
+      <h3>📂 Добавить в список</h3>
+      <button class="btn-icon close-modal-btn" data-close-modal="add-to-list-modal">✕</button>
+    </div>
+    <div id="add-to-list-content"></div>
+  </div>
 </div>

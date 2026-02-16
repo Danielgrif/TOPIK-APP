@@ -582,6 +582,10 @@ export function startQuizMode(mode: string) {
 
   const quizGame = document.getElementById("quiz-game");
   if (quizGame) quizGame.style.display = "flex";
+
+  const modalBody = document.querySelector("#quiz-modal .modal-body-container");
+  if (modalBody) modalBody.scrollTop = 0;
+
   applyBackgroundMusic(true);
 
   const modalContent = document.querySelector("#quiz-modal .modal-content");

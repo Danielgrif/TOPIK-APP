@@ -48,6 +48,14 @@ export function updateGridCardHeight() {
   );
 }
 
+export function restoreScroll() {
+  const grid = document.getElementById("vocabulary-grid");
+  const saved = sessionStorage.getItem("vocab_scroll_top");
+  if (grid && saved) {
+    grid.scrollTop = Number(saved);
+  }
+}
+
 function saveAndRender() {
   scheduleSaveState();
   updateSRSBadge();
@@ -197,6 +205,9 @@ function onVirtualScroll(_e: Event) {
   scrollRafId = window.requestAnimationFrame(() => {
     const grid = document.getElementById("vocabulary-grid");
     if (grid) {
+      // Save scroll position for restoration after reload
+      sessionStorage.setItem("vocab_scroll_top", String(grid.scrollTop));
+
       if (state.viewMode === "list") {
         renderVisibleListItems({
           target: grid,
@@ -1276,6 +1287,7 @@ async function openImagePicker(item: Word, btn: HTMLButtonElement) {
     const regenAgainBtn = document.getElementById("regenerate-again-btn");
     if (!grid || !regenAgainBtn) return;
 
+    grid.scrollTop = 0;
     grid.innerHTML = ""; // Clear previous results
 
     if (data.images.length === 0) {
@@ -1571,11 +1583,12 @@ async function openAddToListModal(wordId: number) {
     (l) => l.user_id === user.id,
   );
 
+  content.scrollTop = 0;
   content.innerHTML = myLists
-    .map((list) => {
+    .map((list, index) => {
       const hasWord = collectionsState.listItems[list.id]?.has(wordId);
       return `
-        <div class="multiselect-item" onclick="toggleWordInList('${list.id}', ${wordId}, this)">
+        <div class="multiselect-item" onclick="toggleWordInList('${list.id}', ${wordId}, this)" style="animation: fadeInUpList 0.3s ease-out ${index * 0.05}s backwards">
             <input type="checkbox" ${hasWord ? "checked" : ""} style="pointer-events: none;">
             <span style="margin-left: 10px;">${list.icon || "📁"} ${list.title}</span>
         </div>

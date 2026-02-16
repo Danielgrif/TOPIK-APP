@@ -238,6 +238,13 @@ export function openEditListModal(
     idInput.value = listId;
     titleInput.value = currentTitle;
     iconInput.value = currentIcon || "📁";
+
+    const modal = document.getElementById("edit-list-modal");
+    if (modal) {
+      const body = modal.querySelector(".modal-body-container");
+      if (body) body.scrollTop = 0;
+    }
+
     openModal("edit-list-modal");
   }
 }
@@ -336,7 +343,7 @@ export function updateCollectionUI() {
       } else {
         html += '<div id="my-lists-container">';
         html += myLists
-          .map((list: UserList) => {
+          .map((list: UserList, index: number) => {
             // Safe escaping for onclick handlers
             const safeTitle = list.title
               .replace(/\\/g, "\\\\")
@@ -348,7 +355,7 @@ export function updateCollectionUI() {
               .replace(/"/g, "&quot;");
 
             return `
-                <div class="collection-item-card" draggable="true" data-list-id="${list.id}">
+                <div class="collection-item-card" draggable="true" data-list-id="${list.id}" style="animation: fadeInUpList 0.3s ease-out ${index * 0.05}s backwards">
                     <div class="collection-word-count">${collectionsState.listItems[list.id]?.size || 0} слов</div>
                     <div class="collection-info" onclick="window.setCollectionFilter('${list.id}', event)" title="Открыть список">
                         <div class="collection-icon">${escapeHtml(list.icon || "📁")}</div>
@@ -373,10 +380,10 @@ export function updateCollectionUI() {
       if (publicLists.length > 0) {
         html += `<div class="section-title-sm" style="margin-top: 20px;">🌐 Общие списки</div>`;
         html += publicLists
-          .map((list: UserList) => {
+          .map((list: UserList, index: number) => {
             // For public lists, we might not allow editing/deleting, just viewing
             return `
-                <div class="collection-item-card">
+                <div class="collection-item-card" style="animation: fadeInUpList 0.3s ease-out ${index * 0.05}s backwards">
                     <div class="collection-word-count">${collectionsState.listItems[list.id]?.size || 0} слов</div>
                     <div class="collection-info" onclick="window.setCollectionFilter('${list.id}', event)">
                         <div class="collection-icon">${escapeHtml(list.icon || "📁")}</div>

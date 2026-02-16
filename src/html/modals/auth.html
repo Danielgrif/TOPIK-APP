@@ -53,15 +53,13 @@
 <!-- Profile Modal -->
 <div id="profile-modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="profile-modal-title" tabindex="-1" data-close-modal="profile-modal">
   <div class="modal-content" style="padding: 0; background: var(--bg);">
-    <div class="modal-body-container">
-      
-      <!-- Header -->
-      <div class="profile-header">
-        <h3 id="profile-modal-title">Профиль</h3>
-        <button class="btn btn-icon close-modal-btn" data-close-modal="profile-modal">✕</button>
-      </div>
+    <!-- Header -->
+    <div class="profile-header">
+      <h3 id="profile-modal-title">Профиль</h3>
+      <button class="btn btn-icon close-modal-btn" data-close-modal="profile-modal">✕</button>
+    </div>
 
-      <div style="padding: 20px;">
+    <div id="profile-scroll-container">
         <!-- User Info Card -->
         <div class="user-profile-card">
             <div class="user-avatar-large" id="profile-avatar-large">👤</div>
@@ -227,7 +225,6 @@
         </div>
 
         <div id="app-version" style="text-align: center; font-size: 11px; color: var(--text-sub); margin-top: 20px; opacity: 0.5;"></div>
-      </div>
     </div>
   </div>
 </div>

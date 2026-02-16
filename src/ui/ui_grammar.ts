@@ -22,5 +22,6 @@ export function openGrammarModal(item: Word) {
   }
 
   container.innerHTML = html;
+  container.scrollTop = 0;
   openModal("grammar-modal");
 }

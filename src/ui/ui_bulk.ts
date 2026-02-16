@@ -11,7 +11,13 @@ export function toggleSelectMode() {
   state.selectMode = !state.selectMode;
   state.selectedWords.clear();
   updateBulkBar();
+
+  const grid = document.getElementById("vocabulary-grid");
+  const savedScroll = grid ? grid.scrollTop : 0;
+
   render();
+
+  if (grid) grid.scrollTop = savedScroll;
 
   // Визуально переключаем кнопку в тулбаре
   const btn = document.querySelector('[data-action="toggle-select-mode"]');
@@ -100,42 +106,33 @@ export function bulkDelete() {
       );
     }
 
+    const grid = document.getElementById("vocabulary-grid");
+    const savedScroll = grid ? grid.scrollTop : 0;
+
     render();
     toggleSelectMode(); // Выходим из режима выбора
 
+    if (grid) grid.scrollTop = savedScroll;
+
     showUndoToast(
-      `Удалено слов: ${ids.length}`,
+      `Перемещено в корзину: ${ids.length}`,
       () => {
         // Undo
         state.dataStore.push(...backup);
         render();
       },
       async () => {
-        // Commit: Удаляем слова и их зависимости вручную (для надежности)
+        // Commit: Soft Delete (перемещение в корзину)
         try {
-          console.log(`🔥 Массовое удаление: ${ids.length} слов`);
+          console.log(`🔥 Массовое удаление (Soft): ${ids.length} слов`);
 
-          // 1. Удаляем прогресс изучения для этих слов
-          const { error: progressError } = await client
-            .from(DB_TABLES.USER_PROGRESS)
-            .delete()
-            .in("word_id", ids);
-          if (progressError)
-            console.warn("Error deleting user_progress:", progressError);
-
-          // 2. Удаляем связи со списками (если есть мусорные записи)
-          const { error: listError } = await client
-            .from(DB_TABLES.LIST_ITEMS)
-            .delete()
-            .in("word_id", ids);
-          if (listError) console.warn("Error deleting list_items:", listError);
-
-          // 3. Удаляем сами слова
+          // FIX: Используем soft delete (deleted_at), не удаляем связи и прогресс!
           const { error, count } = await client
             .from(DB_TABLES.VOCABULARY)
-            .delete()
+            .update({ deleted_at: new Date().toISOString() })
             .in("id", ids)
-            .select("*");
+            .select("id");
+
           console.log("   - Результат удаления:", { error, count });
 
           if (error) {
@@ -155,7 +152,7 @@ export function bulkDelete() {
     executeDelete();
   } else {
     openConfirm(
-      `Удалить выбранные слова (${state.selectedWords.size})?`,
+      `Переместить выбранные слова (${state.selectedWords.size}) в корзину?`,
       executeDelete,
     );
   }
@@ -178,8 +175,13 @@ export function bulkRemoveFromList() {
       );
 
       // Обновляем UI (слова исчезнут из вида, так как фильтр активен)
+      const grid = document.getElementById("vocabulary-grid");
+      const savedScroll = grid ? grid.scrollTop : 0;
+
       render();
       toggleSelectMode();
+
+      if (grid) grid.scrollTop = savedScroll;
 
       // Запрос к БД
       const { error } = await client
@@ -234,7 +236,6 @@ export function bulkMoveToTopic() {
 
       showToast(`Перемещено слов: ${ids.length}`);
       toggleSelectMode();
-      render(); // Перерисовываем, чтобы обновить фильтры
       return true;
     },
   });
@@ -256,6 +257,7 @@ export function bulkAddToList() {
       (l: UserList) => l.user_id === user.id,
     );
 
+    content.scrollTop = 0;
     content.innerHTML =
       `
             <div style="padding: 10px; text-align: center; color: var(--text-sub); margin-bottom: 10px;">

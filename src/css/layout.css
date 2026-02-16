@@ -17,12 +17,16 @@
     backdrop-filter: blur(16px);
     -webkit-backdrop-filter: blur(16px);
     margin: 0;
-    padding: 8px 16px;
+    padding-top: max(8px, env(safe-area-inset-top));
+    padding-bottom: 8px;
+    padding-left: max(16px, env(safe-area-inset-left));
+    padding-right: max(16px, env(safe-area-inset-right));
     transition: transform 0.3s ease, background-color 0.4s ease, border-color 0.4s ease;
     border-bottom: 1px solid var(--border-color);
     width: 100%;
     box-shadow: var(--shadow-sm);
-    height: 64px;
+    height: auto;
+    min-height: 64px;
     box-sizing: border-box;
 }
 
@@ -419,7 +423,7 @@ body.dark-mode #main-header {
 
 #bottom-nav {
     position: fixed;
-    bottom: 16px;
+    bottom: max(16px, env(safe-area-inset-bottom));
     left: 50%;
     transform: translateX(-50%);
     width: 96%;
@@ -589,6 +593,8 @@ body.dark-mode .nav-btn.active .nav-icon {
     transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     display: flex;
     flex-direction: column;
+    padding-top: env(safe-area-inset-top);
+    padding-bottom: env(safe-area-inset-bottom);
 }
 
 #filter-panel.show {

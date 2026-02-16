@@ -11,6 +11,7 @@ export function setupTrash() {
   (window as any).openTrashModal = openTrashModal;
   (window as any).restoreWord = restoreWord;
   (window as any).permanentlyDeleteWord = permanentlyDeleteWord;
+  (window as any).emptyTrash = emptyTrash;
   cleanupExpiredTrash();
 }
 
@@ -27,7 +28,10 @@ export async function openTrashModal() {
       <div class="modal-content">
         <div class="modal-header">
           <h3>🗑️ Корзина</h3>
-          <button class="btn btn-icon close-modal-btn" data-close-modal="${modalId}">✕</button>
+          <div style="display: flex; align-items: center; gap: 10px;">
+            <button class="btn-text" onclick="window.emptyTrash()" style="color: var(--danger); font-size: 13px; font-weight: 600;">Очистить всё</button>
+            <button class="btn btn-icon close-modal-btn" data-close-modal="${modalId}">✕</button>
+          </div>
         </div>
         <div id="trash-list" class="trash-list-container">
           <div style="text-align:center; padding:20px;"><div class="spinner-tiny"></div> Загрузка...</div>
@@ -44,6 +48,7 @@ export async function openTrashModal() {
 async function loadTrashItems() {
   const container = document.getElementById("trash-list");
   if (!container) return;
+  container.scrollTop = 0;
 
   container.innerHTML =
     '<div style="text-align:center; padding:20px;"><div class="spinner-tiny"></div> Загрузка...</div>';
@@ -129,6 +134,31 @@ export async function permanentlyDeleteWord(id: number, btn: HTMLElement) {
       showToast("Удалено навсегда");
     }
   });
+}
+
+export async function emptyTrash() {
+  const container = document.getElementById("trash-list");
+  if (container && container.querySelector(".trash-item") === null) {
+    showToast("Корзина уже пуста");
+    return;
+  }
+
+  openConfirm(
+    "Удалить все слова из корзины навсегда? Это действие нельзя отменить.",
+    async () => {
+      const { error } = await client
+        .from(DB_TABLES.VOCABULARY)
+        .delete()
+        .not("deleted_at", "is", null);
+
+      if (error) {
+        showToast("Ошибка: " + error.message);
+      } else {
+        showToast("Корзина очищена");
+        loadTrashItems();
+      }
+    },
+  );
 }
 
 async function cleanupExpiredTrash() {

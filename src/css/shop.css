@@ -5,6 +5,10 @@
   background-color: var(--surface-1);
   border-radius: 16px;
   overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  max-height: 85vh;
+  max-height: 85dvh;
 }
 
 /* Daily Reward Section */
@@ -104,8 +108,9 @@
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
   gap: 20px;
-  max-height: 65vh;
+  flex: 1;
   overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .shop-item-card {

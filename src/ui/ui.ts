@@ -53,6 +53,14 @@ export function playAndSpeak(word: Word): Promise<void> {
  */
 export function toggleViewMode(mode: string) {
   if (state.viewMode === mode) return;
+
+  // Capture current relative scroll position
+  const grid = document.getElementById("vocabulary-grid");
+  let scrollRatio = 0;
+  if (grid && grid.scrollHeight > 0) {
+    scrollRatio = grid.scrollTop / grid.scrollHeight;
+  }
+
   state.viewMode = mode;
   localStorage.setItem("view_mode_v1", mode);
 
@@ -65,6 +73,15 @@ export function toggleViewMode(mode: string) {
       ),
     );
   render();
+
+  // Restore relative scroll position
+  if (grid) {
+    requestAnimationFrame(() => {
+      if (grid.scrollHeight > 0) {
+        grid.scrollTop = scrollRatio * grid.scrollHeight;
+      }
+    });
+  }
 }
 
 export function shuffleWords() {

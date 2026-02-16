@@ -164,6 +164,13 @@ export function openProfileModal() {
             setupPasswordStrengthMeter(input, bar, container);
           }
 
+          const scrollContainer = document.getElementById(
+            "profile-scroll-container",
+          );
+          if (scrollContainer) {
+            scrollContainer.scrollTop = 0;
+          }
+
           openModal("profile-modal");
         } else {
           console.warn(

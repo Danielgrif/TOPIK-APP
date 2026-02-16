@@ -114,6 +114,13 @@ export function openEditWordModal(id: string | number, onUpdate?: () => void) {
   }
 
   populateSuggestions();
+
+  const modal = document.getElementById("edit-word-modal");
+  if (modal) {
+    const body = modal.querySelector(".modal-body-container");
+    if (body) body.scrollTop = 0;
+  }
+
   openModal("edit-word-modal");
 }
 
@@ -169,7 +176,13 @@ export async function saveWordChanges() {
   } else {
     showToast("✅ Слово обновлено");
     closeModal("edit-word-modal");
+
+    const grid = document.getElementById("vocabulary-grid");
+    const savedScroll = grid ? grid.scrollTop : 0;
+
     if (onUpdateCallback) onUpdateCallback(); // Вызываем callback для перерисовки
+
+    if (grid) grid.scrollTop = savedScroll;
 
     // Обновляем фильтры, чтобы новая тема появилась в списке
     import("./ui_filters.ts").then((m) => m.populateFilters());
@@ -198,8 +211,13 @@ export async function deleteWord() {
         (w) => String(w.id) !== String(id),
       );
     }
+
+    const grid = document.getElementById("vocabulary-grid");
+    const savedScroll = grid ? grid.scrollTop : 0;
+
     if (onUpdateCallback) onUpdateCallback();
     closeModal("edit-word-modal");
+    if (grid) grid.scrollTop = savedScroll;
 
     // Soft delete
     const { error } = await client
