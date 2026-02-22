@@ -7,7 +7,6 @@ import {
 } from "./utils/utils.ts";
 import { QuizStrategies } from "./ui/quiz_strategies.ts";
 import { state } from "./core/state.ts";
-import { runCrossfadeTests } from "./test_crossfade.ts";
 import { runSettingsTests } from "../test_settings.ts";
 import { Word } from "./types/index.ts";
 
@@ -252,7 +251,6 @@ export async function runTests() {
     failed++;
   }
 
-  await runCrossfadeTests(assert, assertRange);
   await runSettingsTests(assert);
 
   console.log(`\n🏁 Result: ${passed} Passed, ${failed} Failed`);

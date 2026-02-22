@@ -5288,3 +5288,898 @@ ValueError: Set of Tasks/Futures is empty.
 2026-02-16 23:04:47,947 - INFO - 🟢 Инициализация Async Realtime клиента...
 2026-02-16 23:04:48,692 - INFO - 🟢 Realtime Listener: Подписка...
 2026-02-16 23:04:49,424 - INFO - 🟢 Realtime Listener: Подписка активна.
+2026-02-16 23:29:19,546 - ERROR - WebSocket connection closed with code: 1006, reason: 
+2026-02-16 23:29:20,266 - ERROR - Task exception was never retrieved
+future: <Task finished name='Task-445' coro=<AsyncRealtimeClient._listen() done, defined at C:\Python313\Lib\site-packages\realtime\_async\client.py:100> exception=ValueError('Set of Tasks/Futures is empty.')>
+Traceback (most recent call last):
+  File "C:\Python313\Lib\site-packages\realtime\_async\client.py", line 110, in _listen
+    async for msg in self._ws_connection:
+    ...<9 lines>...
+            channel._handle_message(message)
+  File "C:\Python313\Lib\site-packages\websockets\asyncio\connection.py", line 242, in __aiter__
+    yield await self.recv()
+          ^^^^^^^^^^^^^^^^^
+  File "C:\Python313\Lib\site-packages\websockets\asyncio\connection.py", line 322, in recv
+    raise self.protocol.close_exc from self.recv_exc
+websockets.exceptions.ConnectionClosedError: no close frame received or sent
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "C:\Python313\Lib\site-packages\realtime\_async\client.py", line 122, in _listen
+    await self._on_connect_error(e)
+  File "C:\Python313\Lib\site-packages\realtime\_async\client.py", line 221, in _on_connect_error
+    await self._reconnect()
+  File "C:\Python313\Lib\site-packages\realtime\_async\client.py", line 139, in _reconnect
+    await asyncio.wait(rejoins)
+  File "C:\Python313\Lib\asyncio\tasks.py", line 441, in wait
+    raise ValueError('Set of Tasks/Futures is empty.')
+ValueError: Set of Tasks/Futures is empty.
+2026-02-17 00:05:22,991 - INFO - ♻️ Плановый перезапуск Realtime соединения (TTL)...
+2026-02-17 00:05:23,798 - INFO - 🟢 Инициализация Async Realtime клиента...
+2026-02-17 00:05:26,771 - INFO - 🟢 Realtime Listener: Подписка...
+2026-02-17 00:05:27,658 - INFO - 🟢 Realtime Listener: Подписка активна.
+2026-02-17 00:10:24,242 - ERROR - WebSocket connection closed with code: 1006, reason: 
+2026-02-17 00:36:53,795 - ERROR - WebSocket connection closed with code: 1006, reason: 
+2026-02-17 00:55:46,774 - ERROR - WebSocket connection closed with code: 1006, reason: 
+2026-02-17 00:56:07,677 - ERROR - WebSocket connection closed with code: 1006, reason: 
+2026-02-17 00:56:33,495 - ERROR - WebSocket connection closed with code: 1006, reason: 
+2026-02-17 01:03:14,496 - ERROR - WebSocket connection closed with code: 1006, reason: 
+2026-02-17 01:05:50,786 - INFO - ♻️ Плановый перезапуск Realtime соединения (TTL)...
+2026-02-17 01:05:50,941 - INFO - channel realtime:worker-db-changes leave
+2026-02-17 01:05:50,942 - INFO - channel realtime:worker-db-changes closed
+2026-02-17 01:05:51,624 - INFO - 🟢 Инициализация Async Realtime клиента...
+2026-02-17 01:05:52,273 - INFO - 🟢 Realtime Listener: Подписка...
+2026-02-17 01:05:53,013 - INFO - 🟢 Realtime Listener: Подписка активна.
+2026-02-17 01:19:40,326 - ERROR - WebSocket connection closed with code: 1006, reason: 
+2026-02-17 02:06:00,477 - INFO - ♻️ Плановый перезапуск Realtime соединения (TTL)...
+2026-02-17 02:06:00,687 - INFO - channel realtime:worker-db-changes leave
+2026-02-17 02:06:00,687 - INFO - channel realtime:worker-db-changes closed
+2026-02-17 02:06:01,083 - INFO - 🟢 Инициализация Async Realtime клиента...
+2026-02-17 02:06:01,773 - INFO - 🟢 Realtime Listener: Подписка...
+2026-02-17 02:06:02,520 - INFO - 🟢 Realtime Listener: Подписка активна.
+2026-02-17 02:20:58,083 - WARNING - ⚠️ Не удалось найти StorageClient. Патч пропущен (возможно, он не нужен в этой версии).
+2026-02-17 02:21:01,377 - INFO - ℹ️ Бакет 'audio-files' уже существует.
+2026-02-17 02:21:01,694 - INFO - ℹ️ Бакет 'image-files' найден. Обновляю права на Public...
+2026-02-17 02:21:01,995 - INFO - 🚀 Воркер запущен (Parallel Mode).
+2026-02-17 02:21:01,995 - INFO - 📡 Анализ скорости соединения...
+2026-02-17 02:21:02,971 - INFO - ⏱ Средний отклик: 0.325 сек.
+2026-02-17 02:21:02,972 - INFO - ⚡ Автоматически установлено потоков для фона: 8
+2026-02-17 02:21:02,973 - INFO - 🔍 Проверка схемы базы данных...
+2026-02-17 02:21:05,056 - INFO - ✅ Схема таблицы 'vocabulary' корректна.
+2026-02-17 02:21:05,354 - INFO - ✅ Схема таблицы 'word_requests' корректна.
+2026-02-17 02:21:05,657 - INFO - ✅ Схема таблицы 'quotes' корректна.
+2026-02-17 02:21:05,657 - INFO - 🤖 Проверка ключа Gemini API...
+2026-02-17 02:21:07,485 - INFO - ✅ Ключ Gemini API валиден.
+2026-02-17 02:21:07,768 - INFO - 👀 Запущен мониторинг пользовательских заявок (Приоритетный поток)...
+2026-02-17 02:21:07,769 - INFO - 🛠 Запущены фоновые задачи (Начальных потоков: 8)...
+2026-02-17 02:21:08,208 - INFO - 🟢 Инициализация Async Realtime клиента...
+2026-02-17 02:21:08,879 - INFO - 🟢 Realtime Listener: Подписка...
+2026-02-17 02:21:09,529 - INFO - 🔥 Запуск обработки 23 слов... (Потоков: 8)
+2026-02-17 02:21:28,913 - ERROR - Connection attempt failed: timed out during opening handshake
+2026-02-17 02:21:30,120 - ERROR - ❌ Ошибка обработки слова '공사': expected str, bytes or os.PathLike object, not BytesIO
+2026-02-17 02:21:32,114 - ERROR - ❌ Ошибка обработки слова '호박': expected str, bytes or os.PathLike object, not BytesIO
+2026-02-17 02:21:34,110 - ERROR - ❌ Ошибка обработки слова '호박': expected str, bytes or os.PathLike object, not BytesIO
+2026-02-17 02:21:34,111 - ERROR - ❌ Ошибка обработки слова '의상': expected str, bytes or os.PathLike object, not BytesIO
+2026-02-17 02:21:34,112 - ERROR - ❌ Ошибка обработки слова '공사': expected str, bytes or os.PathLike object, not BytesIO
+2026-02-17 02:21:34,141 - INFO - 🟢 Realtime Listener: Подписка активна.
+2026-02-17 02:21:34,142 - ERROR - ❌ Ошибка обработки слова '공사': expected str, bytes or os.PathLike object, not BytesIO
+2026-02-17 02:21:34,143 - ERROR - ❌ Ошибка обработки слова '의상': expected str, bytes or os.PathLike object, not BytesIO
+2026-02-17 02:21:44,025 - ERROR - ❌ Ошибка обработки слова '호박': expected str, bytes or os.PathLike object, not BytesIO
+2026-02-17 02:21:47,041 - ERROR - ❌ Ошибка обработки слова '호박': expected str, bytes or os.PathLike object, not BytesIO
+2026-02-17 02:21:49,039 - ERROR - ❌ Ошибка обработки слова '의상': expected str, bytes or os.PathLike object, not BytesIO
+2026-02-17 02:21:49,040 - ERROR - ❌ Ошибка обработки слова '공사': expected str, bytes or os.PathLike object, not BytesIO
+2026-02-17 02:21:49,041 - ERROR - ❌ Ошибка обработки слова '공사': expected str, bytes or os.PathLike object, not BytesIO
+2026-02-17 02:21:49,041 - ERROR - ❌ Ошибка обработки слова '호박': expected str, bytes or os.PathLike object, not BytesIO
+2026-02-17 02:21:49,041 - ERROR - ❌ Ошибка обработки слова '공사': expected str, bytes or os.PathLike object, not BytesIO
+2026-02-17 02:21:58,791 - ERROR - ❌ Ошибка обработки слова '의상': expected str, bytes or os.PathLike object, not BytesIO
+2026-02-17 02:21:58,795 - ERROR - ❌ Ошибка обработки слова '공사': expected str, bytes or os.PathLike object, not BytesIO
+2026-02-17 02:22:01,752 - ERROR - ❌ Ошибка обработки слова '호박': expected str, bytes or os.PathLike object, not BytesIO
+2026-02-17 02:22:01,753 - ERROR - ❌ Ошибка обработки слова '공사': expected str, bytes or os.PathLike object, not BytesIO
+2026-02-17 02:22:01,754 - ERROR - ❌ Ошибка обработки слова '기본적': expected str, bytes or os.PathLike object, not BytesIO
+2026-02-17 02:22:01,789 - ERROR - ❌ Ошибка обработки слова '의상': expected str, bytes or os.PathLike object, not BytesIO
+2026-02-17 02:22:01,827 - ERROR - ❌ Ошибка обработки слова '기본적': expected str, bytes or os.PathLike object, not BytesIO
+2026-02-17 02:22:01,886 - ERROR - ❌ Ошибка обработки слова '공사': expected str, bytes or os.PathLike object, not BytesIO
+2026-02-17 02:22:01,986 - ERROR - ❌ Ошибка обработки слова '의상': expected str, bytes or os.PathLike object, not BytesIO
+2026-02-17 02:22:02,091 - INFO - 📈 Сеть стабильна. Увеличиваю количество потоков до 9.
+2026-02-17 02:22:02,092 - INFO - ✨ Пачка обработана. Проблемных в этой сессии: 23
+2026-02-17 02:22:03,322 - INFO - 💤 Нет новых слов. Сплю 5.0 сек...
+2026-02-17 02:22:09,099 - INFO - 💤 Нет новых слов. Сплю 7.5 сек...
+2026-02-17 02:22:17,706 - INFO - 💤 Нет новых слов. Сплю 11.2 сек...
+2026-02-17 02:22:30,180 - INFO - 💤 Нет новых слов. Сплю 16.9 сек...
+2026-02-17 02:22:48,039 - INFO - 💤 Нет новых слов. Сплю 25.3 сек...
+2026-02-17 02:23:14,263 - INFO - 💤 Нет новых слов. Сплю 38.0 сек...
+2026-02-17 02:23:53,436 - INFO - 💤 Нет новых слов. Сплю 57.0 сек...
+2026-02-17 02:24:51,383 - INFO - 💤 Нет новых слов. Сплю 85.4 сек...
+2026-02-17 02:30:52,110 - ERROR - WebSocket connection closed with code: 1006, reason: 
+2026-02-17 03:21:34,622 - INFO - ♻️ Плановый перезапуск Realtime соединения (TTL)...
+2026-02-17 03:21:34,769 - INFO - channel realtime:worker-db-changes leave
+2026-02-17 03:21:34,770 - INFO - channel realtime:worker-db-changes closed
+2026-02-17 03:21:35,196 - INFO - 🟢 Инициализация Async Realtime клиента...
+2026-02-17 03:21:36,207 - INFO - 🟢 Realtime Listener: Подписка...
+2026-02-17 03:21:36,888 - INFO - 🟢 Realtime Listener: Подписка активна.
+2026-02-17 03:29:27,420 - ERROR - WebSocket connection closed with code: 1006, reason: 
+2026-02-17 03:29:28,345 - ERROR - Task exception was never retrieved
+future: <Task finished name='Task-272' coro=<AsyncRealtimeClient._listen() done, defined at C:\Python313\Lib\site-packages\realtime\_async\client.py:100> exception=ValueError('Set of Tasks/Futures is empty.')>
+Traceback (most recent call last):
+  File "C:\Python313\Lib\site-packages\realtime\_async\client.py", line 110, in _listen
+    async for msg in self._ws_connection:
+    ...<9 lines>...
+            channel._handle_message(message)
+  File "C:\Python313\Lib\site-packages\websockets\asyncio\connection.py", line 242, in __aiter__
+    yield await self.recv()
+          ^^^^^^^^^^^^^^^^^
+  File "C:\Python313\Lib\site-packages\websockets\asyncio\connection.py", line 322, in recv
+    raise self.protocol.close_exc from self.recv_exc
+websockets.exceptions.ConnectionClosedError: no close frame received or sent
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "C:\Python313\Lib\site-packages\realtime\_async\client.py", line 122, in _listen
+    await self._on_connect_error(e)
+  File "C:\Python313\Lib\site-packages\realtime\_async\client.py", line 221, in _on_connect_error
+    await self._reconnect()
+  File "C:\Python313\Lib\site-packages\realtime\_async\client.py", line 139, in _reconnect
+    await asyncio.wait(rejoins)
+  File "C:\Python313\Lib\asyncio\tasks.py", line 441, in wait
+    raise ValueError('Set of Tasks/Futures is empty.')
+ValueError: Set of Tasks/Futures is empty.
+2026-02-17 03:39:57,690 - ERROR - WebSocket connection closed with code: 1006, reason: 
+2026-02-17 03:40:38,873 - ERROR - WebSocket connection closed with code: 1006, reason: 
+2026-02-17 03:41:59,866 - ERROR - WebSocket connection closed with code: 1006, reason: 
+2026-02-17 03:42:00,871 - ERROR - Task exception was never retrieved
+future: <Task finished name='Task-283' coro=<AsyncRealtimeClient._listen() done, defined at C:\Python313\Lib\site-packages\realtime\_async\client.py:100> exception=ValueError('Set of Tasks/Futures is empty.')>
+Traceback (most recent call last):
+  File "C:\Python313\Lib\asyncio\windows_events.py", line 463, in finish_socket_func
+    return ov.getresult()
+           ~~~~~~~~~~~~^^
+OSError: [WinError 64] Указанное сетевое имя более недоступно
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "C:\Python313\Lib\asyncio\proactor_events.py", line 286, in _loop_reading
+    length = fut.result()
+  File "C:\Python313\Lib\asyncio\windows_events.py", line 804, in _poll
+    value = callback(transferred, key, ov)
+  File "C:\Python313\Lib\asyncio\windows_events.py", line 467, in finish_socket_func
+    raise ConnectionResetError(*exc.args)
+ConnectionResetError: [WinError 64] Указанное сетевое имя более недоступно
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "C:\Python313\Lib\site-packages\realtime\_async\client.py", line 110, in _listen
+    async for msg in self._ws_connection:
+    ...<9 lines>...
+            channel._handle_message(message)
+  File "C:\Python313\Lib\site-packages\websockets\asyncio\connection.py", line 242, in __aiter__
+    yield await self.recv()
+          ^^^^^^^^^^^^^^^^^
+  File "C:\Python313\Lib\site-packages\websockets\asyncio\connection.py", line 322, in recv
+    raise self.protocol.close_exc from self.recv_exc
+websockets.exceptions.ConnectionClosedError: no close frame received or sent
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "C:\Python313\Lib\site-packages\realtime\_async\client.py", line 122, in _listen
+    await self._on_connect_error(e)
+  File "C:\Python313\Lib\site-packages\realtime\_async\client.py", line 221, in _on_connect_error
+    await self._reconnect()
+  File "C:\Python313\Lib\site-packages\realtime\_async\client.py", line 139, in _reconnect
+    await asyncio.wait(rejoins)
+  File "C:\Python313\Lib\asyncio\tasks.py", line 441, in wait
+    raise ValueError('Set of Tasks/Futures is empty.')
+ValueError: Set of Tasks/Futures is empty.
+2026-02-17 03:44:01,270 - ERROR - WebSocket connection closed with code: 1006, reason: 
+2026-02-17 03:44:02,477 - ERROR - Task exception was never retrieved
+future: <Task finished name='Task-296' coro=<AsyncRealtimeClient._listen() done, defined at C:\Python313\Lib\site-packages\realtime\_async\client.py:100> exception=ValueError('Set of Tasks/Futures is empty.')>
+Traceback (most recent call last):
+  File "C:\Python313\Lib\asyncio\windows_events.py", line 463, in finish_socket_func
+    return ov.getresult()
+           ~~~~~~~~~~~~^^
+OSError: [WinError 64] Указанное сетевое имя более недоступно
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "C:\Python313\Lib\asyncio\proactor_events.py", line 286, in _loop_reading
+    length = fut.result()
+  File "C:\Python313\Lib\asyncio\windows_events.py", line 804, in _poll
+    value = callback(transferred, key, ov)
+  File "C:\Python313\Lib\asyncio\windows_events.py", line 467, in finish_socket_func
+    raise ConnectionResetError(*exc.args)
+ConnectionResetError: [WinError 64] Указанное сетевое имя более недоступно
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "C:\Python313\Lib\site-packages\realtime\_async\client.py", line 110, in _listen
+    async for msg in self._ws_connection:
+    ...<9 lines>...
+            channel._handle_message(message)
+  File "C:\Python313\Lib\site-packages\websockets\asyncio\connection.py", line 242, in __aiter__
+    yield await self.recv()
+          ^^^^^^^^^^^^^^^^^
+  File "C:\Python313\Lib\site-packages\websockets\asyncio\connection.py", line 322, in recv
+    raise self.protocol.close_exc from self.recv_exc
+websockets.exceptions.ConnectionClosedError: no close frame received or sent
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "C:\Python313\Lib\site-packages\realtime\_async\client.py", line 122, in _listen
+    await self._on_connect_error(e)
+  File "C:\Python313\Lib\site-packages\realtime\_async\client.py", line 221, in _on_connect_error
+    await self._reconnect()
+  File "C:\Python313\Lib\site-packages\realtime\_async\client.py", line 139, in _reconnect
+    await asyncio.wait(rejoins)
+  File "C:\Python313\Lib\asyncio\tasks.py", line 441, in wait
+    raise ValueError('Set of Tasks/Futures is empty.')
+ValueError: Set of Tasks/Futures is empty.
+2026-02-17 03:56:30,741 - ERROR - WebSocket connection closed with code: 1006, reason: 
+2026-02-17 03:56:32,863 - ERROR - WebSocket connection closed with code: 1006, reason: 
+2026-02-17 03:56:33,629 - ERROR - Task exception was never retrieved
+future: <Task finished name='Task-299' coro=<AsyncRealtimeClient._listen() done, defined at C:\Python313\Lib\site-packages\realtime\_async\client.py:100> exception=ValueError('Set of Tasks/Futures is empty.')>
+Traceback (most recent call last):
+  File "C:\Python313\Lib\asyncio\windows_events.py", line 463, in finish_socket_func
+    return ov.getresult()
+           ~~~~~~~~~~~~^^
+OSError: [WinError 64] Указанное сетевое имя более недоступно
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "C:\Python313\Lib\asyncio\proactor_events.py", line 286, in _loop_reading
+    length = fut.result()
+  File "C:\Python313\Lib\asyncio\windows_events.py", line 804, in _poll
+    value = callback(transferred, key, ov)
+  File "C:\Python313\Lib\asyncio\windows_events.py", line 467, in finish_socket_func
+    raise ConnectionResetError(*exc.args)
+ConnectionResetError: [WinError 64] Указанное сетевое имя более недоступно
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "C:\Python313\Lib\site-packages\realtime\_async\client.py", line 110, in _listen
+    async for msg in self._ws_connection:
+    ...<9 lines>...
+            channel._handle_message(message)
+  File "C:\Python313\Lib\site-packages\websockets\asyncio\connection.py", line 242, in __aiter__
+    yield await self.recv()
+          ^^^^^^^^^^^^^^^^^
+  File "C:\Python313\Lib\site-packages\websockets\asyncio\connection.py", line 322, in recv
+    raise self.protocol.close_exc from self.recv_exc
+websockets.exceptions.ConnectionClosedError: no close frame received or sent
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "C:\Python313\Lib\site-packages\realtime\_async\client.py", line 122, in _listen
+    await self._on_connect_error(e)
+  File "C:\Python313\Lib\site-packages\realtime\_async\client.py", line 221, in _on_connect_error
+    await self._reconnect()
+  File "C:\Python313\Lib\site-packages\realtime\_async\client.py", line 139, in _reconnect
+    await asyncio.wait(rejoins)
+  File "C:\Python313\Lib\asyncio\tasks.py", line 441, in wait
+    raise ValueError('Set of Tasks/Futures is empty.')
+ValueError: Set of Tasks/Futures is empty.
+2026-02-17 12:13:07,531 - ERROR - WebSocket connection closed with code: 1006, reason: 
+2026-02-17 12:13:10,513 - WARNING - 🌐 Сетевая ошибка Supabase ([Errno 11001] getaddrinfo failed). Попытка 2/4 через 2.3с...
+2026-02-17 12:13:10,516 - WARNING - 🌐 Сетевая ошибка Supabase ([Errno 11001] getaddrinfo failed). Попытка 2/4 через 2.4с...
+2026-02-17 12:13:11,264 - ERROR - WebSocket connection closed with code: 1006, reason: 
+2026-02-17 12:13:11,587 - ERROR - Connection attempt failed: [Errno 11001] getaddrinfo failed
+2026-02-17 12:13:11,665 - ERROR - Connection attempt failed: [Errno 11001] getaddrinfo failed
+2026-02-17 12:13:12,697 - ERROR - Connection attempt failed: [Errno 11001] getaddrinfo failed
+2026-02-17 12:13:12,828 - ERROR - Connection attempt failed: [Errno 11001] getaddrinfo failed
+2026-02-17 12:13:17,024 - ERROR - Task exception was never retrieved
+future: <Task finished name='Task-307' coro=<AsyncRealtimeClient._listen() done, defined at C:\Python313\Lib\site-packages\realtime\_async\client.py:100> exception=ValueError('Set of Tasks/Futures is empty.')>
+Traceback (most recent call last):
+  File "C:\Python313\Lib\asyncio\proactor_events.py", line 286, in _loop_reading
+    length = fut.result()
+  File "C:\Python313\Lib\asyncio\windows_events.py", line 804, in _poll
+    value = callback(transferred, key, ov)
+  File "C:\Python313\Lib\asyncio\windows_events.py", line 463, in finish_socket_func
+    return ov.getresult()
+           ~~~~~~~~~~~~^^
+ConnectionAbortedError: [WinError 1236] Подключение к сети было разорвано локальной системой
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "C:\Python313\Lib\site-packages\realtime\_async\client.py", line 110, in _listen
+    async for msg in self._ws_connection:
+    ...<9 lines>...
+            channel._handle_message(message)
+  File "C:\Python313\Lib\site-packages\websockets\asyncio\connection.py", line 242, in __aiter__
+    yield await self.recv()
+          ^^^^^^^^^^^^^^^^^
+  File "C:\Python313\Lib\site-packages\websockets\asyncio\connection.py", line 322, in recv
+    raise self.protocol.close_exc from self.recv_exc
+websockets.exceptions.ConnectionClosedError: no close frame received or sent
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "C:\Python313\Lib\site-packages\realtime\_async\client.py", line 122, in _listen
+    await self._on_connect_error(e)
+  File "C:\Python313\Lib\site-packages\realtime\_async\client.py", line 221, in _on_connect_error
+    await self._reconnect()
+  File "C:\Python313\Lib\site-packages\realtime\_async\client.py", line 139, in _reconnect
+    await asyncio.wait(rejoins)
+  File "C:\Python313\Lib\asyncio\tasks.py", line 441, in wait
+    raise ValueError('Set of Tasks/Futures is empty.')
+ValueError: Set of Tasks/Futures is empty.
+2026-02-17 12:30:48,758 - ERROR - WebSocket connection closed with code: 1006, reason: 
+2026-02-17 12:30:49,311 - ERROR - Task exception was never retrieved
+future: <Task finished name='Task-315' coro=<AsyncRealtimeClient._listen() done, defined at C:\Python313\Lib\site-packages\realtime\_async\client.py:100> exception=ValueError('Set of Tasks/Futures is empty.')>
+Traceback (most recent call last):
+  File "C:\Python313\Lib\site-packages\realtime\_async\client.py", line 110, in _listen
+    async for msg in self._ws_connection:
+    ...<9 lines>...
+            channel._handle_message(message)
+  File "C:\Python313\Lib\site-packages\websockets\asyncio\connection.py", line 242, in __aiter__
+    yield await self.recv()
+          ^^^^^^^^^^^^^^^^^
+  File "C:\Python313\Lib\site-packages\websockets\asyncio\connection.py", line 322, in recv
+    raise self.protocol.close_exc from self.recv_exc
+websockets.exceptions.ConnectionClosedError: no close frame received or sent
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "C:\Python313\Lib\site-packages\realtime\_async\client.py", line 122, in _listen
+    await self._on_connect_error(e)
+  File "C:\Python313\Lib\site-packages\realtime\_async\client.py", line 221, in _on_connect_error
+    await self._reconnect()
+  File "C:\Python313\Lib\site-packages\realtime\_async\client.py", line 139, in _reconnect
+    await asyncio.wait(rejoins)
+  File "C:\Python313\Lib\asyncio\tasks.py", line 441, in wait
+    raise ValueError('Set of Tasks/Futures is empty.')
+ValueError: Set of Tasks/Futures is empty.
+2026-02-17 12:34:07,685 - INFO - ♻️ Плановый перезапуск Realtime соединения (TTL)...
+2026-02-17 12:34:07,823 - INFO - channel realtime:worker-db-changes leave
+2026-02-17 12:34:07,824 - INFO - channel realtime:worker-db-changes closed
+2026-02-17 12:34:08,134 - INFO - 🟢 Инициализация Async Realtime клиента...
+2026-02-17 12:35:15,100 - INFO - 🟢 Realtime Listener: Подписка...
+2026-02-17 12:35:15,707 - INFO - 🟢 Realtime Listener: Подписка активна.
+2026-02-20 16:27:14,183 - WARNING - ⚠️ Не удалось найти StorageClient. Патч пропущен (возможно, он не нужен в этой версии).
+2026-02-20 16:27:19,448 - INFO - ℹ️ Бакет 'audio-files' уже существует.
+2026-02-20 16:27:19,761 - INFO - ℹ️ Бакет 'image-files' найден. Обновляю права на Public...
+2026-02-20 16:27:20,087 - INFO - 🚀 Воркер запущен (Parallel Mode).
+2026-02-20 16:27:20,088 - INFO - 📡 Анализ скорости соединения...
+2026-02-20 16:27:21,325 - INFO - ⏱ Средний отклик: 0.412 сек.
+2026-02-20 16:27:21,327 - INFO - ⚡ Автоматически установлено потоков для фона: 8
+2026-02-20 16:27:21,329 - INFO - 🔍 Проверка схемы базы данных...
+2026-02-20 16:27:23,290 - INFO - ✅ Схема таблицы 'vocabulary' корректна.
+2026-02-20 16:27:23,617 - INFO - ✅ Схема таблицы 'word_requests' корректна.
+2026-02-20 16:27:23,914 - INFO - ✅ Схема таблицы 'quotes' корректна.
+2026-02-20 16:27:23,915 - INFO - 🤖 Проверка ключа Gemini API...
+2026-02-20 16:27:26,148 - INFO - ✅ Ключ Gemini API валиден.
+2026-02-20 16:27:26,454 - INFO - 👀 Запущен мониторинг пользовательских заявок (Приоритетный поток)...
+2026-02-20 16:27:26,461 - INFO - 🛠 Запущены фоновые задачи (Начальных потоков: 8)...
+2026-02-20 16:27:27,019 - INFO - 🟢 Инициализация Async Realtime клиента...
+2026-02-20 16:27:28,599 - INFO - 🟢 Realtime Listener: Подписка...
+2026-02-20 16:27:28,906 - INFO - 🔥 Запуск обработки 23 слов... (Потоков: 8)
+2026-02-20 16:28:16,541 - ERROR - Connection attempt failed: timed out during opening handshake
+2026-02-20 16:28:27,576 - ERROR - Connection attempt failed: timed out during opening handshake
+2026-02-20 16:28:27,724 - WARNING - 🌐 Сетевая ошибка Supabase ([Errno 11001] getaddrinfo failed). Попытка 2/4 через 1.9с...
+2026-02-20 16:28:32,981 - WARNING - 🌐 Сетевая ошибка Supabase ([Errno 11001] getaddrinfo failed). Попытка 4/4 через 6.1с...
+2026-02-20 16:28:43,774 - ERROR - ❌ Ошибка в цикле заявок: [Errno 11001] getaddrinfo failed
+2026-02-20 16:29:07,373 - ERROR - Connection attempt failed: [Errno 11001] getaddrinfo failed
+2026-02-20 16:29:07,387 - WARNING - 🌐 Сетевая ошибка Supabase ([Errno 11001] getaddrinfo failed). Попытка 2/4 через 1.6с...
+2026-02-20 16:29:12,219 - WARNING - 🌐 Сетевая ошибка Supabase ([Errno 11001] getaddrinfo failed). Попытка 4/4 через 6.2с...
+2026-02-20 16:29:41,896 - ERROR - ❌ Ошибка в цикле заявок: [Errno 11001] getaddrinfo failed
+2026-02-20 16:29:41,908 - WARNING - ⚠️ Ошибка Edge TTS: Cannot connect to host speech.platform.bing.com:443 ssl:<ssl.SSLContext object at 0x0000025440733750> [getaddrinfo failed]
+2026-02-20 16:29:41,909 - WARNING - ⚠️ Ошибка Edge TTS: Cannot connect to host speech.platform.bing.com:443 ssl:<ssl.SSLContext object at 0x0000025440731D10> [getaddrinfo failed]
+2026-02-20 16:29:41,928 - WARNING - ⚠️ Ошибка Edge TTS: Cannot connect to host speech.platform.bing.com:443 ssl:<ssl.SSLContext object at 0x0000025440731C70> [getaddrinfo failed]
+2026-02-20 16:29:41,930 - ERROR - Connection attempt failed: [Errno 11001] getaddrinfo failed
+2026-02-20 16:29:41,932 - WARNING - ⚠️ Ошибка Edge TTS: Cannot connect to host speech.platform.bing.com:443 ssl:<ssl.SSLContext object at 0x0000025440733F70> [getaddrinfo failed]
+2026-02-20 16:29:41,932 - WARNING - ⚠️ Ошибка Edge TTS: Cannot connect to host speech.platform.bing.com:443 ssl:<ssl.SSLContext object at 0x00000254406D36B0> [getaddrinfo failed]
+2026-02-20 16:29:41,933 - WARNING - ⚠️ Ошибка Edge TTS: Cannot connect to host speech.platform.bing.com:443 ssl:<ssl.SSLContext object at 0x00000254406D3890> [getaddrinfo failed]
+2026-02-20 16:29:41,934 - WARNING - ⚠️ Ошибка Edge TTS: Cannot connect to host speech.platform.bing.com:443 ssl:<ssl.SSLContext object at 0x00000254406D3B10> [getaddrinfo failed]
+2026-02-20 16:29:41,935 - WARNING - ⚠️ Ошибка Edge TTS: Cannot connect to host speech.platform.bing.com:443 ssl:<ssl.SSLContext object at 0x00000254428C9B30> [getaddrinfo failed]
+2026-02-20 16:29:41,936 - WARNING - ⚠️ Ошибка Edge TTS: Cannot connect to host speech.platform.bing.com:443 ssl:<ssl.SSLContext object at 0x00000254428C8FF0> [getaddrinfo failed]
+2026-02-20 16:29:41,936 - WARNING - ⚠️ Ошибка Edge TTS: Cannot connect to host speech.platform.bing.com:443 ssl:<ssl.SSLContext object at 0x00000254428CA2B0> [getaddrinfo failed]
+2026-02-20 16:29:41,937 - WARNING - ⚠️ Ошибка Edge TTS: Cannot connect to host speech.platform.bing.com:443 ssl:<ssl.SSLContext object at 0x00000254428CAA30> [getaddrinfo failed]
+2026-02-20 16:29:41,938 - WARNING - ⚠️ Ошибка Edge TTS: Cannot connect to host speech.platform.bing.com:443 ssl:<ssl.SSLContext object at 0x00000254428CA670> [getaddrinfo failed]
+2026-02-20 16:29:41,938 - WARNING - ⚠️ Ошибка Edge TTS: Cannot connect to host speech.platform.bing.com:443 ssl:<ssl.SSLContext object at 0x00000254428C89B0> [getaddrinfo failed]
+2026-02-20 16:29:41,939 - WARNING - ⚠️ Ошибка Edge TTS: Cannot connect to host speech.platform.bing.com:443 ssl:<ssl.SSLContext object at 0x0000025440732A30> [getaddrinfo failed]
+2026-02-20 16:29:41,940 - WARNING - ⚠️ Ошибка Edge TTS: Cannot connect to host speech.platform.bing.com:443 ssl:<ssl.SSLContext object at 0x00000254428CB570> [getaddrinfo failed]
+2026-02-20 16:29:41,941 - WARNING - ⚠️ Ошибка Edge TTS: Cannot connect to host speech.platform.bing.com:443 ssl:<ssl.SSLContext object at 0x00000254428CADF0> [getaddrinfo failed]
+2026-02-20 16:29:41,943 - WARNING - ⚠️ Ошибка Edge TTS: Cannot connect to host speech.platform.bing.com:443 ssl:<ssl.SSLContext object at 0x00000254428C9EF0> [getaddrinfo failed]
+2026-02-20 16:29:41,943 - WARNING - ⚠️ Ошибка Edge TTS: Cannot connect to host speech.platform.bing.com:443 ssl:<ssl.SSLContext object at 0x00000254428C8EB0> [getaddrinfo failed]
+2026-02-20 16:29:41,944 - WARNING - ⚠️ Ошибка Edge TTS: Cannot connect to host speech.platform.bing.com:443 ssl:<ssl.SSLContext object at 0x00000254428CB1B0> [getaddrinfo failed]
+2026-02-20 16:29:41,945 - WARNING - ⚠️ Ошибка Edge TTS: Cannot connect to host speech.platform.bing.com:443 ssl:<ssl.SSLContext object at 0x00000254428CBCF0> [getaddrinfo failed]
+2026-02-20 16:29:41,946 - WARNING - ⚠️ Ошибка Edge TTS: Cannot connect to host speech.platform.bing.com:443 ssl:<ssl.SSLContext object at 0x00000254428CB930> [getaddrinfo failed]
+2026-02-20 16:29:41,947 - WARNING - ⚠️ Ошибка Edge TTS: Cannot connect to host speech.platform.bing.com:443 ssl:<ssl.SSLContext object at 0x00000254428F8870> [getaddrinfo failed]
+2026-02-20 16:29:41,947 - WARNING - ⚠️ Ошибка Edge TTS: Cannot connect to host speech.platform.bing.com:443 ssl:<ssl.SSLContext object at 0x00000254428F80F0> [getaddrinfo failed]
+2026-02-20 16:29:41,948 - WARNING - ⚠️ Ошибка Edge TTS: Cannot connect to host speech.platform.bing.com:443 ssl:<ssl.SSLContext object at 0x00000254428F8C30> [getaddrinfo failed]
+2026-02-20 16:30:05,562 - ERROR - Connection attempt failed: timed out during opening handshake
+2026-02-20 16:30:05,564 - ERROR - Connection failed permanently after 5 attempts. Error: timed out during opening handshake
+2026-02-20 16:30:05,566 - WARNING - ⚠️ Ошибка Realtime: timed out during opening handshake. Реконнект через 5 сек...
+2026-02-20 16:30:06,762 - ERROR - ❌ Ошибка обработки слова '호박': expected str, bytes or os.PathLike object, not BytesIO
+2026-02-20 16:30:09,340 - ERROR - ❌ Ошибка обработки слова '공사': expected str, bytes or os.PathLike object, not BytesIO
+2026-02-20 16:30:11,978 - ERROR - ❌ Ошибка обработки слова '의상': expected str, bytes or os.PathLike object, not BytesIO
+2026-02-20 16:30:11,979 - ERROR - ❌ Ошибка обработки слова '호박': expected str, bytes or os.PathLike object, not BytesIO
+2026-02-20 16:30:11,979 - ERROR - ❌ Ошибка обработки слова '공사': expected str, bytes or os.PathLike object, not BytesIO
+2026-02-20 16:30:11,980 - ERROR - ❌ Ошибка обработки слова '공사': expected str, bytes or os.PathLike object, not BytesIO
+2026-02-20 16:30:11,981 - ERROR - ❌ Ошибка обработки слова '의상': expected str, bytes or os.PathLike object, not BytesIO
+2026-02-20 16:30:11,981 - ERROR - ❌ Ошибка обработки слова '공사': expected str, bytes or os.PathLike object, not BytesIO
+2026-02-20 16:30:26,227 - WARNING - 🌐 Нет интернета. Ожидание 7.5 сек перед подключением к Realtime...
+2026-02-20 16:30:27,449 - ERROR - ❌ Ошибка обработки слова '기본적': expected str, bytes or os.PathLike object, not BytesIO
+2026-02-20 16:30:27,464 - ERROR - ❌ Ошибка обработки слова '의상': expected str, bytes or os.PathLike object, not BytesIO
+2026-02-20 16:30:27,497 - ERROR - ❌ Ошибка обработки слова '호박': expected str, bytes or os.PathLike object, not BytesIO
+2026-02-20 16:30:27,507 - ERROR - ❌ Ошибка обработки слова '공사': expected str, bytes or os.PathLike object, not BytesIO
+2026-02-20 16:30:27,515 - ERROR - ❌ Ошибка обработки слова '공사': expected str, bytes or os.PathLike object, not BytesIO
+2026-02-20 16:30:27,541 - ERROR - ❌ Ошибка обработки слова '기본적': expected str, bytes or os.PathLike object, not BytesIO
+2026-02-20 16:30:27,553 - ERROR - ❌ Ошибка обработки слова '의상': expected str, bytes or os.PathLike object, not BytesIO
+2026-02-20 16:30:27,662 - INFO - 📈 Сеть стабильна. Увеличиваю количество потоков до 9.
+2026-02-20 16:30:27,663 - INFO - ✨ Пачка обработана. Проблемных в этой сессии: 23
+2026-02-20 16:30:28,459 - INFO - 💤 Нет новых слов. Сплю 5.0 сек...
+2026-02-20 16:30:34,069 - INFO - 💤 Нет новых слов. Сплю 7.5 сек...
+2026-02-20 16:30:34,096 - INFO - 🟢 Инициализация Async Realtime клиента...
+2026-02-20 16:30:35,630 - INFO - 🟢 Realtime Listener: Подписка...
+2026-02-20 16:30:36,148 - INFO - 🟢 Realtime Listener: Подписка активна.
+2026-02-20 16:30:42,315 - INFO - 💤 Нет новых слов. Сплю 11.2 сек...
+2026-02-20 16:30:54,330 - INFO - 💤 Нет новых слов. Сплю 16.9 сек...
+2026-02-20 16:31:12,027 - INFO - 💤 Нет новых слов. Сплю 25.3 сек...
+2026-02-20 16:31:38,244 - INFO - 💤 Нет новых слов. Сплю 38.0 сек...
+2026-02-20 16:32:17,159 - INFO - 💤 Нет новых слов. Сплю 57.0 сек...
+2026-02-20 16:33:14,965 - INFO - 💤 Нет новых слов. Сплю 85.4 сек...
+2026-02-20 16:46:29,166 - ERROR - WebSocket connection closed with code: 1006, reason: 
+2026-02-20 16:46:29,231 - ERROR - Connection attempt failed: [Errno 11001] getaddrinfo failed
+2026-02-20 16:46:30,265 - ERROR - Connection attempt failed: [Errno 11001] getaddrinfo failed
+2026-02-20 16:46:32,270 - ERROR - Connection attempt failed: [Errno 11001] getaddrinfo failed
+2026-02-20 16:46:36,274 - ERROR - Connection attempt failed: [Errno 11001] getaddrinfo failed
+2026-02-20 16:46:39,478 - WARNING - 🌐 Сетевая ошибка Supabase ([Errno 11001] getaddrinfo failed). Попытка 2/4 через 2.2с...
+2026-02-20 16:46:44,280 - ERROR - Connection attempt failed: [Errno 11001] getaddrinfo failed
+2026-02-20 16:46:44,281 - ERROR - Connection failed permanently after 5 attempts. Error: [Errno 11001] getaddrinfo failed
+2026-02-20 16:46:44,849 - WARNING - 🌐 Сетевая ошибка Supabase ([Errno 11001] getaddrinfo failed). Попытка 4/4 через 6.6с...
+2026-02-20 16:46:51,497 - ERROR - ❌ Ошибка в цикле заявок: [Errno 11001] getaddrinfo failed
+2026-02-20 16:46:52,497 - WARNING - 🌐 Сетевая ошибка Supabase ([Errno 11001] getaddrinfo failed). Попытка 2/4 через 1.9с...
+2026-02-20 16:47:16,712 - WARNING - 🌐 Сетевая ошибка Supabase ([Errno 11001] getaddrinfo failed). Попытка 2/4 через 2.2с...
+2026-02-20 16:47:16,712 - WARNING - 🌐 Сетевая ошибка Supabase ([Errno 11001] getaddrinfo failed). Попытка 4/4 через 6.3с...
+2026-02-20 16:47:22,871 - WARNING - 🌐 Сетевая ошибка Supabase ([Errno 11001] getaddrinfo failed). Попытка 4/4 через 6.3с...
+2026-02-20 16:47:23,017 - WARNING - ⚠️ Пропуск цитат (возможно нет колонки audio_url): [Errno 11001] getaddrinfo failed
+2026-02-20 16:47:23,019 - WARNING - 🌐 Сетевая ошибка Supabase ([Errno 11001] getaddrinfo failed). Попытка 2/4 через 2.0с...
+2026-02-20 16:48:13,244 - ERROR - ❌ Ошибка в цикле заявок: [WinError 10065] Сделана попытка выполнить операцию на сокете для недоступного хоста
+2026-02-20 16:48:18,289 - WARNING - 🌐 Сетевая ошибка Supabase ([Errno 11001] getaddrinfo failed). Попытка 2/4 через 2.5с...
+2026-02-20 16:48:24,123 - WARNING - 🌐 Сетевая ошибка Supabase ([Errno 11001] getaddrinfo failed). Попытка 4/4 через 6.7с...
+2026-02-20 16:48:30,870 - ERROR - ❌ Ошибка в цикле заявок: [Errno 11001] getaddrinfo failed
+2026-02-20 16:48:35,873 - WARNING - 🌐 Сетевая ошибка Supabase ([Errno 11001] getaddrinfo failed). Попытка 2/4 через 2.0с...
+2026-02-20 16:59:38,208 - ERROR - ❌ Ошибка в цикле заявок: [WinError 10065] Сделана попытка выполнить операцию на сокете для недоступного хоста
+2026-02-20 16:59:38,233 - WARNING - 🌐 Сетевая ошибка Supabase ([Errno 11001] getaddrinfo failed). Попытка 2/4 через 2.5с...
+2026-02-20 16:59:43,283 - WARNING - 🌐 Сетевая ошибка Supabase ([Errno 11001] getaddrinfo failed). Попытка 2/4 через 2.3с...
+2026-02-20 16:59:44,220 - WARNING - 🌐 Сетевая ошибка Supabase ([Errno 11001] getaddrinfo failed). Попытка 4/4 через 6.7с...
+2026-02-20 16:59:48,732 - WARNING - 🌐 Сетевая ошибка Supabase ([Errno 11001] getaddrinfo failed). Попытка 4/4 через 6.7с...
+2026-02-20 16:59:50,896 - WARNING - ⚠️ Ошибка при авто-сбросе заявок: [Errno 11001] getaddrinfo failed
+2026-02-20 16:59:50,901 - WARNING - 🌐 Сетевая ошибка Supabase ([Errno 11001] getaddrinfo failed). Попытка 2/4 через 1.5с...
+2026-02-20 16:59:55,455 - WARNING - 🌐 Сетевая ошибка Supabase ([Errno 11001] getaddrinfo failed). Попытка 4/4 через 6.3с...
+2026-02-20 16:59:55,475 - ERROR - ❌ Ошибка в цикле заявок: [Errno 11001] getaddrinfo failed
+2026-02-20 17:00:00,481 - WARNING - 🌐 Сетевая ошибка Supabase ([Errno 11001] getaddrinfo failed). Попытка 2/4 через 2.0с...
+2026-02-20 17:00:01,777 - WARNING - ⚠️ Пропуск цитат (возможно нет колонки audio_url): [Errno 11001] getaddrinfo failed
+2026-02-20 17:00:01,780 - WARNING - 🌐 Сетевая ошибка Supabase ([Errno 11001] getaddrinfo failed). Попытка 2/4 через 2.4с...
+2026-02-20 17:00:05,936 - WARNING - 🌐 Сетевая ошибка Supabase ([Errno 11001] getaddrinfo failed). Попытка 4/4 через 6.1с...
+2026-02-20 17:00:07,557 - WARNING - 🌐 Сетевая ошибка Supabase ([Errno 11001] getaddrinfo failed). Попытка 4/4 через 6.1с...
+2026-02-20 17:00:12,036 - ERROR - ❌ Ошибка в цикле заявок: [Errno 11001] getaddrinfo failed
+2026-02-20 17:00:13,638 - ERROR - Ошибка БД: [Errno 11001] getaddrinfo failed
+2026-02-20 17:00:17,052 - WARNING - 🌐 Сетевая ошибка Supabase ([Errno 11001] getaddrinfo failed). Попытка 2/4 через 2.1с...
+2026-02-20 17:00:23,022 - WARNING - 🌐 Сетевая ошибка Supabase ([Errno 11001] getaddrinfo failed). Попытка 4/4 через 6.2с...
+2026-02-20 17:00:29,238 - ERROR - ❌ Ошибка в цикле заявок: [Errno 11001] getaddrinfo failed
+2026-02-20 17:00:34,252 - WARNING - 🌐 Сетевая ошибка Supabase ([Errno 11001] getaddrinfo failed). Попытка 2/4 через 2.3с...
+2026-02-20 17:00:39,913 - WARNING - 🌐 Сетевая ошибка Supabase ([Errno 11001] getaddrinfo failed). Попытка 4/4 через 6.3с...
+2026-02-20 17:00:46,257 - ERROR - ❌ Ошибка в цикле заявок: [Errno 11001] getaddrinfo failed
+2026-02-20 17:00:51,266 - WARNING - 🌐 Сетевая ошибка Supabase ([Errno 11001] getaddrinfo failed). Попытка 2/4 через 2.3с...
+2026-02-20 17:00:57,296 - WARNING - 🌐 Сетевая ошибка Supabase ([Errno 11001] getaddrinfo failed). Попытка 4/4 через 6.5с...
+2026-02-20 17:30:36,572 - INFO - ♻️ Плановый перезапуск Realtime соединения (TTL)...
+2026-02-20 17:30:37,027 - INFO - 🟢 Инициализация Async Realtime клиента...
+2026-02-20 17:30:37,679 - INFO - 🟢 Realtime Listener: Подписка...
+2026-02-20 17:30:38,227 - INFO - 🟢 Realtime Listener: Подписка активна.
+2026-02-20 17:47:08,613 - WARNING - 🌐 Сетевая ошибка Supabase ([Errno 11001] getaddrinfo failed). Попытка 2/4 через 1.9с...
+2026-02-20 17:47:08,682 - WARNING - 🌐 Сетевая ошибка Supabase ([Errno 11001] getaddrinfo failed). Попытка 2/4 через 1.9с...
+2026-02-20 17:47:27,729 - ERROR - WebSocket connection closed with code: 1006, reason: 
+2026-02-20 18:35:08,786 - INFO - ♻️ Плановый перезапуск Realtime соединения (TTL)...
+2026-02-20 18:35:08,898 - INFO - channel realtime:worker-db-changes leave
+2026-02-20 18:35:08,899 - INFO - channel realtime:worker-db-changes closed
+2026-02-20 18:35:09,232 - INFO - 🟢 Инициализация Async Realtime клиента...
+2026-02-20 18:35:10,561 - INFO - 🟢 Realtime Listener: Подписка...
+2026-02-20 18:35:11,274 - INFO - 🟢 Realtime Listener: Подписка активна.
+2026-02-20 18:41:37,807 - ERROR - WebSocket connection closed with code: 1006, reason: 
+2026-02-20 18:41:38,544 - ERROR - Task exception was never retrieved
+future: <Task finished name='Task-301' coro=<AsyncRealtimeClient._listen() done, defined at C:\Python313\Lib\site-packages\realtime\_async\client.py:100> exception=ValueError('Set of Tasks/Futures is empty.')>
+Traceback (most recent call last):
+  File "C:\Python313\Lib\site-packages\realtime\_async\client.py", line 110, in _listen
+    async for msg in self._ws_connection:
+    ...<9 lines>...
+            channel._handle_message(message)
+  File "C:\Python313\Lib\site-packages\websockets\asyncio\connection.py", line 242, in __aiter__
+    yield await self.recv()
+          ^^^^^^^^^^^^^^^^^
+  File "C:\Python313\Lib\site-packages\websockets\asyncio\connection.py", line 322, in recv
+    raise self.protocol.close_exc from self.recv_exc
+websockets.exceptions.ConnectionClosedError: no close frame received or sent
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "C:\Python313\Lib\site-packages\realtime\_async\client.py", line 122, in _listen
+    await self._on_connect_error(e)
+  File "C:\Python313\Lib\site-packages\realtime\_async\client.py", line 221, in _on_connect_error
+    await self._reconnect()
+  File "C:\Python313\Lib\site-packages\realtime\_async\client.py", line 139, in _reconnect
+    await asyncio.wait(rejoins)
+  File "C:\Python313\Lib\asyncio\tasks.py", line 441, in wait
+    raise ValueError('Set of Tasks/Futures is empty.')
+ValueError: Set of Tasks/Futures is empty.
+2026-02-20 18:42:05,125 - ERROR - WebSocket connection closed with code: 1006, reason: 
+2026-02-20 18:42:05,765 - ERROR - Task exception was never retrieved
+future: <Task finished name='Task-312' coro=<AsyncRealtimeClient._listen() done, defined at C:\Python313\Lib\site-packages\realtime\_async\client.py:100> exception=ValueError('Set of Tasks/Futures is empty.')>
+Traceback (most recent call last):
+  File "C:\Python313\Lib\site-packages\realtime\_async\client.py", line 110, in _listen
+    async for msg in self._ws_connection:
+    ...<9 lines>...
+            channel._handle_message(message)
+  File "C:\Python313\Lib\site-packages\websockets\asyncio\connection.py", line 242, in __aiter__
+    yield await self.recv()
+          ^^^^^^^^^^^^^^^^^
+  File "C:\Python313\Lib\site-packages\websockets\asyncio\connection.py", line 322, in recv
+    raise self.protocol.close_exc from self.recv_exc
+websockets.exceptions.ConnectionClosedError: no close frame received or sent
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "C:\Python313\Lib\site-packages\realtime\_async\client.py", line 122, in _listen
+    await self._on_connect_error(e)
+  File "C:\Python313\Lib\site-packages\realtime\_async\client.py", line 221, in _on_connect_error
+    await self._reconnect()
+  File "C:\Python313\Lib\site-packages\realtime\_async\client.py", line 139, in _reconnect
+    await asyncio.wait(rejoins)
+  File "C:\Python313\Lib\asyncio\tasks.py", line 441, in wait
+    raise ValueError('Set of Tasks/Futures is empty.')
+ValueError: Set of Tasks/Futures is empty.
+2026-02-20 19:00:26,040 - ERROR - WebSocket connection closed with code: 1006, reason: 
+2026-02-20 19:00:48,794 - ERROR - WebSocket connection closed with code: 1006, reason: 
+2026-02-20 19:00:49,339 - ERROR - Task exception was never retrieved
+future: <Task finished name='Task-315' coro=<AsyncRealtimeClient._listen() done, defined at C:\Python313\Lib\site-packages\realtime\_async\client.py:100> exception=ValueError('Set of Tasks/Futures is empty.')>
+Traceback (most recent call last):
+  File "C:\Python313\Lib\site-packages\realtime\_async\client.py", line 110, in _listen
+    async for msg in self._ws_connection:
+    ...<9 lines>...
+            channel._handle_message(message)
+  File "C:\Python313\Lib\site-packages\websockets\asyncio\connection.py", line 242, in __aiter__
+    yield await self.recv()
+          ^^^^^^^^^^^^^^^^^
+  File "C:\Python313\Lib\site-packages\websockets\asyncio\connection.py", line 322, in recv
+    raise self.protocol.close_exc from self.recv_exc
+websockets.exceptions.ConnectionClosedError: no close frame received or sent
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "C:\Python313\Lib\site-packages\realtime\_async\client.py", line 122, in _listen
+    await self._on_connect_error(e)
+  File "C:\Python313\Lib\site-packages\realtime\_async\client.py", line 221, in _on_connect_error
+    await self._reconnect()
+  File "C:\Python313\Lib\site-packages\realtime\_async\client.py", line 139, in _reconnect
+    await asyncio.wait(rejoins)
+  File "C:\Python313\Lib\asyncio\tasks.py", line 441, in wait
+    raise ValueError('Set of Tasks/Futures is empty.')
+ValueError: Set of Tasks/Futures is empty.
+2026-02-20 19:00:58,355 - ERROR - WebSocket connection closed with code: 1006, reason: 
+2026-02-20 19:00:58,907 - ERROR - Task exception was never retrieved
+future: <Task finished name='Task-323' coro=<AsyncRealtimeClient._listen() done, defined at C:\Python313\Lib\site-packages\realtime\_async\client.py:100> exception=ValueError('Set of Tasks/Futures is empty.')>
+Traceback (most recent call last):
+  File "C:\Python313\Lib\site-packages\realtime\_async\client.py", line 110, in _listen
+    async for msg in self._ws_connection:
+    ...<9 lines>...
+            channel._handle_message(message)
+  File "C:\Python313\Lib\site-packages\websockets\asyncio\connection.py", line 242, in __aiter__
+    yield await self.recv()
+          ^^^^^^^^^^^^^^^^^
+  File "C:\Python313\Lib\site-packages\websockets\asyncio\connection.py", line 322, in recv
+    raise self.protocol.close_exc from self.recv_exc
+websockets.exceptions.ConnectionClosedError: no close frame received or sent
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "C:\Python313\Lib\site-packages\realtime\_async\client.py", line 122, in _listen
+    await self._on_connect_error(e)
+  File "C:\Python313\Lib\site-packages\realtime\_async\client.py", line 221, in _on_connect_error
+    await self._reconnect()
+  File "C:\Python313\Lib\site-packages\realtime\_async\client.py", line 139, in _reconnect
+    await asyncio.wait(rejoins)
+  File "C:\Python313\Lib\asyncio\tasks.py", line 441, in wait
+    raise ValueError('Set of Tasks/Futures is empty.')
+ValueError: Set of Tasks/Futures is empty.
+2026-02-20 19:35:11,811 - INFO - ♻️ Плановый перезапуск Realtime соединения (TTL)...
+2026-02-20 19:35:11,925 - INFO - channel realtime:worker-db-changes leave
+2026-02-20 19:35:11,927 - INFO - channel realtime:worker-db-changes closed
+2026-02-20 19:35:12,249 - INFO - 🟢 Инициализация Async Realtime клиента...
+2026-02-20 19:35:13,277 - INFO - 🟢 Realtime Listener: Подписка...
+2026-02-20 19:35:13,818 - INFO - 🟢 Realtime Listener: Подписка активна.
+2026-02-20 19:55:33,437 - ERROR - WebSocket connection closed with code: 1006, reason: 
+2026-02-20 20:00:11,915 - ERROR - WebSocket connection closed with code: 1006, reason: 
+2026-02-20 20:00:12,538 - ERROR - Task exception was never retrieved
+future: <Task finished name='Task-318' coro=<AsyncRealtimeClient._listen() done, defined at C:\Python313\Lib\site-packages\realtime\_async\client.py:100> exception=ValueError('Set of Tasks/Futures is empty.')>
+Traceback (most recent call last):
+  File "C:\Python313\Lib\site-packages\realtime\_async\client.py", line 110, in _listen
+    async for msg in self._ws_connection:
+    ...<9 lines>...
+            channel._handle_message(message)
+  File "C:\Python313\Lib\site-packages\websockets\asyncio\connection.py", line 242, in __aiter__
+    yield await self.recv()
+          ^^^^^^^^^^^^^^^^^
+  File "C:\Python313\Lib\site-packages\websockets\asyncio\connection.py", line 322, in recv
+    raise self.protocol.close_exc from self.recv_exc
+websockets.exceptions.ConnectionClosedError: no close frame received or sent
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "C:\Python313\Lib\site-packages\realtime\_async\client.py", line 122, in _listen
+    await self._on_connect_error(e)
+  File "C:\Python313\Lib\site-packages\realtime\_async\client.py", line 221, in _on_connect_error
+    await self._reconnect()
+  File "C:\Python313\Lib\site-packages\realtime\_async\client.py", line 139, in _reconnect
+    await asyncio.wait(rejoins)
+  File "C:\Python313\Lib\asyncio\tasks.py", line 441, in wait
+    raise ValueError('Set of Tasks/Futures is empty.')
+ValueError: Set of Tasks/Futures is empty.
+2026-02-20 20:05:52,725 - ERROR - WebSocket connection closed with code: 1006, reason: 
+2026-02-20 20:05:53,368 - ERROR - Task exception was never retrieved
+future: <Task finished name='Task-340' coro=<AsyncRealtimeClient._listen() done, defined at C:\Python313\Lib\site-packages\realtime\_async\client.py:100> exception=ValueError('Set of Tasks/Futures is empty.')>
+Traceback (most recent call last):
+  File "C:\Python313\Lib\asyncio\windows_events.py", line 463, in finish_socket_func
+    return ov.getresult()
+           ~~~~~~~~~~~~^^
+OSError: [WinError 64] Указанное сетевое имя более недоступно
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "C:\Python313\Lib\asyncio\proactor_events.py", line 286, in _loop_reading
+    length = fut.result()
+  File "C:\Python313\Lib\asyncio\windows_events.py", line 804, in _poll
+    value = callback(transferred, key, ov)
+  File "C:\Python313\Lib\asyncio\windows_events.py", line 467, in finish_socket_func
+    raise ConnectionResetError(*exc.args)
+ConnectionResetError: [WinError 64] Указанное сетевое имя более недоступно
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "C:\Python313\Lib\site-packages\realtime\_async\client.py", line 110, in _listen
+    async for msg in self._ws_connection:
+    ...<9 lines>...
+            channel._handle_message(message)
+  File "C:\Python313\Lib\site-packages\websockets\asyncio\connection.py", line 242, in __aiter__
+    yield await self.recv()
+          ^^^^^^^^^^^^^^^^^
+  File "C:\Python313\Lib\site-packages\websockets\asyncio\connection.py", line 322, in recv
+    raise self.protocol.close_exc from self.recv_exc
+websockets.exceptions.ConnectionClosedError: no close frame received or sent
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "C:\Python313\Lib\site-packages\realtime\_async\client.py", line 122, in _listen
+    await self._on_connect_error(e)
+  File "C:\Python313\Lib\site-packages\realtime\_async\client.py", line 221, in _on_connect_error
+    await self._reconnect()
+  File "C:\Python313\Lib\site-packages\realtime\_async\client.py", line 139, in _reconnect
+    await asyncio.wait(rejoins)
+  File "C:\Python313\Lib\asyncio\tasks.py", line 441, in wait
+    raise ValueError('Set of Tasks/Futures is empty.')
+ValueError: Set of Tasks/Futures is empty.
+2026-02-20 20:05:54,372 - ERROR - WebSocket connection closed with code: 1006, reason: 
+2026-02-20 20:06:00,427 - ERROR - WebSocket connection closed with code: 1006, reason: 
+2026-02-20 20:06:00,981 - ERROR - Task exception was never retrieved
+future: <Task finished name='Task-326' coro=<AsyncRealtimeClient._listen() done, defined at C:\Python313\Lib\site-packages\realtime\_async\client.py:100> exception=ValueError('Set of Tasks/Futures is empty.')>
+Traceback (most recent call last):
+  File "C:\Python313\Lib\asyncio\windows_events.py", line 463, in finish_socket_func
+    return ov.getresult()
+           ~~~~~~~~~~~~^^
+OSError: [WinError 64] Указанное сетевое имя более недоступно
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "C:\Python313\Lib\asyncio\proactor_events.py", line 286, in _loop_reading
+    length = fut.result()
+  File "C:\Python313\Lib\asyncio\windows_events.py", line 804, in _poll
+    value = callback(transferred, key, ov)
+  File "C:\Python313\Lib\asyncio\windows_events.py", line 467, in finish_socket_func
+    raise ConnectionResetError(*exc.args)
+ConnectionResetError: [WinError 64] Указанное сетевое имя более недоступно
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "C:\Python313\Lib\site-packages\realtime\_async\client.py", line 110, in _listen
+    async for msg in self._ws_connection:
+    ...<9 lines>...
+            channel._handle_message(message)
+  File "C:\Python313\Lib\site-packages\websockets\asyncio\connection.py", line 242, in __aiter__
+    yield await self.recv()
+          ^^^^^^^^^^^^^^^^^
+  File "C:\Python313\Lib\site-packages\websockets\asyncio\connection.py", line 322, in recv
+    raise self.protocol.close_exc from self.recv_exc
+websockets.exceptions.ConnectionClosedError: no close frame received or sent
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "C:\Python313\Lib\site-packages\realtime\_async\client.py", line 122, in _listen
+    await self._on_connect_error(e)
+  File "C:\Python313\Lib\site-packages\realtime\_async\client.py", line 221, in _on_connect_error
+    await self._reconnect()
+  File "C:\Python313\Lib\site-packages\realtime\_async\client.py", line 139, in _reconnect
+    await asyncio.wait(rejoins)
+  File "C:\Python313\Lib\asyncio\tasks.py", line 441, in wait
+    raise ValueError('Set of Tasks/Futures is empty.')
+ValueError: Set of Tasks/Futures is empty.
+2026-02-20 20:06:26,070 - ERROR - WebSocket connection closed with code: 1006, reason: 
+2026-02-20 20:06:26,736 - ERROR - Task exception was never retrieved
+future: <Task finished name='Task-351' coro=<AsyncRealtimeClient._listen() done, defined at C:\Python313\Lib\site-packages\realtime\_async\client.py:100> exception=ValueError('Set of Tasks/Futures is empty.')>
+Traceback (most recent call last):
+  File "C:\Python313\Lib\asyncio\windows_events.py", line 463, in finish_socket_func
+    return ov.getresult()
+           ~~~~~~~~~~~~^^
+OSError: [WinError 64] Указанное сетевое имя более недоступно
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "C:\Python313\Lib\asyncio\proactor_events.py", line 286, in _loop_reading
+    length = fut.result()
+  File "C:\Python313\Lib\asyncio\windows_events.py", line 804, in _poll
+    value = callback(transferred, key, ov)
+  File "C:\Python313\Lib\asyncio\windows_events.py", line 467, in finish_socket_func
+    raise ConnectionResetError(*exc.args)
+ConnectionResetError: [WinError 64] Указанное сетевое имя более недоступно
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "C:\Python313\Lib\site-packages\realtime\_async\client.py", line 110, in _listen
+    async for msg in self._ws_connection:
+    ...<9 lines>...
+            channel._handle_message(message)
+  File "C:\Python313\Lib\site-packages\websockets\asyncio\connection.py", line 242, in __aiter__
+    yield await self.recv()
+          ^^^^^^^^^^^^^^^^^
+  File "C:\Python313\Lib\site-packages\websockets\asyncio\connection.py", line 322, in recv
+    raise self.protocol.close_exc from self.recv_exc
+websockets.exceptions.ConnectionClosedError: no close frame received or sent
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "C:\Python313\Lib\site-packages\realtime\_async\client.py", line 122, in _listen
+    await self._on_connect_error(e)
+  File "C:\Python313\Lib\site-packages\realtime\_async\client.py", line 221, in _on_connect_error
+    await self._reconnect()
+  File "C:\Python313\Lib\site-packages\realtime\_async\client.py", line 139, in _reconnect
+    await asyncio.wait(rejoins)
+  File "C:\Python313\Lib\asyncio\tasks.py", line 441, in wait
+    raise ValueError('Set of Tasks/Futures is empty.')
+ValueError: Set of Tasks/Futures is empty.
+2026-02-20 20:06:33,550 - ERROR - WebSocket connection closed with code: 1006, reason: 
+2026-02-20 20:06:34,262 - ERROR - Task exception was never retrieved
+future: <Task finished name='Task-343' coro=<AsyncRealtimeClient._listen() done, defined at C:\Python313\Lib\site-packages\realtime\_async\client.py:100> exception=ValueError('Set of Tasks/Futures is empty.')>
+Traceback (most recent call last):
+  File "C:\Python313\Lib\asyncio\windows_events.py", line 463, in finish_socket_func
+    return ov.getresult()
+           ~~~~~~~~~~~~^^
+OSError: [WinError 64] Указанное сетевое имя более недоступно
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "C:\Python313\Lib\asyncio\proactor_events.py", line 286, in _loop_reading
+    length = fut.result()
+  File "C:\Python313\Lib\asyncio\windows_events.py", line 804, in _poll
+    value = callback(transferred, key, ov)
+  File "C:\Python313\Lib\asyncio\windows_events.py", line 467, in finish_socket_func
+    raise ConnectionResetError(*exc.args)
+ConnectionResetError: [WinError 64] Указанное сетевое имя более недоступно
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "C:\Python313\Lib\site-packages\realtime\_async\client.py", line 110, in _listen
+    async for msg in self._ws_connection:
+    ...<9 lines>...
+            channel._handle_message(message)
+  File "C:\Python313\Lib\site-packages\websockets\asyncio\connection.py", line 242, in __aiter__
+    yield await self.recv()
+          ^^^^^^^^^^^^^^^^^
+  File "C:\Python313\Lib\site-packages\websockets\asyncio\connection.py", line 322, in recv
+    raise self.protocol.close_exc from self.recv_exc
+websockets.exceptions.ConnectionClosedError: no close frame received or sent
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "C:\Python313\Lib\site-packages\realtime\_async\client.py", line 122, in _listen
+    await self._on_connect_error(e)
+  File "C:\Python313\Lib\site-packages\realtime\_async\client.py", line 221, in _on_connect_error
+    await self._reconnect()
+  File "C:\Python313\Lib\site-packages\realtime\_async\client.py", line 139, in _reconnect
+    await asyncio.wait(rejoins)
+  File "C:\Python313\Lib\asyncio\tasks.py", line 441, in wait
+    raise ValueError('Set of Tasks/Futures is empty.')
+ValueError: Set of Tasks/Futures is empty.
+2026-02-20 20:06:35,037 - ERROR - WebSocket connection closed with code: 1006, reason: 
+2026-02-22 17:12:01,326 - WARNING - ⚠️ Не удалось найти StorageClient. Патч пропущен (возможно, он не нужен в этой версии).
+2026-02-22 17:12:03,890 - INFO - ℹ️ Бакет 'audio-files' уже существует.
+2026-02-22 17:12:04,360 - INFO - ℹ️ Бакет 'image-files' найден. Обновляю права на Public...
+2026-02-22 17:12:04,806 - INFO - 🚀 Воркер запущен (Parallel Mode).
+2026-02-22 17:12:04,807 - INFO - 📡 Анализ скорости соединения...
+2026-02-22 17:12:07,670 - INFO - ⏱ Средний отклик: 0.954 сек.
+2026-02-22 17:12:07,671 - INFO - ⚡ Автоматически установлено потоков для фона: 4
+2026-02-22 17:12:07,671 - INFO - 🔍 Проверка схемы базы данных...
+2026-02-22 17:12:10,459 - INFO - ✅ Схема таблицы 'vocabulary' корректна.
+2026-02-22 17:12:10,858 - INFO - ✅ Схема таблицы 'word_requests' корректна.
+2026-02-22 17:12:11,206 - INFO - ✅ Схема таблицы 'quotes' корректна.
+2026-02-22 17:12:11,244 - INFO - 🤖 Проверка ключа Gemini API...
+2026-02-22 17:12:14,391 - INFO - ✅ Ключ Gemini API валиден.
+2026-02-22 17:12:14,934 - INFO - 👀 Запущен мониторинг пользовательских заявок (Приоритетный поток)...
+2026-02-22 17:12:14,935 - INFO - 🛠 Запущены фоновые задачи (Начальных потоков: 4)...
+2026-02-22 17:12:15,552 - INFO - 🟢 Инициализация Async Realtime клиента...
+2026-02-22 17:12:16,194 - INFO - 🟢 Realtime Listener: Подписка...
+2026-02-22 17:12:16,539 - INFO - 🔥 Запуск обработки 23 слов... (Потоков: 4)
+2026-02-22 17:12:24,615 - INFO - 🟢 Realtime Listener: Подписка активна.
+2026-02-22 17:12:26,695 - ERROR - ❌ Ошибка обработки слова '공사': expected str, bytes or os.PathLike object, not BytesIO
+2026-02-22 17:12:28,550 - ERROR - ❌ Ошибка обработки слова '의상': expected str, bytes or os.PathLike object, not BytesIO
+2026-02-22 17:12:31,221 - ERROR - ❌ Ошибка обработки слова '호박': expected str, bytes or os.PathLike object, not BytesIO
+2026-02-22 17:12:33,395 - ERROR - ❌ Ошибка обработки слова '호박': expected str, bytes or os.PathLike object, not BytesIO
+2026-02-22 17:12:33,396 - ERROR - ❌ Ошибка обработки слова '공사': expected str, bytes or os.PathLike object, not BytesIO
+2026-02-22 17:12:37,057 - ERROR - ❌ Ошибка обработки слова '의상': expected str, bytes or os.PathLike object, not BytesIO
+2026-02-22 17:12:38,974 - ERROR - ❌ Ошибка обработки слова '호박': expected str, bytes or os.PathLike object, not BytesIO
+2026-02-22 17:12:42,486 - ERROR - ❌ Ошибка обработки слова '공사': expected str, bytes or os.PathLike object, not BytesIO
+2026-02-22 17:12:48,895 - ERROR - ❌ Ошибка обработки слова '의상': expected str, bytes or os.PathLike object, not BytesIO
+2026-02-22 17:13:03,874 - ERROR - ❌ Ошибка обработки слова '호박': expected str, bytes or os.PathLike object, not BytesIO
+2026-02-22 17:13:10,457 - ERROR - ❌ Ошибка обработки слова '호박': expected str, bytes or os.PathLike object, not BytesIO
+2026-02-22 17:13:13,689 - ERROR - ❌ Ошибка обработки слова '공사': expected str, bytes or os.PathLike object, not BytesIO
+2026-02-22 17:13:13,689 - ERROR - ❌ Ошибка обработки слова '공사': expected str, bytes or os.PathLike object, not BytesIO
+2026-02-22 17:13:17,537 - ERROR - ❌ Ошибка обработки слова '의상': expected str, bytes or os.PathLike object, not BytesIO
+2026-02-22 17:13:18,943 - ERROR - ❌ Ошибка обработки слова '공사': expected str, bytes or os.PathLike object, not BytesIO
+2026-02-22 17:13:20,422 - ERROR - ❌ Ошибка обработки слова '공사': expected str, bytes or os.PathLike object, not BytesIO
+2026-02-22 17:13:21,586 - ERROR - ❌ Ошибка обработки слова '기본적': expected str, bytes or os.PathLike object, not BytesIO
+2026-02-22 17:13:23,431 - ERROR - ❌ Ошибка обработки слова '의상': expected str, bytes or os.PathLike object, not BytesIO
+2026-02-22 17:13:24,663 - ERROR - ❌ Ошибка обработки слова '호박': expected str, bytes or os.PathLike object, not BytesIO
+2026-02-22 17:13:25,969 - ERROR - ❌ Ошибка обработки слова '공사': expected str, bytes or os.PathLike object, not BytesIO
+2026-02-22 17:13:25,982 - ERROR - ❌ Ошибка обработки слова '기본적': expected str, bytes or os.PathLike object, not BytesIO
+2026-02-22 17:13:26,812 - ERROR - ❌ Ошибка обработки слова '공사': expected str, bytes or os.PathLike object, not BytesIO
+2026-02-22 17:13:26,980 - ERROR - ❌ Ошибка обработки слова '의상': expected str, bytes or os.PathLike object, not BytesIO
+2026-02-22 17:13:27,082 - INFO - 📈 Сеть стабильна. Увеличиваю количество потоков до 5.
+2026-02-22 17:13:27,083 - INFO - ✨ Пачка обработана. Проблемных в этой сессии: 23
+2026-02-22 17:13:28,025 - INFO - 💤 Нет новых слов. Сплю 5.0 сек...
+2026-02-22 17:13:33,702 - INFO - 💤 Нет новых слов. Сплю 7.5 сек...
+2026-02-22 17:13:42,704 - INFO - 💤 Нет новых слов. Сплю 11.2 сек...
+2026-02-22 17:13:54,882 - INFO - 💤 Нет новых слов. Сплю 16.9 сек...
+2026-02-22 17:14:12,875 - INFO - 💤 Нет новых слов. Сплю 25.3 сек...
+2026-02-22 17:14:39,098 - INFO - 💤 Нет новых слов. Сплю 38.0 сек...
+2026-02-22 17:15:18,119 - INFO - 💤 Нет новых слов. Сплю 57.0 сек...
+2026-02-22 17:16:15,990 - INFO - 💤 Нет новых слов. Сплю 85.4 сек...
+2026-02-22 17:37:22,471 - ERROR - WebSocket connection closed with code: 1006, reason: 
+2026-02-22 18:15:03,871 - INFO - ♻️ Плановый перезапуск Realtime соединения (TTL)...
+2026-02-22 18:15:04,026 - INFO - channel realtime:worker-db-changes leave
+2026-02-22 18:15:04,027 - INFO - channel realtime:worker-db-changes closed
+2026-02-22 18:15:05,878 - WARNING - 🌐 Нет интернета. Ожидание 5 сек перед подключением к Realtime...
+2026-02-22 18:15:12,890 - WARNING - 🌐 Нет интернета. Ожидание 7.5 сек перед подключением к Realtime...
+2026-02-22 18:15:22,415 - WARNING - 🌐 Нет интернета. Ожидание 11.25 сек перед подключением к Realtime...
+2026-02-22 18:15:35,674 - WARNING - 🌐 Нет интернета. Ожидание 16.875 сек перед подключением к Realtime...
+2026-02-22 18:15:54,567 - WARNING - 🌐 Нет интернета. Ожидание 25.3125 сек перед подключением к Realtime...
+2026-02-22 18:16:21,896 - WARNING - 🌐 Нет интернета. Ожидание 37.96875 сек перед подключением к Realtime...
+2026-02-22 18:17:01,881 - WARNING - 🌐 Нет интернета. Ожидание 56.953125 сек перед подключением к Realtime...
+2026-02-22 18:18:00,850 - WARNING - 🌐 Нет интернета. Ожидание 60 сек перед подключением к Realtime...
+2026-02-22 18:19:01,391 - INFO - 🟢 Инициализация Async Realtime клиента...
+2026-02-22 18:19:01,657 - INFO - 🟢 Realtime Listener: Подписка...
+2026-02-22 18:19:02,305 - INFO - 🟢 Realtime Listener: Подписка активна.

@@ -24,7 +24,10 @@ import selectionModalsHtml from "../html/modals/selection_modals.html?raw";
  */
 export function injectComponents(): void {
   // eslint-disable-next-line no-console
-  console.log("🧩 Injecting UI components...");
+
+  if (!document.body) {
+    return;
+  }
 
   // 1. Инъекция Хедера и Тулбара (в поток документа)
   const mainContent = document.getElementById("main-content");
@@ -38,6 +41,8 @@ export function injectComponents(): void {
   // 2. Инъекция Модальных окон и Оверлеев (в конец body)
   const container = document.createElement("div");
   container.id = "injected-components";
+  // Убираем стили, создающие stacking context.
+  // Теперь position: fixed внутри container будет работать относительно viewport.
 
   // Собираем HTML в одну строку. Порядок не критичен для функционала,
   // но важен для CSS (z-index), если окна перекрываются.
@@ -62,5 +67,11 @@ export function injectComponents(): void {
   ].join("\n");
 
   // Вставляем в конец body
-  document.body.appendChild(container);
+  if (document.body) {
+    document.body.appendChild(container);
+  } else {
+    console.error(
+      "❌ document.body is null, cannot append injected components",
+    );
+  }
 }

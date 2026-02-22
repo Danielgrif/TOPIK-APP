@@ -1,14 +1,13 @@
 /* eslint-disable no-console, @typescript-eslint/no-explicit-any */
-import { client } from "./supabaseClient.ts";
 import { state } from "./state.ts";
 import { loadFromSupabase } from "./db.ts";
-import { showToast } from "../utils/utils.ts";
+import { showToast, promiseWithTimeout } from "../utils/utils.ts";
 import { saveAndRender } from "../ui/ui.ts";
 import { openModal, closeModal, openConfirm } from "../ui/ui_modal.ts";
 import { applyTheme, updateVoiceUI } from "../ui/ui_settings.ts";
 import { User } from "../types/index.ts";
-import type { Session } from "@supabase/supabase-js";
 import { LS_KEYS } from "./constants.ts";
+import { AuthService } from "./auth_service.ts";
 
 export function updateAuthUI(user: User | null) {
   // Keep a reference to the current user in the global state
@@ -17,7 +16,9 @@ export function updateAuthUI(user: User | null) {
   const profileBtn = document.getElementById("profile-button");
   const avatar = document.getElementById("profile-avatar");
   const name = document.getElementById("profile-name");
-  if (!profileBtn || !avatar || !name) return;
+  if (!profileBtn || !avatar || !name) {
+    return;
+  }
 
   if (user) {
     const email = user.email || "";
@@ -73,115 +74,101 @@ export function openLoginModal() {
 }
 
 export function openProfileModal() {
-  client.auth
-    .getSession()
-    .then(
-      ({ data, error }: { data: { session: Session | null }; error: any }) => {
-        if (error) throw error;
-        const session = data?.session;
-        if (session && session.user) {
-          const user = session.user;
-          const displayName =
-            user.user_metadata?.full_name ||
-            user.email?.split("@")[0] ||
-            "Гость";
+  // АТОМАРНОЕ ИЗМЕНЕНИЕ: Синхронная проверка состояния.
+  // Мы доверяем state.currentUser, который обновляется в app.ts.
+  // Это гарантирует мгновенный отклик UI в том же цикле событий.
+  
+  console.log("👤 [DEBUG] openProfileModal called. Current User:", state.currentUser);
+  
+  if (state.currentUser) {
+    const user = state.currentUser;
+    const displayName =
+      user.user_metadata?.full_name ||
+      user.email?.split("@")[0] ||
+      "Гость";
 
-          const nameDisplay = document.getElementById("profile-name-display");
-          const nameInput = document.getElementById(
-            "profile-name-input",
-          ) as HTMLInputElement;
-          const editBtn = document.getElementById("edit-profile-name-btn");
+    const nameDisplay = document.getElementById("profile-name-display");
+    const nameInput = document.getElementById(
+      "profile-name-input",
+    ) as HTMLInputElement;
+    const editBtn = document.getElementById("edit-profile-name-btn");
 
-          if (nameDisplay) nameDisplay.textContent = displayName;
+    if (nameDisplay) nameDisplay.textContent = displayName;
 
-          const avatarEl = document.getElementById("profile-avatar-large");
-          if (avatarEl)
-            avatarEl.textContent = (user.email || "U").charAt(0).toUpperCase();
+    const avatarEl = document.getElementById("profile-avatar-large");
+    if (avatarEl)
+      avatarEl.textContent = (user.email || "U").charAt(0).toUpperCase();
 
-          // Логика редактирования имени
-          if (editBtn && nameInput && nameDisplay) {
-            editBtn.onclick = () => {
-              nameDisplay.style.display = "none";
-              editBtn.style.display = "none";
-              nameInput.style.display = "block";
-              nameInput.value = displayName;
-              nameInput.focus();
-            };
+    // Логика редактирования имени
+    if (editBtn && nameInput && nameDisplay) {
+      editBtn.onclick = () => {
+        nameDisplay.style.display = "none";
+        editBtn.style.display = "none";
+        nameInput.style.display = "block";
+        nameInput.value = displayName;
+        nameInput.focus();
+      };
 
-            const saveName = async () => {
-              const newName = nameInput.value.trim();
-              if (newName && newName !== displayName) {
-                const { error } = await client.auth.updateUser({
-                  data: { full_name: newName },
-                });
-                if (!error) {
-                  nameDisplay.textContent = newName;
-                  showToast("Имя обновлено");
-                  updateAuthUI({
-                    ...user,
-                    user_metadata: {
-                      ...user.user_metadata,
-                      full_name: newName,
-                    },
-                  });
-                } else {
-                  showToast("Ошибка обновления: " + error.message);
-                }
-              }
-              nameInput.style.display = "none";
-              nameDisplay.style.display = "block";
-              editBtn.style.display = "inline-flex";
-            };
-
-            nameInput.onblur = saveName;
-            nameInput.onkeydown = (e) => {
-              if (e.key === "Enter") nameInput.blur();
-            };
+      const saveName = async () => {
+        const newName = nameInput.value.trim();
+        if (newName && newName !== displayName) {
+          const { error } = await AuthService.updateProfile(newName);
+          if (!error) {
+            nameDisplay.textContent = newName;
+            showToast("Имя обновлено");
+            updateAuthUI({
+              ...user,
+              user_metadata: { ...user.user_metadata, full_name: newName },
+            });
+          } else {
+            showToast("Ошибка обновления: " + error.message);
           }
-
-          // Обновляем звание пользователя на основе уровня
-          const roleEl = document.getElementById("profile-role");
-          if (roleEl) {
-            const lvl = state.userStats.level;
-            let role = "Новичок";
-            if (lvl >= 5) role = "Студент";
-            if (lvl >= 10) role = "Знаток";
-            if (lvl >= 20) role = "Мастер";
-            if (lvl >= 50) role = "Легенда";
-            roleEl.textContent = `${role} (LVL ${lvl})`;
-          }
-
-          const input = document.getElementById(
-            "new-password",
-          ) as HTMLInputElement | null;
-          const bar = document.getElementById("new-strength-bar");
-          const container = document.getElementById("new-strength-container");
-
-          if (input && bar && container) {
-            input.value = "";
-            container.style.display = "none";
-            bar.style.width = "0%";
-            setupPasswordStrengthMeter(input, bar, container);
-          }
-
-          const scrollContainer = document.getElementById(
-            "profile-scroll-container",
-          );
-          if (scrollContainer) {
-            scrollContainer.scrollTop = 0;
-          }
-
-          openModal("profile-modal");
-        } else {
-          console.warn(
-            "Кнопка профиля нажата, но активная сессия не найдена. Исправляем UI.",
-          );
-          updateAuthUI(null);
-          openLoginModal();
         }
-      },
-    )
-    .catch((err: unknown) => console.error("Profile check failed:", err));
+        nameInput.style.display = "none";
+        nameDisplay.style.display = "block";
+        editBtn.style.display = "inline-flex";
+      };
+
+      nameInput.onblur = saveName;
+      nameInput.onkeydown = (e) => {
+        if (e.key === "Enter") nameInput.blur();
+      };
+    }
+
+    // Обновляем звание пользователя на основе уровня
+    const roleEl = document.getElementById("profile-role");
+    if (roleEl) {
+      const lvl = state.userStats.level;
+      let role = "Новичок";
+      if (lvl >= 5) role = "Студент";
+      if (lvl >= 10) role = "Знаток";
+      if (lvl >= 20) role = "Мастер";
+      if (lvl >= 50) role = "Легенда";
+      roleEl.textContent = `${role} (LVL ${lvl})`;
+    }
+
+    const input = document.getElementById("new-password") as HTMLInputElement | null;
+    const bar = document.getElementById("new-strength-bar");
+    const container = document.getElementById("new-strength-container");
+
+    if (input && bar && container) {
+      input.value = "";
+      container.style.display = "none";
+      bar.style.width = "0%";
+      setupPasswordStrengthMeter(input, bar, container);
+    }
+
+    const scrollContainer = document.getElementById("profile-scroll-container");
+    if (scrollContainer) scrollContainer.scrollTop = 0;
+
+    openModal("profile-modal");
+  } else {
+    // Если пользователя нет в стейте - сразу открываем вход.
+    // Никаких await, никаких задержек.
+    console.log("👤 [DEBUG] No user, opening login modal directly");
+    updateAuthUI(null);
+    openLoginModal();
+  }
 }
 
 function setupPasswordStrengthMeter(
@@ -246,9 +233,7 @@ async function performReset(email: string) {
   if (!email) return showAuthError("Введите Email для сброса пароля");
   showToast("⏳ Отправка письма...");
   try {
-    const { error } = await client.auth.resetPasswordForEmail(email, {
-      redirectTo: window.location.href,
-    });
+    const { error } = await AuthService.resetPasswordForEmail(email, window.location.href);
     if (error) throw error;
     alert(`Ссылка для входа отправлена на ${email}.\nПроверьте почту.`);
     closeModal("login-modal");
@@ -261,10 +246,7 @@ async function performLogin(email: string, password: string) {
   if (!email || !password) return showAuthError("Введите Email и пароль");
   showToast("⏳ Вход...");
   try {
-    const { data, error } = await client.auth.signInWithPassword({
-      email,
-      password,
-    });
+    const { data, error } = await AuthService.signInWithPassword(email, password);
     if (error) throw error;
     if (data.user) await finalizeAuth(data.user as any);
   } catch (e) {
@@ -276,7 +258,7 @@ async function performSignup(email: string, password: string) {
   if (!email || !password) return showAuthError("Введите Email и пароль");
   showToast("⏳ Регистрация...");
   try {
-    const { data, error } = await client.auth.signUp({ email, password });
+    const { data, error } = await AuthService.signUp(email, password);
     if (error) throw error;
 
     if (data.user && !data.session) {
@@ -284,13 +266,7 @@ async function performSignup(email: string, password: string) {
       closeModal("login-modal");
     } else {
       if (data.user) {
-        try {
-          await client
-            .from("user_global_stats")
-            .insert([{ user_id: data.user.id, xp: 0, level: 1 }]);
-        } catch {
-          // Ignore if stats already exist
-        }
+        await AuthService.initUserStats(data.user.id);
       }
       if (data.user) await finalizeAuth(data.user as any);
     }
@@ -361,10 +337,7 @@ function handleAuthError(e: unknown) {
 }
 
 export async function signInWithGoogle() {
-  const { error } = await client.auth.signInWithOAuth({
-    provider: "google",
-    options: { redirectTo: window.location.origin + window.location.pathname },
-  });
+  const { error } = await AuthService.signInWithGoogle(window.location.origin + window.location.pathname);
   if (error) {
     console.error("Google Sign-In Error:", error);
     alert("Ошибка Google входа: " + error.message);
@@ -386,7 +359,7 @@ export async function handleChangePassword() {
     return;
   }
   showToast("⏳ Обновление...");
-  const { error } = await client.auth.updateUser({ password: newPass });
+  const { error } = await AuthService.updatePassword(newPass);
   if (error) {
     console.error("Update Password Error:", error);
     alert("Ошибка: " + error.message);
@@ -401,7 +374,7 @@ export async function handleLogout() {
   openConfirm("Вы уверены, что хотите выйти?", async () => {
     showToast("👋 До встречи!");
     try {
-      await client.auth.signOut();
+      await AuthService.signOut();
     } catch (e) {
       console.error("Logout error:", e);
     } finally {

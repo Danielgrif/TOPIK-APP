@@ -12,11 +12,12 @@ import { findAssociations } from "../core/associations.ts";
 import { checkPronunciation } from "../core/speech.ts";
 import { findConfusingWords } from "../core/confusing_words.ts";
 import { Word } from "../types/index.ts";
+import { quitQuiz } from "./quiz.ts";
 
 function getAudioBtnHtml(url: string | undefined): string {
   if (!url) return "";
   const jsSafe = url.replace(/\\/g, "\\\\").replace(/'/g, "\\'");
-  return `<button class="speak-btn" onclick="window.speak(null, '${escapeHtml(jsSafe)}')">🔊</button>`;
+  return `<button class="speak-btn" data-action="speak" data-url="${escapeHtml(jsSafe)}">🔊</button>`;
 }
 
 function getOptions(correctWord: Word, count: number = 4): Word[] {
@@ -708,7 +709,7 @@ export const QuizStrategies: Record<string, Strategy> = {
       const pairs = findAssociations();
       if (pairs.length < 5) {
         qEl.innerText = "Недостаточно слов для этого режима.";
-        setTimeout(() => window.quitQuiz(true), 1500);
+        setTimeout(() => quitQuiz(true), 1500);
         return;
       }
 

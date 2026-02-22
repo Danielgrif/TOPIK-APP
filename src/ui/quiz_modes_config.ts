@@ -141,7 +141,7 @@ class SprintQuizConfig extends BaseQuizConfig {
 class SurvivalQuizConfig extends BaseQuizConfig {
   initialTimer = 30; // Time bank, increased from 15
   isTimerCountdown = true;
-  initialLives = 3 + (state.userStats.survivalHealth || 0);
+  initialLives = 3;
   private streak = 0;
 
   getWords(pool: Word[]): Word[] {

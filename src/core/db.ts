@@ -1,6 +1,6 @@
 import { client } from "./supabaseClient.ts";
 import { state, Session, CURRENT_DB_VERSION } from "./state.ts";
-import { showToast, parseBilingualString } from "../utils/utils.ts";
+import { showToast, parseBilingualString, isConnectionSlow } from "../utils/utils.ts";
 import { syncGlobalStats } from "./sync.ts";
 import { Scheduler } from "./scheduler.ts";
 import { LS_KEYS, DB_TABLES } from "./constants.ts";
@@ -127,8 +127,14 @@ export function immediateSaveState() {
     localStorage.setItem(LS_KEYS.VOCAB_CACHE, JSON.stringify(state.dataStore));
     localStorage.setItem(LS_KEYS.TTS_VOLUME, String(state.ttsVolume));
     localStorage.setItem(LS_KEYS.VOCAB_VERSION, VOCABULARY_CACHE_VERSION);
-  } catch (e) {
+  } catch (e: any) {
     console.error("Save error:", e);
+    if (
+      e.name === "QuotaExceededError" ||
+      e.name === "NS_ERROR_DOM_QUOTA_REACHED"
+    ) {
+      showToast("⚠️ Память переполнена! Данные могут не сохраниться.");
+    }
   }
 }
 
@@ -276,6 +282,10 @@ function processVocabularyData(serverData: Word[]) {
       w.word_hanja,
       w.synonyms,
       w.my_notes,
+      w.topic,
+      w.topic_ru,
+      w.category,
+      w.category_ru,
     ]
       .filter(Boolean)
       .join(" ")
@@ -297,21 +307,11 @@ export async function fetchVocabulary() {
     const isCacheValid = cachedVersion === VOCABULARY_CACHE_VERSION;
 
     // 🐌 Проверка скорости: если есть кэш и интернет медленный, пропускаем обновление
-    // @ts-ignore
-    const conn = navigator.connection;
-    if (
-      conn &&
-      (conn.saveData || ["slow-2g", "2g"].includes(conn.effectiveType))
-    ) {
+    if (isConnectionSlow()) {
       if (state.dataStore.length > 0) {
         showToast("🐌 Медленный интернет: обновление словаря отложено");
         return;
       }
-    }
-
-    if (!isCacheValid && navigator.onLine) {
-      // eslint-disable-next-line no-console
-      console.log("🔄 Cache outdated or missing. Forcing refresh...");
     }
 
     const controller = new AbortController();
@@ -322,11 +322,28 @@ export async function fetchVocabulary() {
       .select("*")
       .is("deleted_at", null)
       .abortSignal(controller.signal);
+
+    // Загружаем пользовательские слова, если есть сессия
+    let userWords: Word[] = [];
+    const { data: sessionData } = await client.auth.getSession();
+    if (sessionData?.session?.user) {
+      const { data: userData, error: userError } = await client
+        .from(DB_TABLES.USER_VOCABULARY)
+        .select("*")
+        .eq("user_id", sessionData.session.user.id)
+        .is("deleted_at", null)
+        .abortSignal(controller.signal);
+
+      if (!userError && userData) {
+        userWords = userData;
+      }
+    }
+
     clearTimeout(timeoutId);
 
     if (error) throw error;
 
-    const serverData: Word[] = data || [];
+    const serverData: Word[] = [...(data || []), ...userWords];
 
     if (serverData.length === 0 || (!navigator.onLine && isCacheValid)) {
       if (state.dataStore.length > 0) {

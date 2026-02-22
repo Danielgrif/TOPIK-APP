@@ -175,11 +175,3 @@ function buildReviewModal(queue: Word[]) {
   renderOne();
   openModal(modalId);
 }
-
-declare global {
-  interface Window {
-    openReviewMode: typeof openReviewMode;
-  }
-}
-
-window.openReviewMode = openReviewMode;

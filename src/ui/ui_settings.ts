@@ -3,7 +3,7 @@ import { state } from "../core/state.ts";
 import { showToast } from "../utils/utils.ts";
 import { render } from "./ui_card.ts";
 import { scheduleSaveState } from "../core/db.ts";
-import { openConfirm, closeModal } from "./ui_modal.ts";
+import { openConfirm } from "./ui_modal.ts";
 import { LS_KEYS } from "../core/constants.ts";
 
 const THEME_PALETTES: Record<
@@ -476,7 +476,6 @@ export function updateThemePickerUI() {
         buyBtn.title = "Купить в магазине";
         buyBtn.onclick = (e) => {
           e.stopPropagation();
-          closeModal("profile-modal");
           import("./ui_shop.ts").then((shop) => {
             shop.openShopModal();
             setTimeout(() => shop.switchShopTab("theme"), 100);
@@ -851,41 +850,3 @@ export function resetOnboarding() {
   showToast("🎓 Обучение сброшено. Перезагрузка...");
   setTimeout(() => location.reload(), 800);
 }
-
-declare global {
-  interface Window {
-    toggleHanjaMode: typeof toggleHanjaMode;
-    toggleVoice: typeof toggleVoice;
-    setAudioSpeed: typeof setAudioSpeed;
-    setTtsVolume: typeof setTtsVolume;
-    toggleAutoTheme: typeof toggleAutoTheme;
-    toggleDarkMode: typeof toggleDarkMode;
-    toggleAutoUpdate: typeof toggleAutoUpdate;
-    setAccentColor: typeof setAccentColor;
-    previewAccentColor: typeof previewAccentColor;
-    toggleFocusMode: typeof toggleFocusMode;
-    updateThemePickerUI: typeof updateThemePickerUI;
-    toggleBackgroundMusic: typeof toggleBackgroundMusic;
-    setBackgroundMusicVolume: typeof setBackgroundMusicVolume;
-    resetAllSettings: typeof resetAllSettings;
-    setTrashRetention: typeof setTrashRetention;
-    resetOnboarding: typeof resetOnboarding;
-  }
-}
-
-window.toggleHanjaMode = toggleHanjaMode;
-window.toggleVoice = toggleVoice;
-window.setAudioSpeed = setAudioSpeed;
-window.setTtsVolume = setTtsVolume;
-window.toggleAutoTheme = toggleAutoTheme;
-window.toggleDarkMode = toggleDarkMode;
-window.toggleAutoUpdate = toggleAutoUpdate;
-window.setAccentColor = setAccentColor;
-window.previewAccentColor = previewAccentColor;
-window.toggleFocusMode = toggleFocusMode;
-window.updateThemePickerUI = updateThemePickerUI;
-window.toggleBackgroundMusic = toggleBackgroundMusic;
-window.setBackgroundMusicVolume = setBackgroundMusicVolume;
-window.resetAllSettings = resetAllSettings;
-window.setTrashRetention = setTrashRetention;
-window.resetOnboarding = resetOnboarding;

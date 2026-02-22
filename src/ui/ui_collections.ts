@@ -322,7 +322,7 @@ export function updateCollectionUI() {
         html += `
         <div class="collection-item-card special">
             <div class="collection-word-count">${myCustomWordsCount} слов</div>
-            <div class="collection-info" onclick="window.setCollectionFilter('my-custom', event)" title="Показать мои слова">
+            <div class="collection-info" data-action="set-collection-filter" data-value="my-custom" title="Показать мои слова">
                 <div class="collection-icon" style="background: rgba(124, 58, 237, 0.1); color: var(--primary);">✍️</div>
                 <div class="collection-text">
                     <div class="collection-title" style="color: var(--primary);">Мои слова</div>
@@ -330,7 +330,7 @@ export function updateCollectionUI() {
                 </div>
             </div>
             <div class="collection-actions">
-                <button class="btn-collection-action" onclick="window.manageMyWords(event)" title="Выбрать несколько" style="background: var(--surface-1); color: var(--primary);">✅</button>
+                <button class="btn-collection-action" data-action="manage-my-words" title="Выбрать несколько" style="background: var(--surface-1); color: var(--primary);">✅</button>
             </div>
         </div>
         `;
@@ -357,7 +357,7 @@ export function updateCollectionUI() {
             return `
                 <div class="collection-item-card" draggable="true" data-list-id="${list.id}" style="animation: fadeInUpList 0.3s ease-out ${index * 0.05}s backwards">
                     <div class="collection-word-count">${collectionsState.listItems[list.id]?.size || 0} слов</div>
-                    <div class="collection-info" onclick="window.setCollectionFilter('${list.id}', event)" title="Открыть список">
+                    <div class="collection-info" data-action="set-collection-filter" data-value="${list.id}" title="Открыть список">
                         <div class="collection-icon">${escapeHtml(list.icon || "📁")}</div>
                         <div class="collection-text">
                             <div class="collection-title">${escapeHtml(list.title)}</div>
@@ -365,9 +365,9 @@ export function updateCollectionUI() {
                         </div>
                     </div>
                     <div class="collection-actions">
-                        <button class="btn-collection-action" onclick="window.openEditListModal('${list.id}', '${safeTitle}', '${safeIcon}')" title="Редактировать">✏️</button>
+                        <button class="btn-collection-action" data-action="edit-list" data-value="${list.id}" data-title="${safeTitle}" data-icon="${safeIcon}" title="Редактировать">✏️</button>
                         <button class="btn-collection-action" data-action="open-add-word-modal" data-value="${list.id}" title="Добавить слово">➕</button>
-                        <button class="btn-collection-action delete" onclick="window.deleteList('${list.id}', this)" title="Удалить">🗑️</button>
+                        <button class="btn-collection-action delete" data-action="delete-list" data-value="${list.id}" title="Удалить">🗑️</button>
                     </div>
                 </div>
                 `;
@@ -385,7 +385,7 @@ export function updateCollectionUI() {
             return `
                 <div class="collection-item-card" style="animation: fadeInUpList 0.3s ease-out ${index * 0.05}s backwards">
                     <div class="collection-word-count">${collectionsState.listItems[list.id]?.size || 0} слов</div>
-                    <div class="collection-info" onclick="window.setCollectionFilter('${list.id}', event)">
+                    <div class="collection-info" data-action="set-collection-filter" data-value="${list.id}">
                         <div class="collection-icon">${escapeHtml(list.icon || "📁")}</div>
                         <div class="collection-text">
                             <div class="collection-title">${escapeHtml(list.title)}</div>
@@ -428,14 +428,32 @@ export function updateCollectionUI() {
   const filterBtn = document.getElementById("collection-filter-btn");
   if (filterBtn) {
     if (collectionsState.currentCollectionFilter) {
+      const backBtnStyle = `
+        display: inline-flex; 
+        align-items: center; 
+        justify-content: center; 
+        width: 28px; 
+        height: 28px; 
+        margin-right: 8px; 
+        border-radius: 50%; 
+        background: var(--surface-2); 
+        color: var(--text-main);
+        font-size: 18px; 
+        line-height: 1; 
+        cursor: pointer; 
+        transition: all 0.2s;
+        box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+      `;
+      const backIcon = `<span class="filter-back-btn" style="${backBtnStyle}" title="Назад">‹</span>`;
+
       if (collectionsState.currentCollectionFilter === "uncategorized") {
-        filterBtn.innerHTML = `<span>📦 Без списка</span> <span style="opacity: 0.6;">✕</span>`;
+        filterBtn.innerHTML = `${backIcon}<span>📦 Без списка</span>`;
         filterBtn.onclick = (e) => {
           e.stopPropagation();
           setCollectionFilter(null);
         };
       } else if (collectionsState.currentCollectionFilter === "my-custom") {
-        filterBtn.innerHTML = `<span>✍️ Мои слова</span> <span style="opacity: 0.6;">✕</span>`;
+        filterBtn.innerHTML = `${backIcon}<span>✍️ Мои слова</span>`;
         filterBtn.onclick = (e) => {
           e.stopPropagation();
           setCollectionFilter(null);
@@ -448,18 +466,33 @@ export function updateCollectionUI() {
           list && state.currentUser && list.user_id === state.currentUser.id;
 
         if (isOwner && list) {
-          filterBtn.innerHTML = `<span onclick="window.editListTitleInline('${list.id}', this, event)" style="cursor: text; border-bottom: 1px dashed var(--text-tertiary); padding-bottom: 1px;" title="Нажмите для переименования">${escapeHtml(list.icon || "📁")} ${escapeHtml(list.title)}</span> <span onclick="window.clearCollectionFilter(event)" style="opacity: 0.6; padding: 4px 8px; cursor: pointer; margin-left: 5px;">✕</span>`;
+          filterBtn.innerHTML = `
+            <span data-action="clear-collection-filter" class="filter-back-btn" style="${backBtnStyle}" title="Назад">‹</span>
+            <span data-action="edit-list-title-inline" data-value="${list.id}" style="cursor: text; border-bottom: 1px dashed var(--text-tertiary); padding-bottom: 2px; font-weight: 600; display: inline-flex; align-items: center; gap: 6px;" title="Нажмите для переименования">
+                ${escapeHtml(list.icon || "📁")} ${escapeHtml(list.title)}
+            </span>`;
           filterBtn.onclick = null;
         } else {
-          filterBtn.innerHTML = `<span>${escapeHtml(list?.icon || "📁")} ${escapeHtml(list?.title || "Список")}</span> <span style="opacity: 0.6;">✕</span>`;
+          filterBtn.innerHTML = `${backIcon}<span>${escapeHtml(list?.icon || "📁")} ${escapeHtml(list?.title || "Список")}</span>`;
           filterBtn.onclick = (e) => {
             e.stopPropagation();
             setCollectionFilter(null);
           };
         }
       }
+
+      // Add hover/active effect logic for back button
+      const backBtns = filterBtn.querySelectorAll(".filter-back-btn");
+      backBtns.forEach((btn) => {
+        const el = btn as HTMLElement;
+        el.onmousedown = () => (el.style.transform = "scale(0.9)");
+        el.onmouseup = () => (el.style.transform = "scale(1)");
+        el.onmouseleave = () => (el.style.transform = "scale(1)");
+        el.onmouseenter = () => (el.style.background = "var(--surface-3)");
+        el.onmouseout = () => (el.style.background = "var(--surface-2)");
+      });
     } else {
-      filterBtn.innerHTML = `<span>Все слова</span> <span>›</span>`;
+      filterBtn.innerHTML = `<span>Все слова</span> <span style="opacity: 0.5; font-size: 0.9em; margin-left: 6px;">▼</span>`;
       filterBtn.onclick = () => openModal("collections-modal");
     }
   }
@@ -643,25 +676,3 @@ function handleDragEnd(e: Event) {
   });
   draggedItem = null;
 }
-
-declare global {
-  interface Window {
-    deleteList: typeof deleteList;
-    openEditListModal: typeof openEditListModal;
-    setCollectionFilter: typeof setCollectionFilter;
-    saveListChanges: typeof saveListChanges;
-    createList: typeof createList;
-    manageMyWords: typeof manageMyWords;
-    editListTitleInline: typeof editListTitleInline;
-    clearCollectionFilter: typeof clearCollectionFilter;
-  }
-}
-
-window.deleteList = deleteList;
-window.openEditListModal = openEditListModal;
-window.setCollectionFilter = setCollectionFilter;
-window.saveListChanges = saveListChanges;
-window.createList = createList;
-window.manageMyWords = manageMyWords;
-window.editListTitleInline = editListTitleInline;
-window.clearCollectionFilter = clearCollectionFilter;

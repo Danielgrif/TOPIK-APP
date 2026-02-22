@@ -49,6 +49,7 @@ declare global {
     ) => void;
     setBackgroundMusicVolume: (volume: string | number) => void;
     scheduleSaveState: () => void;
+    updateSearchIndex: () => void;
 
     // Navigation & Modals
     toggleFocusMode: () => void;

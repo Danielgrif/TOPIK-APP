@@ -76,7 +76,7 @@ function renderMistakesContent() {
         <div class="stat-value-primary">${totalMistakes}</div>
         <div class="stat-label-primary">Всего ошибок</div>
       </div>
-      <button class="btn btn-quiz" style="flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center;" onclick="window.startMistakeQuiz()">
+      <button class="btn btn-quiz" style="flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center;" data-action="start-mistake-quiz">
         <span style="font-size: 20px;">🩹</span>
         <span style="font-size: 12px; font-weight: bold;">Работа над ошибками</span>
       </button>
@@ -161,11 +161,3 @@ export function startMistakeQuiz() {
   // Open quiz modal
   openModal("quiz-modal");
 }
-
-declare global {
-  interface Window {
-    startMistakeQuiz: typeof startMistakeQuiz;
-  }
-}
-
-window.startMistakeQuiz = startMistakeQuiz;

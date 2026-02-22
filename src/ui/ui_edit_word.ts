@@ -160,15 +160,19 @@ export async function saveWordChanges() {
   const wordIndex = state.dataStore.findIndex(
     (w) => String(w.id) === String(id),
   );
+  let isUserWord = false;
   if (wordIndex > -1) {
+    const word = state.dataStore[wordIndex];
+    isUserWord = !!word.user_id;
     state.dataStore[wordIndex] = { ...state.dataStore[wordIndex], ...updates };
   }
 
+  const tableName = isUserWord
+    ? DB_TABLES.USER_VOCABULARY
+    : DB_TABLES.VOCABULARY;
+
   // Отправка в базу данных
-  const { error } = await client
-    .from(DB_TABLES.VOCABULARY)
-    .update(updates)
-    .eq("id", id);
+  const { error } = await client.from(tableName).update(updates).eq("id", id);
 
   if (error) {
     console.error("Update error:", error);
@@ -186,6 +190,8 @@ export async function saveWordChanges() {
 
     // Обновляем фильтры, чтобы новая тема появилась в списке
     import("./ui_filters.ts").then((m) => m.populateFilters());
+    // Обновляем поиск
+    if (window.updateSearchIndex) window.updateSearchIndex();
   }
 }
 
@@ -202,6 +208,7 @@ export async function deleteWord() {
     );
     if (wordIndex === -1) return;
     const wordBackup = { ...state.dataStore[wordIndex] };
+    const isUserWord = !!wordBackup.user_id;
 
     if (wordIndex > -1) {
       state.dataStore.splice(wordIndex, 1);
@@ -219,9 +226,13 @@ export async function deleteWord() {
     closeModal("edit-word-modal");
     if (grid) grid.scrollTop = savedScroll;
 
+    const tableName = isUserWord
+      ? DB_TABLES.USER_VOCABULARY
+      : DB_TABLES.VOCABULARY;
+
     // Soft delete
     const { error } = await client
-      .from(DB_TABLES.VOCABULARY)
+      .from(tableName)
       .update({ deleted_at: new Date().toISOString() })
       .eq("id", id);
     if (error) {
@@ -231,18 +242,8 @@ export async function deleteWord() {
       if (onUpdateCallback) onUpdateCallback();
     } else {
       showToast("🗑️ Слово перемещено в корзину");
+      // Обновляем поиск после удаления
+      if (window.updateSearchIndex) window.updateSearchIndex();
     }
   });
 }
-
-declare global {
-  interface Window {
-    openEditWordModal: typeof openEditWordModal;
-    saveWordChanges: typeof saveWordChanges;
-    deleteWord: typeof deleteWord;
-  }
-}
-
-window.openEditWordModal = openEditWordModal;
-window.saveWordChanges = saveWordChanges;
-window.deleteWord = deleteWord;

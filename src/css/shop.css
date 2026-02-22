@@ -3,11 +3,11 @@
   width: 95%;
   padding: 0;
   background-color: var(--surface-1);
-  border-radius: 16px;
+  border-radius: 24px;
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  max-height: 85vh;
+  height: 90vh;
   max-height: 85dvh;
 }
 
@@ -51,21 +51,28 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  background: var(--surface-2);
+  background: var(--surface-1);
 }
 
-.shop-header h2 {
+.shop-header-right {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.shop-header h3 {
   margin: 0;
   font-size: 22px;
-  color: var(--text-main);
+  font-weight: 800;
 }
 
 .shop-points {
   font-size: 16px;
-  font-weight: bold;
-  color: var(--primary);
-  background: var(--primary-light);
-  padding: 8px 16px;
+  font-weight: 800;
+  color: var(--gold);
+  background: rgba(245, 158, 11, 0.1);
+  border: 1px solid rgba(245, 158, 11, 0.2);
+  padding: 6px 14px;
   border-radius: 20px;
 }
 
@@ -103,74 +110,6 @@
   font-weight: bold;
 }
 
-.shop-items-container {
-  padding: 24px;
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-  gap: 20px;
-  flex: 1;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-}
-
-.shop-item-card {
-  background: var(--surface-2);
-  border-radius: 12px;
-  padding: 20px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  text-align: center;
-  border: 1px solid var(--border-color);
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
-}
-
-.shop-item-card:hover {
-  transform: translateY(-4px);
-  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.08);
-}
-
-.shop-item-card.disabled {
-  opacity: 0.6;
-  filter: grayscale(50%);
-}
-
-.shop-item-icon {
-  font-size: 48px;
-  margin-bottom: 12px;
-  line-height: 1;
-}
-
-.shop-item-name {
-  font-size: 16px;
-  font-weight: bold;
-  color: var(--text-main);
-  margin-bottom: 8px;
-}
-
-.shop-item-desc {
-  font-size: 13px;
-  color: var(--text-sub);
-  flex-grow: 1;
-  margin-bottom: 16px;
-}
-
-.shop-item-buy-btn {
-  width: 100%;
-  font-size: 15px;
-  font-weight: bold;
-}
-
-.shop-item-buy-btn.purchased {
-  background-color: var(--success);
-  border-color: var(--success);
-  color: var(--text-inverse);
-  cursor: default;
-}
-.shop-item-buy-btn.purchased:hover {
-  background-color: var(--success);
-  border-color: var(--success);
-}
 
 .reward-day .day-number {
   font-size: 12px;

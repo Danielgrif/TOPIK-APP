@@ -19,6 +19,7 @@ import {
   toggleViewMode,
   showError,
   saveAndRender,
+  updatePingIndicator,
 } from "./ui/ui.ts";
 import {
   showUpdateNotification,
@@ -85,6 +86,7 @@ import {
   openLoginModal,
   cleanAuthUrl,
 } from "./core/auth.ts";
+import { AuthService } from "./core/auth_service.ts";
 import {
   debounce,
   showToast,
@@ -110,12 +112,22 @@ import {
 import { canClaimDailyReward, claimDailyReward } from "./ui/ui_shop.ts";
 import { setupTrash } from "./ui/ui_trash.ts";
 import { checkPronunciation } from "./core/speech.ts";
-import { SW_MESSAGES } from "./core/constants.ts";
+import { SW_MESSAGES, DB_TABLES } from "./core/constants.ts";
 import { Quote, User } from "./types/index.ts";
 import type { Session } from "@supabase/supabase-js";
 
 let currentQuote: Quote | null = null;
 let welcomeAudioTimeout: number | null = null;
+
+function ensureErrorOverlay() {
+  if (!document.getElementById("error-overlay")) {
+    const div = document.createElement("div");
+    div.innerHTML = `<div id="error-overlay" style="position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.9);z-index:99999;display:flex;justify-content:center;align-items:center;flex-direction:column;color:white;text-align:center;padding:20px;"><div style="font-size:48px;margin-bottom:20px;">⚠️</div><div id="error-msg" style="font-size:18px;margin-bottom:20px;">Критическая ошибка</div><button onclick="location.reload()" style="padding:10px 20px;border-radius:8px;border:none;background:white;color:black;font-weight:bold;cursor:pointer;">Перезагрузить</button></div>`;
+    if (document.body) {
+      document.body.appendChild(div.firstElementChild as Node);
+    }
+  }
+}
 
 function performWelcomeClose() {
   cancelSpeech(); // FIX: Отменяем любые отложенные или текущие звуки
@@ -140,6 +152,7 @@ function performWelcomeClose() {
 
 // Используем Vite-совместимый импорт воркера
 let searchWorker: Worker;
+let currentSearchRequestId = 0;
 try {
   searchWorker = new Worker(
     new URL("./workers/searchWorker.ts", import.meta.url),
@@ -205,10 +218,91 @@ function updateBottomNav(target?: string) {
   });
 }
 
+async function measurePing() {
+  if (!navigator.onLine) {
+    if (state.networkPing !== null) {
+      state.networkPing = null;
+      updatePingIndicator();
+    }
+    return;
+  }
+  try {
+    const start = performance.now();
+    // @ts-ignore - supabaseUrl is protected but we need it for ping check
+    const baseUrl = client.supabaseUrl;
+    if (!baseUrl) throw new Error("No URL");
+    const apiUrl = `${baseUrl}/rest/v1/`;
+    await fetch(apiUrl, { method: "HEAD", mode: "cors", cache: "no-store" });
+    const duration = Math.round(performance.now() - start);
+    state.networkPing = duration;
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  } catch (e) {
+    state.networkPing = null; // Set to null on error
+  }
+  updatePingIndicator();
+}
+
+function injectDynamicStyles() {
+  const style = document.createElement("style");
+  style.textContent = `
+    .ping-indicator {
+      display: none; align-items: center; gap: 6px; font-size: 12px; font-weight: 600;
+      padding: 4px 8px; border-radius: 20px; background-color: var(--surface-2);
+      transition: color 0.3s ease, background-color 0.3s ease;
+    }
+    .ping-indicator::before { content: ''; display: block; width: 8px; height: 8px; border-radius: 50%; background-color: currentColor; }
+    .ping-indicator.good { color: var(--success); }
+    .ping-indicator.medium { color: var(--warning); }
+    .ping-indicator.bad { color: var(--danger); }
+
+    /* Bottom Nav Styles */
+    .nav-btn {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        background: none;
+        border: none;
+        padding: 6px 0;
+        cursor: pointer;
+        color: var(--text-sub, #888);
+        transition: all 0.2s ease;
+        -webkit-tap-highlight-color: transparent;
+    }
+    .nav-btn .nav-icon {
+        font-size: 24px;
+        margin-bottom: 2px;
+        transition: transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    }
+    .nav-btn .nav-label {
+        font-size: 10px;
+        font-weight: 500;
+    }
+    .nav-btn.active {
+        color: var(--primary, #6c5ce7);
+    }
+    .nav-btn.active .nav-icon {
+        transform: translateY(-2px) scale(1.1);
+    }
+  `;
+  document.head.appendChild(style);
+}
+
 function setupGlobalListeners() {
   console.log("🛠️ Global listeners setup started");
   document.body.addEventListener("click", (e) => {
     const target = e.target as HTMLElement;
+
+    // [DEBUG] Логирование клика для отладки
+    console.groupCollapsed(
+      `🖱️ [DEBUG] Click: <${target.tagName.toLowerCase()}> .${target.className}`,
+    );
+    console.log("Target:", target);
+    console.log("Path:", e.composedPath());
+    console.log("Onboarding Active:", document.getElementById("onboarding-overlay")?.classList.contains("active"));
+    console.log("Modal Active:", document.querySelector(".modal.active")?.id);
+    console.groupEnd();
 
     const modalTrigger = target.closest("[data-modal-target]");
     if (modalTrigger) {
@@ -249,7 +343,6 @@ function setupGlobalListeners() {
 
       const action = actionTrigger.getAttribute("data-action");
       const value = actionTrigger.getAttribute("data-value");
-      console.log(`⚡ Action detected: ${action}`);
 
       switch (action) {
         case "nav-home":
@@ -257,6 +350,10 @@ function setupGlobalListeners() {
             closeModal(m.id);
           });
           updateBottomNav("nav-home");
+          // Сбрасываем фильтр коллекции при переходе на главную
+          import("./ui/ui_collections.ts").then((m) =>
+            m.setCollectionFilter(null),
+          );
           break;
         case "toggle-focus":
           toggleFocusMode();
@@ -480,6 +577,131 @@ function setupGlobalListeners() {
               m.setTrashRetention(value),
             );
           break;
+        case "toggle-session":
+          toggleSessionTimer();
+          break;
+        case "reset-search":
+          resetSearchHandler();
+          break;
+        case "switch-shop-tab":
+          if (value)
+            import("./ui/ui_shop.ts").then((m) => (m as any).switchShopTab(value));
+          break;
+        case "delete-list":
+          if (value)
+            import("./ui/ui_collections.ts").then((m) =>
+              m.deleteList(value, actionTrigger as HTMLElement),
+            );
+          break;
+        case "edit-list":
+          {
+            const title = actionTrigger.getAttribute("data-title") || "";
+            const icon = actionTrigger.getAttribute("data-icon") || "";
+            if (value)
+              import("./ui/ui_collections.ts").then((m) =>
+                m.openEditListModal(value, title, icon),
+              );
+          }
+          break;
+        case "set-collection-filter":
+          import("./ui/ui_collections.ts").then((m) =>
+            m.setCollectionFilter(value, e),
+          );
+          break;
+        case "edit-word":
+          if (value)
+            import("./ui/ui_edit_word.ts").then((m) =>
+              m.openEditWordModal(value),
+            );
+          break;
+        case "restore-word":
+          if (value)
+            import("./ui/ui_trash.ts").then((m) => m.restoreWord(value));
+          break;
+        case "delete-word-permanent":
+          if (value)
+            import("./ui/ui_trash.ts").then((m) =>
+              m.permanentlyDeleteWord(value, actionTrigger as HTMLElement),
+            );
+          break;
+        case "bulk-add-to-list-item":
+          if (value)
+            import("./ui/ui_bulk.ts").then((m) =>
+              (m as any).handleBulkAddToList(value),
+            );
+          break;
+        case "create-new-list-bulk":
+          import("./ui/ui_bulk.ts").then((m) =>
+            (m as any).createNewListForBulk(),
+          );
+          break;
+        case "toggle-word-in-list":
+          {
+            const listId = actionTrigger.getAttribute("data-list-id");
+            const wordId = actionTrigger.getAttribute("data-word-id");
+            if (listId && wordId) {
+              import("./ui/ui_card.ts").then((m) =>
+                (m as any).toggleWordInList(
+                  listId,
+                  Number(wordId),
+                  actionTrigger as HTMLElement,
+                ),
+              );
+            }
+          }
+          break;
+        case "start-mistake-quiz":
+          import("./ui/ui_mistakes.ts").then((m) => m.startMistakeQuiz());
+          break;
+        case "quiz-summary-continue":
+          import("./ui/quiz.ts").then((m) =>
+            (m as any).handleQuizSummaryContinue(),
+          );
+          break;
+        case "claim-reward":
+          import("./ui/ui_shop.ts").then((m) =>
+            m.claimDailyReward(actionTrigger as HTMLElement),
+          );
+          break;
+        case "buy-item":
+          if (value)
+            import("./ui/ui_shop.ts").then((m) =>
+              m.buyItem(value, actionTrigger as HTMLButtonElement),
+            );
+          break;
+        case "apply-shop-theme":
+          if (value)
+            import("./ui/ui_shop.ts").then((m) => (m as any).applyShopTheme(value));
+          break;
+        case "manage-my-words":
+          import("./ui/ui_collections.ts").then((m) => m.manageMyWords(e));
+          break;
+        case "clear-collection-filter":
+          import("./ui/ui_collections.ts").then((m) =>
+            m.clearCollectionFilter(e),
+          );
+          break;
+        case "edit-list-title-inline":
+          if (value)
+            import("./ui/ui_collections.ts").then((m) =>
+              m.editListTitleInline(value, actionTrigger as HTMLElement, e),
+            );
+          break;
+        case "empty-trash":
+          import("./ui/ui_trash.ts").then((m) => m.emptyTrash());
+          break;
+        case "show-request-error": {
+          const errorMsg = actionTrigger.getAttribute("data-error") || "";
+          import("./ui/ui_custom_words.ts").then((m) =>
+            m.showRequestError(errorMsg),
+          );
+          break;
+        }
+        case "speak": {
+          const url = actionTrigger.getAttribute("data-url");
+          if (url) speak(null, url);
+          break;
+        }
       }
     }
   });
@@ -606,6 +828,14 @@ function setupGlobalListeners() {
       }
     }
   });
+
+  // File Import Listener
+  const importFile = document.getElementById("import-file");
+  if (importFile) {
+    importFile.addEventListener("change", (e) => {
+      import("./ui/ui_data.ts").then((m) => m.importProgress(e));
+    });
+  }
 }
 
 function setupLevelUpObserver() {
@@ -698,6 +928,8 @@ function showWelcomeScreen(user?: User) {
     welcomeOverlay.classList.add("active");
     welcomeOverlay.style.display = "flex"; // <--- Показываем при открытии
     // FIX: Мгновенное появление (без transition), чтобы гарантированно скрыть интерфейс под низом
+    welcomeOverlay.style.zIndex = "20000";
+    welcomeOverlay.style.visibility = "visible";
     welcomeOverlay.style.transition = "none";
     welcomeOverlay.style.opacity = "1";
 
@@ -787,6 +1019,8 @@ function setupNetworkListeners() {
   window.addEventListener("online", () => {
     updateStatus();
     showToast("🌐 Соединение восстановлено");
+    // Принудительно восстанавливаем Realtime соединение при появлении сети
+    client.realtime.connect();
   });
   window.addEventListener("offline", () => {
     updateStatus();
@@ -817,60 +1051,139 @@ function setupNetworkListeners() {
 }
 
 function setupRealtimeUpdates() {
-  // Слушаем новые слова, добавленные через Worker (INSERT в таблицу vocabulary)
-  client
-    .channel("public:vocabulary")
-    .on(
-      "postgres_changes",
-      { event: "INSERT", schema: "public", table: "vocabulary" },
-      (payload: { new: any }) => {
-        const newWord = payload.new;
-        // Проверяем, нет ли уже этого слова (на всякий случай)
-        if (newWord && !state.dataStore.find((w) => w.id === newWord.id)) {
-          console.log("🔥 Realtime: New word added", newWord.word_kr);
-          state.dataStore.unshift(newWord); // Добавляем в начало списка
-          showToast(`✨ Готово: ${newWord.word_kr}`); // Уведомляем пользователя
+  const newWordsBuffer: any[] = [];
 
-          const grid = document.getElementById("vocabulary-grid");
-          const savedScroll = grid ? grid.scrollTop : 0;
-          render(); // Обновляем экран
-          if (grid) grid.scrollTop = savedScroll;
+  const processBuffer = debounce(() => {
+    if (newWordsBuffer.length === 0) return;
+
+    // Фильтруем дубликаты внутри батча и относительно текущего стора
+    const currentIds = new Set(state.dataStore.map((w) => w.id));
+    const uniqueWords: any[] = [];
+    const seenInBatch = new Set();
+
+    for (const w of newWordsBuffer) {
+      if (!currentIds.has(w.id) && !seenInBatch.has(w.id)) {
+        uniqueWords.push(w);
+        seenInBatch.add(w.id);
+      }
+    }
+    newWordsBuffer.length = 0; // Очищаем буфер
+
+    if (uniqueWords.length === 0) return;
+
+    console.log(`🔥 Realtime: Adding ${uniqueWords.length} new words`);
+    state.dataStore.unshift(...uniqueWords);
+
+    if (uniqueWords.length === 1) {
+      showToast(`✨ Готово: ${uniqueWords[0].word_kr}`);
+    } else {
+      showToast(`✨ Добавлено слов: ${uniqueWords.length}`);
+    }
+
+    const grid = document.getElementById("vocabulary-grid");
+    const savedScroll = grid ? grid.scrollTop : 0;
+    render();
+    if (searchWorker) {
+      searchWorker.postMessage({ type: "SET_DATA", data: state.dataStore });
+    }
+    if (grid) grid.scrollTop = savedScroll;
+  }, 1000);
+
+  const handleNewWord = (payload: { new: any }) => {
+    const newWord = payload.new;
+    if (newWord) {
+      newWordsBuffer.push(newWord);
+      processBuffer();
+    }
+  };
+
+  // Слушаем новые слова, добавленные через Worker (INSERT в таблицу vocabulary и user_vocabulary)
+  const subscribeVocab = () => {
+    const channel = client.channel("public:vocabulary");
+    channel
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: DB_TABLES.VOCABULARY },
+        handleNewWord,
+      )
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: DB_TABLES.USER_VOCABULARY },
+        handleNewWord,
+      )
+      .subscribe((status, err) => {
+        if (status === "SUBSCRIBED") {
+          console.log("✅ Realtime: Подписка на 'public:vocabulary' активна.");
+        } else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
+          console.error(
+            `❌ Realtime: Ошибка канала 'public:vocabulary' (${status})`,
+            err,
+          );
+          setTimeout(async () => {
+            console.log("🔄 Переподключение 'public:vocabulary'...");
+            await client.removeChannel(channel);
+            subscribeVocab();
+          }, 5000);
         }
-      },
-    )
-    .subscribe();
+      });
+  };
 
   // Слушаем добавление слов в списки (таблица list_items)
-  client
-    .channel("public:list_items")
-    .on(
-      "postgres_changes",
-      { event: "INSERT", schema: "public", table: "list_items" },
-      (payload: { new: any }) => {
-        const newItem = payload.new;
-        if (newItem && newItem.list_id && newItem.word_id) {
-          import("./core/collections_data.ts").then(({ collectionsState }) => {
-            if (!collectionsState.listItems[newItem.list_id]) {
-              collectionsState.listItems[newItem.list_id] = new Set();
-            }
-            collectionsState.listItems[newItem.list_id].add(newItem.word_id);
+  const subscribeListItems = () => {
+    const channel = client.channel("public:list_items");
+    channel
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "list_items" },
+        (payload: { new: any }) => {
+          const newItem = payload.new;
+          if (newItem && newItem.list_id && newItem.word_id) {
+            import("./core/collections_data.ts").then(
+              ({ collectionsState }) => {
+                if (!collectionsState.listItems[newItem.list_id]) {
+                  collectionsState.listItems[newItem.list_id] = new Set();
+                }
+                collectionsState.listItems[newItem.list_id].add(
+                  newItem.word_id,
+                );
 
-            // Если мы сейчас смотрим этот список — обновляем экран
-            if (collectionsState.currentCollectionFilter === newItem.list_id) {
-              const grid = document.getElementById("vocabulary-grid");
-              const savedScroll = grid ? grid.scrollTop : 0;
-              render();
-              if (grid) grid.scrollTop = savedScroll;
-            }
-            // Обновляем счетчики в меню коллекций
-            import("./ui/ui_collections.ts").then((m) =>
-              m.updateCollectionUI(),
+                // Если мы сейчас смотрим этот список — обновляем экран
+                if (
+                  collectionsState.currentCollectionFilter === newItem.list_id
+                ) {
+                  const grid = document.getElementById("vocabulary-grid");
+                  const savedScroll = grid ? grid.scrollTop : 0;
+                  render();
+                  if (grid) grid.scrollTop = savedScroll;
+                }
+                // Обновляем счетчики в меню коллекций
+                import("./ui/ui_collections.ts").then((m) =>
+                  m.updateCollectionUI(),
+                );
+              },
             );
-          });
+          }
+        },
+      )
+      .subscribe((status, err) => {
+        if (status === "SUBSCRIBED") {
+          console.log("✅ Realtime: Подписка на 'public:list_items' активна.");
+        } else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
+          console.error(
+            `❌ Realtime: Ошибка канала 'public:list_items' (${status})`,
+            err,
+          );
+          setTimeout(async () => {
+            console.log("🔄 Переподключение 'public:list_items'...");
+            await client.removeChannel(channel);
+            subscribeListItems();
+          }, 5000);
         }
-      },
-    )
-    .subscribe();
+      });
+  };
+
+  subscribeVocab();
+  subscribeListItems();
 }
 
 async function init() {
@@ -884,10 +1197,61 @@ async function init() {
     });
   }
 
-  console.log("🏁 Init sequence started");
+  if (!document.body) {
+    throw new Error("Document body not ready");
+  }
 
   // 1. Вставляем HTML-компоненты (Header, Toolbar, Modals) перед инициализацией UI
   injectComponents();
+
+  // 1.1 Инъекция динамических стилей и элементов
+  injectDynamicStyles();
+  const headerActions = document.querySelector(".header-actions");
+  if (headerActions && !document.getElementById("ping-indicator")) {
+    const pingEl = document.createElement("div");
+    pingEl.id = "ping-indicator";
+    pingEl.className = "ping-indicator";
+    headerActions.prepend(pingEl); // Добавляем в начало кнопок хедера
+  }
+
+  // FIX: Ensure Bottom Nav is visible and active
+  const nav = document.getElementById("bottom-nav");
+  if (nav) {
+    // Перемещаем в body, чтобы избежать проблем с наложением (stacking context)
+    if (nav.parentElement !== document.body) {
+      document.body.appendChild(nav);
+    }
+
+    nav.style.setProperty("display", "flex", "important");
+
+    // Принудительно обновляем содержимое панели согласно вашему списку
+    nav.innerHTML = `
+        <button class="nav-btn active" data-action="nav-home">
+            <span class="nav-icon">🏠</span>
+            <span class="nav-label">Главная</span>
+        </button>
+        <button class="nav-btn" data-action="open-collections-filter">
+            <span class="nav-icon">📂</span>
+            <span class="nav-label">Списки</span>
+        </button>
+        <button class="nav-btn" data-modal-target="quiz-modal">
+            <span class="nav-icon">🎯</span>
+            <span class="nav-label">Тренировка</span>
+        </button>
+        <button class="nav-btn" data-action="open-review">
+            <span class="nav-icon">🧠</span>
+            <span class="nav-label">Повторение</span>
+        </button>
+        <button class="nav-btn" data-modal-target="stats-modal">
+            <span class="nav-icon">📊</span>
+            <span class="nav-label">Прогресс</span>
+        </button>
+    `;
+
+    updateBottomNav("nav-home");
+  } else {
+    console.error("❌ Bottom Nav NOT found in DOM after injection");
+  }
 
   setupGlobalListeners();
   setupNetworkListeners();
@@ -895,9 +1259,12 @@ async function init() {
 
   renderSkeletons();
 
-  console.log("⏳ Fetching vocabulary...");
-  await fetchVocabulary();
-  console.log("✅ Vocabulary fetched");
+  try {
+    await fetchVocabulary();
+  } catch (e) {
+    console.error("Vocabulary fetch failed:", e);
+    throw e;
+  }
 
   // FIX: Фильтруем удаленные слова, чтобы они не появлялись в списке после перезагрузки
   if (state.dataStore) {
@@ -913,40 +1280,18 @@ async function init() {
 
   if (searchWorker)
     searchWorker.onmessage = (e) => {
-      state.searchResults = e.data;
+      const { results, requestId } = e.data;
 
-      // Enhanced Search: Also filter by Topic and Category locally
-      const searchInput = document.getElementById(
-        "searchInput",
-      ) as HTMLInputElement;
-      if (searchInput) {
-        const query = searchInput.value.trim().toLowerCase();
-        if (query.length > 1) {
-          const topicCatMatches = state.dataStore.filter(
-            (w) =>
-              (w.topic && w.topic.toLowerCase().includes(query)) ||
-              (w.category && w.category.toLowerCase().includes(query)),
-          );
-
-          // Merge results (deduplicate by ID)
-          const existingIds = new Set(
-            state.searchResults?.map((r) => r.id) || [],
-          );
-          topicCatMatches.forEach((w) => {
-            if (!existingIds.has(w.id)) {
-              state.searchResults?.push(w);
-              existingIds.add(w.id);
-            }
-          });
-        }
-      }
+      // Игнорируем результаты устаревших запросов
+      if (requestId !== currentSearchRequestId) return;
+      state.searchResults = results;
 
       render();
     };
 
   // FIX: Настраиваем слушатель только для БУДУЩИХ событий (вход/выход).
   // INITIAL_SESSION игнорируем, так как обработаем его явно ниже, чтобы не было "скачка" интерфейса.
-  client.auth.onAuthStateChange(
+  AuthService.onAuthStateChange(
     async (event: string, session: Session | null) => {
       if (event === "INITIAL_SESSION") return;
 
@@ -982,7 +1327,10 @@ async function init() {
     client.auth.getSession(),
     5000, // 5 секунд таймаут
     new Error("Session check timed out"),
-  ).catch(() => ({ data: { session: null } }))) as {
+  ).catch((e) => {
+    console.warn("Session check failed/timed out:", e);
+    return { data: { session: null } };
+  })) as {
     data: { session: Session | null };
   };
 
@@ -1028,6 +1376,10 @@ async function init() {
   setupTrash();
   setupLevelUpObserver();
 
+  // Запускаем периодическое измерение пинга
+  setInterval(measurePing, 15000);
+  measurePing(); // Первый замер сразу
+
   const verEl = document.getElementById("app-version");
   if (verEl)
     verEl.innerHTML = `TOPIK Master ${APP_VERSION} <span style="margin: 0 5px; opacity: 0.5;">|</span> ${AI_MODEL_NAME}`;
@@ -1042,7 +1394,12 @@ async function init() {
         const target = (e as Event).target as HTMLInputElement;
         if (target) {
           const val = target.value.trim().toLowerCase();
-          searchWorker.postMessage({ type: "SEARCH", query: val });
+          currentSearchRequestId++; // Увеличиваем ID при каждом новом вводе
+          searchWorker.postMessage({
+            type: "SEARCH",
+            query: val,
+            requestId: currentSearchRequestId,
+          });
         }
       }, 200) as EventListener,
     );
@@ -1129,21 +1486,28 @@ async function init() {
     loader.style.opacity = "0";
     setTimeout(() => loader.remove(), 500);
   }
+  console.log("App initialized successfully");
 }
+
+// init() defined. Setting up listeners...
 
 window.addEventListener("beforeunload", () => {
   immediateSaveState();
 });
 
-init().catch((e) => {
+const handleInitError = (e: any) => {
   // Если произошла ошибка, тоже убираем спиннер, чтобы показать сообщение
   const loader = document.getElementById("loading-overlay");
   if (loader) loader.remove();
 
-  console.error("Init Error", e);
+  console.error("Init Error:", e);
+  ensureErrorOverlay();
 
   // Автоматическое восстановление при повреждении JSON в localStorage
-  if (e instanceof SyntaxError && e.message.includes("JSON")) {
+  if (
+    e instanceof SyntaxError &&
+    (e.message.includes("JSON") || e.message.includes("token"))
+  ) {
     console.warn(
       "⚠️ Обнаружен поврежденный кэш. Очистка localStorage и перезагрузка...",
     );
@@ -1152,14 +1516,38 @@ init().catch((e) => {
     return;
   }
 
-  // Убираем alert, чтобы не блокировать интерфейс при некритичных ошибках
-  // alert("Critical Init Error: " + e.message);
   let msg = "Ошибка инициализации: " + e.message;
   if (e.name === "AbortError" || e.message.includes("AbortError")) {
     msg = "Время ожидания истекло. Проверьте интернет.";
   }
   showError(msg);
-});
+};
+
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", () => {
+    try {
+      init().catch(handleInitError);
+    } catch (e) {
+      console.error("Synchronous error in init call:", e);
+    }
+  });
+} else {
+  if (document.body) {
+    try {
+      init().catch(handleInitError);
+    } catch (e) {
+      console.error("Synchronous error in init call:", e);
+    }
+  } else {
+    document.addEventListener("DOMContentLoaded", () => {
+      try {
+        init().catch(handleInitError);
+      } catch (e) {
+        console.error("Synchronous error in init call:", e);
+      }
+    });
+  }
+}
 
 Object.assign(window, {
   openModal,
@@ -1223,7 +1611,6 @@ Object.assign(window, {
     canvas?: HTMLCanvasElement,
   ) => checkPronunciation(word, btn, callback, canvas),
   resetSearchHandler,
-  runTests: () => import("./tests.ts").then((m) => m.runTests()),
   forceUpdateSW: async () => {
     if ("serviceWorker" in navigator) {
       const regs = await navigator.serviceWorker.getRegistrations();
@@ -1260,4 +1647,9 @@ Object.assign(window, {
     (window as any).permanentlyDeleteWord(id, btn),
   toggleTrashSelection: (id: number, checked: boolean) =>
     (window as any).toggleTrashSelection(id, checked),
+  updateSearchIndex: () => {
+    if (searchWorker) {
+      searchWorker.postMessage({ type: "SET_DATA", data: state.dataStore });
+    }
+  },
 });

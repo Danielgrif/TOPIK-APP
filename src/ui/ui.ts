@@ -90,6 +90,15 @@ export function shuffleWords() {
 }
 
 export function showError(m: string) {
+  // Fallback if overlay doesn't exist (e.g. injectComponents failed)
+  if (!document.getElementById("error-overlay")) {
+    const div = document.createElement("div");
+    div.innerHTML = `<div id="error-overlay" style="position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.9);z-index:99999;display:none;justify-content:center;align-items:center;flex-direction:column;color:white;text-align:center;padding:20px;"><div style="font-size:48px;margin-bottom:20px;">⚠️</div><div id="error-msg" style="font-size:18px;margin-bottom:20px;"></div><button onclick="location.reload()" style="padding:10px 20px;border-radius:8px;border:none;background:white;color:black;font-weight:bold;cursor:pointer;">Перезагрузить</button></div>`;
+    if (document.body) {
+      document.body.appendChild(div.firstElementChild as Node);
+    }
+  }
+
   const msg = document.getElementById("error-msg");
   if (msg) msg.innerText = m;
   const overlay = document.getElementById("error-overlay");
@@ -214,4 +223,32 @@ export function sortByWeakWords() {
   });
   state.dataStore = sortedCopy;
   render();
+}
+
+export function updatePingIndicator() {
+  const indicator = document.getElementById("ping-indicator");
+  if (!indicator) return;
+
+  const ping = state.networkPing;
+
+  if (ping === null) {
+    indicator.style.display = "none";
+    return;
+  }
+
+  indicator.style.display = "flex";
+  indicator.textContent = `${ping}ms`;
+
+  let statusClass = "good";
+  if (ping > 400) {
+    statusClass = "bad";
+  } else if (ping > 200) {
+    statusClass = "medium";
+  }
+
+  // Check if class needs updating to avoid unnecessary DOM manipulation
+  if (!indicator.classList.contains(statusClass)) {
+    indicator.classList.remove("good", "medium", "bad");
+    indicator.classList.add(statusClass);
+  }
 }

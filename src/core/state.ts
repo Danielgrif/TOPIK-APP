@@ -82,10 +82,20 @@ export interface AppState {
   sessionInterval: number | null;
   sessionWordsReviewed: number;
   currentUser: User | null;
+  networkPing: number | null;
   settingsUpdatedAt: number;
 }
 
 export const CURRENT_DB_VERSION = 9;
+
+const safeGetItem = (key: string): string | null => {
+  try {
+    return localStorage.getItem(key);
+  } catch (e) {
+    console.warn(`localStorage access failed for key "${key}":`, e);
+    return null;
+  }
+};
 
 export const state: AppState = {
   dataStore: [],
@@ -102,6 +112,9 @@ export const state: AppState = {
     achievements: [],
     survivalHealth: 0,
     lastFreezeDate: null,
+    timeFreeze: 0,
+    skipQuestion: 0,
+    fiftyFifty: 0,
   },
   learned: new Set(),
   mistakes: new Set(),
@@ -126,28 +139,27 @@ export const state: AppState = {
   currentTopic: ["all"],
   currentCategory: ["all"],
   currentType: "word",
-  hanjaMode: localStorage.getItem(LS_KEYS.HANJA_MODE) === "true",
-  currentVoice: localStorage.getItem(LS_KEYS.VOICE_PREF) || "female",
+  hanjaMode: safeGetItem(LS_KEYS.HANJA_MODE) === "true",
+  currentVoice: safeGetItem(LS_KEYS.VOICE_PREF) || "female",
   audioSpeed:
-    localStorage.getItem(LS_KEYS.AUDIO_SPEED) !== null
-      ? Number(localStorage.getItem(LS_KEYS.AUDIO_SPEED))
+    safeGetItem(LS_KEYS.AUDIO_SPEED) !== null
+      ? Number(safeGetItem(LS_KEYS.AUDIO_SPEED))
       : 0.9,
-  darkMode: localStorage.getItem(LS_KEYS.DARK_MODE) === "true",
+  darkMode: safeGetItem(LS_KEYS.DARK_MODE) === "true",
   focusMode: false, // Отключаем сохранение состояния при перезагрузке
-  zenMode: localStorage.getItem(LS_KEYS.ZEN_MODE) === "true",
-  viewMode: localStorage.getItem(LS_KEYS.VIEW_MODE) || "grid",
-  themeColor: localStorage.getItem(LS_KEYS.THEME_COLOR) || "purple",
-  autoUpdate: localStorage.getItem(LS_KEYS.AUTO_UPDATE) !== "false",
-  autoTheme: localStorage.getItem(LS_KEYS.AUTO_THEME) === "true",
-  backgroundMusicEnabled:
-    localStorage.getItem(LS_KEYS.MUSIC_ENABLED) === "true",
+  zenMode: safeGetItem(LS_KEYS.ZEN_MODE) === "true",
+  viewMode: safeGetItem(LS_KEYS.VIEW_MODE) || "grid",
+  themeColor: safeGetItem(LS_KEYS.THEME_COLOR) || "purple",
+  autoUpdate: safeGetItem(LS_KEYS.AUTO_UPDATE) !== "false",
+  autoTheme: safeGetItem(LS_KEYS.AUTO_THEME) === "true",
+  backgroundMusicEnabled: safeGetItem(LS_KEYS.MUSIC_ENABLED) === "true",
   backgroundMusicVolume:
-    localStorage.getItem(LS_KEYS.MUSIC_VOLUME) !== null
-      ? Number(localStorage.getItem(LS_KEYS.MUSIC_VOLUME))
+    safeGetItem(LS_KEYS.MUSIC_VOLUME) !== null
+      ? Number(safeGetItem(LS_KEYS.MUSIC_VOLUME))
       : 0.3,
   ttsVolume:
-    localStorage.getItem(LS_KEYS.TTS_VOLUME) !== null
-      ? Number(localStorage.getItem(LS_KEYS.TTS_VOLUME))
+    safeGetItem(LS_KEYS.TTS_VOLUME) !== null
+      ? Number(safeGetItem(LS_KEYS.TTS_VOLUME))
       : 1.0,
 
   MUSIC_TRACKS: [
@@ -167,9 +179,9 @@ export const state: AppState = {
       filename: "Future Bass Pop (Instrumental).mp3",
     },
   ],
-  quizDifficulty: localStorage.getItem(LS_KEYS.QUIZ_DIFFICULTY) || "all",
-  quizTopic: localStorage.getItem(LS_KEYS.QUIZ_TOPIC) || "all",
-  quizCategory: localStorage.getItem(LS_KEYS.QUIZ_CATEGORY) || "all",
+  quizDifficulty: safeGetItem(LS_KEYS.QUIZ_DIFFICULTY) || "all",
+  quizTopic: safeGetItem(LS_KEYS.QUIZ_TOPIC) || "all",
+  quizCategory: safeGetItem(LS_KEYS.QUIZ_CATEGORY) || "all",
 
   isSyncing: false,
 
@@ -178,24 +190,18 @@ export const state: AppState = {
   sessionInterval: null,
   sessionWordsReviewed: 0,
   currentUser: null,
+  networkPing: null,
   settingsUpdatedAt: 0,
 };
 
 try {
   const runMigrations = () => {
     try {
-      const storedVersion = Number(
-        localStorage.getItem(LS_KEYS.DB_VERSION) || "0",
-      );
+      const storedVersion = Number(safeGetItem(LS_KEYS.DB_VERSION) || "0");
       if (storedVersion >= CURRENT_DB_VERSION) return;
 
       // 🛡️ Автоматическое создание резервной копии перед миграцией
-      console.log("🛡️ Creating safety backup before migration...");
       createLocalBackup();
-
-      console.log(
-        `🔄 Migrating data from v${storedVersion} to v${CURRENT_DB_VERSION}...`,
-      );
 
       // Пример миграции: перенос данных из v4 в v5 (если бы мы обновлялись с v4)
       if (storedVersion < 5) {
@@ -213,8 +219,8 @@ try {
         keys.forEach((baseKey) => {
           const oldKey = `${baseKey}_v4`;
           const newKey = `${baseKey}_v5`;
-          const val = localStorage.getItem(oldKey);
-          if (val && !localStorage.getItem(newKey)) {
+          const val = safeGetItem(oldKey);
+          if (val && !safeGetItem(newKey)) {
             localStorage.setItem(newKey, val);
           }
         });
@@ -222,7 +228,7 @@ try {
 
       if (storedVersion < 6) {
         const key = "user_stats_v5";
-        const raw = localStorage.getItem(key);
+        const raw = safeGetItem(key);
         if (raw) {
           try {
             const stats = JSON.parse(raw);
@@ -237,9 +243,6 @@ try {
             if (stats.survivalHealth === undefined) stats.survivalHealth = 0;
 
             localStorage.setItem(key, JSON.stringify(stats));
-            console.log(
-              "✅ Migration v6 applied: user_stats structure updated",
-            );
           } catch (e) {
             console.error("Migration v6 failed:", e);
           }
@@ -248,7 +251,7 @@ try {
 
       if (storedVersion < 7) {
         const key = "sessions_v5";
-        const raw = localStorage.getItem(key);
+        const raw = safeGetItem(key);
         if (raw) {
           try {
             const sessions = JSON.parse(raw);
@@ -258,7 +261,6 @@ try {
                 platform: s.platform || "web", // Значение по умолчанию
               }));
               localStorage.setItem(key, JSON.stringify(updatedSessions));
-              console.log("✅ Migration v7 applied: sessions array updated");
             }
           } catch (e) {
             console.error("Migration v7 failed:", e);
@@ -268,7 +270,7 @@ try {
 
       if (storedVersion < 8) {
         const key = "sessions_v5";
-        const raw = localStorage.getItem(key);
+        const raw = safeGetItem(key);
         if (raw) {
           try {
             const sessions = JSON.parse(raw);
@@ -282,9 +284,6 @@ try {
 
               if (uniqueSessions.length !== sessions.length) {
                 localStorage.setItem(key, JSON.stringify(uniqueSessions));
-                console.log(
-                  `✅ Migration v8 applied: removed ${sessions.length - uniqueSessions.length} duplicate sessions`,
-                );
               }
             }
           } catch (e) {
@@ -295,7 +294,7 @@ try {
 
       if (storedVersion < 9) {
         const key = "sessions_v5";
-        const raw = localStorage.getItem(key);
+        const raw = safeGetItem(key);
         if (raw) {
           try {
             const sessions: Session[] = JSON.parse(raw);
@@ -327,9 +326,6 @@ try {
 
               const mergedSessions = Array.from(mergedMap.values());
               localStorage.setItem(key, JSON.stringify(mergedSessions));
-              console.log(
-                `✅ Migration v9 applied: merged ${sessions.length} sessions into ${mergedSessions.length}`,
-              );
             }
           } catch (e) {
             console.error("Migration v9 failed:", e);
@@ -345,7 +341,7 @@ try {
   runMigrations();
 
   const load = <T>(key: string, def: T): T => {
-    const val = localStorage.getItem(key);
+    const val = safeGetItem(key);
     if (!val) return def;
     try {
       return JSON.parse(val);
@@ -384,11 +380,10 @@ try {
   state.customWords = load(LS_KEYS.CUSTOM_WORDS, []);
   state.wordRequests = load(LS_KEYS.WORD_REQUESTS, []);
   state.purchasedItems = load(LS_KEYS.PURCHASED_ITEMS, []);
-  state.settingsUpdatedAt =
-    Number(localStorage.getItem("settings_updated_at")) || 0;
+  state.settingsUpdatedAt = Number(safeGetItem("settings_updated_at")) || 0;
 
   // Загрузка сжатого словаря
-  const cachedVocab = localStorage.getItem(LS_KEYS.VOCAB_CACHE);
+  const cachedVocab = safeGetItem(LS_KEYS.VOCAB_CACHE);
   if (cachedVocab) {
     try {
       // Убрана декомпрессия, парсим напрямую
@@ -412,7 +407,7 @@ try {
         throw new Error("Invalid vocabulary schema in cache");
       }
     } catch (e) {
-      console.warn("Failed to decompress vocabulary cache, resetting.", e);
+      console.warn("Failed to parse vocabulary cache, resetting.", e);
       localStorage.removeItem(LS_KEYS.VOCAB_CACHE);
       state.dataStore = [];
     }
@@ -421,8 +416,8 @@ try {
   state.favoriteQuotes = load(LS_KEYS.FAVORITE_QUOTES, []);
   state.dirtyWordIds = new Set(load(LS_KEYS.DIRTY_IDS, []));
   state.trashRetentionDays =
-    localStorage.getItem(LS_KEYS.TRASH_RETENTION) !== null
-      ? Number(localStorage.getItem(LS_KEYS.TRASH_RETENTION))
+    safeGetItem(LS_KEYS.TRASH_RETENTION) !== null
+      ? Number(safeGetItem(LS_KEYS.TRASH_RETENTION))
       : 30;
   state.quizDifficulty = localStorage.getItem(LS_KEYS.QUIZ_DIFFICULTY) || "all";
   state.quizTopic = localStorage.getItem(LS_KEYS.QUIZ_TOPIC) || "all";
@@ -441,6 +436,9 @@ try {
     state.userStats.dailyRewardStreak = 0;
   if (state.userStats.survivalHealth === undefined)
     state.userStats.survivalHealth = 0;
+  if (state.userStats.timeFreeze === undefined) state.userStats.timeFreeze = 0;
+  if (state.userStats.skipQuestion === undefined) state.userStats.skipQuestion = 0;
+  if (state.userStats.fiftyFifty === undefined) state.userStats.fiftyFifty = 0;
 } catch (e) {
   console.error("State init error:", e);
 }

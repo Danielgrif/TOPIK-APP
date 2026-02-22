@@ -283,8 +283,7 @@ export function bulkAddToList() {
   });
 }
 
-// Глобальный обработчик для выбора списка
-window.handleBulkAddToList = async (listId: string) => {
+export async function handleBulkAddToList(listId: string) {
   const ids = Array.from(state.selectedWords);
   const rows = ids.map((id) => ({ list_id: listId, word_id: id }));
 
@@ -304,10 +303,9 @@ window.handleBulkAddToList = async (listId: string) => {
     closeModal("add-to-list-modal");
     toggleSelectMode();
   }
-};
+}
 
-// Глобальный обработчик для создания нового списка из модального окна
-window.createNewListForBulk = () => {
+export function createNewListForBulk() {
   closeModal("add-to-list-modal");
   openConfirm("Введите название нового списка:", () => {}, {
     showInput: true,
@@ -343,7 +341,7 @@ window.createNewListForBulk = () => {
       return true;
     },
   });
-};
+}
 
 export function selectAll() {
   const words = getFilteredData();
@@ -360,11 +358,4 @@ export function selectAll() {
   });
 
   updateBulkBar();
-}
-
-declare global {
-  interface Window {
-    handleBulkAddToList: (listId: string) => void;
-    createNewListForBulk: () => void;
-  }
 }

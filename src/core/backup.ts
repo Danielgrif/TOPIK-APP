@@ -40,7 +40,6 @@ export function createLocalBackup() {
     }
 
     localStorage.setItem(LS_KEYS.SAFETY_BACKUP, JSON.stringify(backup));
-    console.log("🛡️ Safety backup created");
   } catch (e) {
     console.warn("⚠️ Backup failed:", e);
   }

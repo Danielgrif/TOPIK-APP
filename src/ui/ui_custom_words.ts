@@ -17,8 +17,6 @@ import { DB_TABLES, WORD_REQUEST_STATUS } from "../core/constants.ts";
 import { WordRequestState } from "../core/state.ts";
 import type { RealtimePostgresChangesPayload } from "@supabase/supabase-js";
 
-console.log("📂 Loaded: ui_custom_words.ts");
-
 interface CancellationToken {
   isCancelled: boolean;
 }
@@ -36,8 +34,6 @@ const requestProgress = new Map<
 >();
 
 export async function submitWordRequest() {
-  console.log("🚀 submitWordRequest: Function started");
-
   const input = document.getElementById(
     "new-word-input",
   ) as HTMLTextAreaElement;
@@ -77,13 +73,6 @@ export async function submitWordRequest() {
   }
 
   const progressView = document.getElementById("add-word-progress-view");
-
-  console.log("👀 Elements found:", {
-    input: !!input,
-    listSelect: !!listSelect,
-    formView: !!formView,
-    progressView: !!progressView,
-  });
 
   // --- Cancellation Setup ---
   cancellationToken = { isCancelled: false };
@@ -708,7 +697,7 @@ function trackProgress(
           text = "Ошибка";
           cssClass = "status-error";
           const safeError = escapeHtml(item.error || "Неизвестная ошибка");
-          extraAttrs = `onclick="window.showRequestError('${safeError}')" style="cursor: pointer;" title="Нажмите, чтобы увидеть детали"`;
+          extraAttrs = `data-action="show-request-error" data-error="${safeError}" style="cursor: pointer;" title="Нажмите, чтобы увидеть детали"`;
         }
 
         return `
@@ -883,27 +872,34 @@ function trackProgress(
   }, 8000);
 
   // --- Realtime Listeners ---
+  const handleVocabInsert = (payload: RealtimePostgresChangesPayload<any>) => {
+    const newWord = payload.new as any;
+    if (!newWord) return;
+
+    // Find the request that matches the newly inserted word
+    for (const progress of requestProgress.values()) {
+      if (progress.word === newWord.word_kr && progress.status !== "done") {
+        console.log(
+          `🎤 Realtime vocab insert detected for: ${newWord.word_kr}`,
+        );
+        progress.status = WORD_REQUEST_STATUS.AUDIO as any;
+        updateUIWithStages();
+        break; // Assume one request per word_kr for now
+      }
+    }
+  };
+
   vocabChannel = client
     .channel("public:vocabulary:custom-words")
     .on(
       "postgres_changes",
       { event: "INSERT", schema: "public", table: DB_TABLES.VOCABULARY },
-      (payload: RealtimePostgresChangesPayload<any>) => {
-        const newWord = payload.new as any;
-        if (!newWord) return;
-
-        // Find the request that matches the newly inserted word
-        for (const progress of requestProgress.values()) {
-          if (progress.word === newWord.word_kr && progress.status !== "done") {
-            console.log(
-              `🎤 Realtime vocab insert detected for: ${newWord.word_kr}`,
-            );
-            progress.status = WORD_REQUEST_STATUS.AUDIO as any;
-            updateUIWithStages();
-            break; // Assume one request per word_kr for now
-          }
-        }
-      },
+      handleVocabInsert,
+    )
+    .on(
+      "postgres_changes",
+      { event: "INSERT", schema: "public", table: DB_TABLES.USER_VOCABULARY },
+      handleVocabInsert,
     )
     .subscribe((status) => {
       if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
@@ -1008,6 +1004,8 @@ export async function deleteCustomWord(id: string | number) {
   const grid = document.getElementById("vocabulary-grid");
   const savedScroll = grid ? grid.scrollTop : 0;
   render();
+  if (window.updateSearchIndex) window.updateSearchIndex();
+
   if (grid) grid.scrollTop = savedScroll;
 
   showUndoToast(
@@ -1028,14 +1026,4 @@ export async function deleteCustomWord(id: string | number) {
 
 export function showRequestError(error: string) {
   openConfirm(`Детали ошибки:\n\n${error}`, () => {}, { showCancel: false });
-}
-
-declare global {
-  interface Window {
-    showRequestError: typeof showRequestError;
-  }
-}
-
-if (typeof window.showRequestError === "undefined") {
-  window.showRequestError = showRequestError;
 }

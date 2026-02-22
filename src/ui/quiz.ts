@@ -5,6 +5,7 @@ import {
   playTone,
   playComboSound,
   escapeHtml,
+  showComboEffect,
 } from "../utils/utils.ts";
 import { ensureSessionStarted, playAndSpeak, saveAndRender } from "./ui.ts";
 import { closeModal, openModal, openConfirm } from "./ui_modal.ts";
@@ -33,6 +34,8 @@ let advanceTimer: number | null = null;
 let currentConfig: QuizConfig | null = null;
 let quizXPGained: number = 0;
 let quizStreak: number = 0;
+let isTimeFrozen: boolean = false;
+let freezeTimeout: number | null = null;
 
 export function updateDailyChallengeUI() {
   const btn = document.querySelector(".fire-btn") as HTMLElement;
@@ -497,6 +500,9 @@ export function startQuizMode(mode: string) {
   quizTimerValue = currentConfig.initialTimer;
   survivalLives = currentConfig.initialLives;
   isQuizPaused = false;
+  isTimeFrozen = false;
+  if (freezeTimeout) clearTimeout(freezeTimeout);
+  freezeTimeout = null;
 
   const comboEl = document.getElementById("quiz-combo");
   if (comboEl) comboEl.style.display = "none";
@@ -522,6 +528,7 @@ export function startQuizMode(mode: string) {
     if (isQuizPaused) return;
 
     if (!currentConfig || !currentConfig.onTick) return;
+    if (isTimeFrozen) return;
 
     // Вычисляем, сколько секунд прошло с прошлого тика (обычно 1, но может быть больше при лагах)
     const deltaSeconds = Math.round((now - quizLastTick) / 1000);
@@ -552,6 +559,8 @@ export function startQuizMode(mode: string) {
         } else {
           bar.style.backgroundColor = "";
         }
+        // Reset color if frozen ended
+        if (!isTimeFrozen && bar.style.backgroundColor === "var(--info)") bar.style.backgroundColor = "";
       }
 
       // Update sprint button timers if they exist
@@ -592,6 +601,7 @@ export function startQuizMode(mode: string) {
   if (modalContent) modalContent.classList.add("game-active");
 
   nextQuizQuestion();
+  renderPowerups();
 }
 
 export function startDailyChallenge() {
@@ -644,6 +654,7 @@ export function startDailyChallenge() {
     applyBackgroundMusic(true);
 
     nextQuizQuestion();
+    renderPowerups();
     showToast(
       isSunday
         ? "🌟 СУПЕР-ВЫЗОВ начат! (x2 Награда)"
@@ -747,6 +758,7 @@ function nextQuizQuestion() {
   if (progressEl) progressEl.style.backgroundColor = "";
 
   preloadNextAudio();
+  renderPowerups(); // Re-render to update states (e.g. 50/50 availability)
   const word = quizWords[quizIndex];
   const scoreEl = document.getElementById("quiz-score");
   if (scoreEl)
@@ -986,6 +998,8 @@ function endQuiz(forceEnd: boolean = false) {
     clearTimeout(advanceTimer);
     advanceTimer = null;
   }
+  if (freezeTimeout) clearTimeout(freezeTimeout);
+  isTimeFrozen = false;
 
   // FIX: Проверяем, был ли квиз действительно завершен для Ежедневного вызова
   const isDaily =
@@ -1085,6 +1099,128 @@ export function quitQuiz(skipConfirm: boolean = false) {
       },
     },
   );
+}
+
+function renderPowerups() {
+  const container = document.getElementById("quiz-powerups");
+  if (!container) return;
+  container.innerHTML = "";
+
+  // Helper to create button
+  const createBtn = (_id: string, icon: string, count: number, handler: () => void, disabled: boolean = false) => {
+    const btn = document.createElement("button");
+    btn.className = "powerup-btn";
+    if (count <= 0 || disabled) btn.disabled = true;
+    btn.innerHTML = `<span class="powerup-icon">${icon}</span><span class="powerup-count">${count}</span>`;
+    btn.onclick = (e) => {
+      e.stopPropagation();
+      if (count > 0 && !disabled) handler();
+    };
+    return btn;
+  };
+
+  // 1. Time Freeze (Only for countdown modes)
+  if (currentConfig?.isTimerCountdown) {
+    const btn = createBtn("time_freeze", "⏳", state.userStats.timeFreeze || 0, () => useTimeFreeze());
+    if (isTimeFrozen) btn.classList.add("active");
+    container.appendChild(btn);
+  }
+
+  // 2. Skip Question
+  container.appendChild(createBtn("skip_question", "⏭️", state.userStats.skipQuestion || 0, () => useSkipQuestion()));
+
+  // 3. 50/50 (Only for multiple choice with enough options)
+  const optionsCount = document.querySelectorAll("#quiz-opts .quiz-option").length;
+  if (optionsCount >= 4 && (currentQuizMode === "multiple-choice" || currentQuizMode === "survival" || currentQuizMode === "sprint")) {
+    container.appendChild(createBtn("fifty_fifty", "⚖️", state.userStats.fiftyFifty || 0, () => useFiftyFifty()));
+  }
+
+  // 4. Heal (Only for survival)
+  if (currentQuizMode === "survival") {
+    container.appendChild(createBtn("survival_heal", "❤️", state.userStats.survivalHealth || 0, () => useHeal()));
+  }
+}
+
+function useTimeFreeze() {
+  if (isTimeFrozen) return;
+  if ((state.userStats.timeFreeze || 0) <= 0) return;
+
+  state.userStats.timeFreeze = (state.userStats.timeFreeze || 0) - 1;
+  scheduleSaveState();
+
+  isTimeFrozen = true;
+  showComboEffect("❄️ Время заморожено!");
+  playTone("achievement-unlock");
+
+  const bar = document.getElementById("quiz-progress-fill");
+  if (bar) bar.style.backgroundColor = "var(--info)";
+
+  renderPowerups();
+
+  freezeTimeout = window.setTimeout(() => {
+    isTimeFrozen = false;
+    if (bar) bar.style.backgroundColor = "";
+    renderPowerups();
+  }, 10000); // 10 seconds
+}
+
+function useSkipQuestion() {
+  if ((state.userStats.skipQuestion || 0) <= 0) return;
+
+  state.userStats.skipQuestion = (state.userStats.skipQuestion || 0) - 1;
+  scheduleSaveState();
+
+  showToast("⏭️ Вопрос пропущен");
+  playTone("pop");
+
+  // Move to next question without recording stats
+  if (quizIndex < quizWords.length - 1) {
+    quizIndex++;
+    nextQuizQuestion();
+  } else {
+    endQuiz(false);
+  }
+}
+
+function useFiftyFifty() {
+  if ((state.userStats.fiftyFifty || 0) <= 0) return;
+
+  const options = Array.from(document.querySelectorAll("#quiz-opts .quiz-option")) as HTMLButtonElement[];
+  const incorrectOptions = options.filter(btn => btn.dataset.correct !== "true" && !btn.disabled);
+
+  if (incorrectOptions.length < 2) {
+    showToast("Недостаточно вариантов для 50/50");
+    return;
+  }
+
+  state.userStats.fiftyFifty = (state.userStats.fiftyFifty || 0) - 1;
+  scheduleSaveState();
+
+  // Shuffle and pick 2 to hide
+  incorrectOptions.sort(() => Math.random() - 0.5);
+  incorrectOptions.slice(0, 2).forEach(btn => {
+    btn.style.opacity = "0.2";
+    btn.style.pointerEvents = "none";
+    btn.disabled = true;
+  });
+
+  playTone("pop");
+  renderPowerups();
+}
+
+function useHeal() {
+  if ((state.userStats.survivalHealth || 0) <= 0) return;
+
+  state.userStats.survivalHealth = (state.userStats.survivalHealth || 0) - 1;
+  survivalLives++;
+  scheduleSaveState();
+
+  const scoreEl = document.getElementById("quiz-score");
+  if (scoreEl) scoreEl.innerText = `❤️ ${survivalLives}`;
+
+  showComboEffect("❤️ Жизнь восстановлена!");
+  playTone("success");
+  renderPowerups();
 }
 
 export function updateQuizCount() {
@@ -1291,7 +1427,7 @@ function showQuizSummaryModal(correct: number, total: number, xp: number) {
             Правильных ответов: <b>${correct}</b> из <b>${total}</b>
         </div>
         
-        <button class="btn btn-quiz" style="width: 100%; padding: 15px; font-size: 16px; border-radius: 16px;" onclick="window.handleQuizSummaryContinue()">Продолжить</button>
+        <button class="btn btn-quiz" style="width: 100%; padding: 15px; font-size: 16px; border-radius: 16px;" data-action="quiz-summary-continue">Продолжить</button>
     </div>
   `;
 
@@ -1313,18 +1449,10 @@ function updateComboUI(streak: number | undefined) {
   }
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-(window as any).handleQuizSummaryContinue = () => {
+export function handleQuizSummaryContinue() {
   closeModal("quiz-summary-modal");
   // Если это был ежедневный вызов, показываем статус (серию и награду) после закрытия сводки
   if (currentQuizMode === "daily" || currentQuizMode === "super-daily") {
     setTimeout(() => openDailyStatusModal(), 300);
   }
-};
-
-declare global {
-  interface Window {
-    quitQuiz: typeof quitQuiz;
-  }
 }
-window.quitQuiz = quitQuiz;

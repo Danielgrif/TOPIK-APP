@@ -92,6 +92,7 @@ DB_TABLES = {
     "WORD_REQUESTS": "word_requests",
     "USER_PROGRESS": "user_progress",
     "LIST_ITEMS": "list_items",
+    "USER_VOCABULARY": "user_vocabulary",
 }
 DB_BUCKETS = {
     "AUDIO": "audio-files",
@@ -829,20 +830,28 @@ Input: '{word_kr}'
             if request.get('topic'): data['topic'] = request.get('topic')
             if request.get('category'): data['category'] = request.get('category')
 
-            # 2. Проверка на дубликаты в vocabulary
-            # Проверяем не только по слову, но и по переводу, чтобы различать омонимы
-            builder = supabase.table(DB_TABLES['VOCABULARY']).select('id, translation').eq('word_kr', data.get('word_kr'))
-            existing_rows = (await execute_supabase_query(builder)).data or []
-            
+            # 2. Проверка на дубликаты (в целевой и общей таблицах)
+            target_table = DB_TABLES['USER_VOCABULARY'] if user_id else DB_TABLES['VOCABULARY']
             word_id = None
             
-            # Ищем точное совпадение по переводу (или очень похожее)
-            for row in existing_rows:
-                if row.get('translation') == data.get('translation'):
-                    word_id = row['id']
-                    success_count += 1
-                    logging.info(f"ℹ️ Слово {data.get('word_kr')} ({data.get('translation')}) уже есть в базе.")
-                    break
+            async def _find_duplicate(table, uid=None):
+                b = supabase.table(table).select('id, translation').eq('word_kr', data.get('word_kr'))
+                if uid: b = b.eq('user_id', uid)
+                rows = (await execute_supabase_query(b)).data or []
+                req_t = (data.get('translation') or "").strip().lower()
+                for r in rows:
+                    db_t = (r.get('translation') or "").strip().lower()
+                    if db_t == req_t: return r['id']
+                return None
+
+            word_id = await _find_duplicate(target_table, user_id if target_table == DB_TABLES['USER_VOCABULARY'] else None)
+            
+            if not word_id and user_id:
+                word_id = await _find_duplicate(DB_TABLES['VOCABULARY'])
+            
+            if word_id:
+                success_count += 1
+                logging.info(f"ℹ️ Слово {data.get('word_kr')} ({data.get('translation')}) уже есть в базе.")
             
             if not word_id:
                 # 3. Вставка в vocabulary
@@ -862,7 +871,7 @@ Input: '{word_kr}'
                     del clean_data['grammar_info']
                 
                 try:
-                    builder = supabase.table(DB_TABLES['VOCABULARY']).insert(clean_data)
+                    builder = supabase.table(target_table).insert(clean_data)
                     insert_data = (await execute_supabase_query(builder)).data
                 except Exception as e:
                     logging.error(f"❌ Ошибка вставки в БД: {e}")
@@ -871,7 +880,7 @@ Input: '{word_kr}'
                 if insert_data and isinstance(insert_data, list) and len(insert_data) > 0:
                     word_id = insert_data[0]['id']
                     success_count += 1
-                    logging.info(f"✅ Слово {data.get('word_kr')} ({data.get('translation')}) добавлено.")
+                    logging.info(f"✅ Слово {data.get('word_kr')} ({data.get('translation')}) добавлено в {target_table}.")
                     
                     # Генерируем медиа для нового слова сразу
                     if session:
@@ -881,7 +890,7 @@ Input: '{word_kr}'
                             updates = await _generate_content_for_word(local_session, insert_data[0])
                     
                     if updates:
-                        update_builder = supabase.table(DB_TABLES['VOCABULARY']).update(updates).eq("id", word_id)
+                        update_builder = supabase.table(target_table).update(updates).eq("id", word_id)
                         await execute_supabase_query(update_builder)
                 else:
                     logging.error(f"❌ Не удалось вставить слово '{data.get('word_kr')}'. Ответ БД пуст (возможно, ошибка прав доступа RLS).")

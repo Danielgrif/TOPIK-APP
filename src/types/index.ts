@@ -41,7 +41,7 @@ export interface Achievement {
 }
 
 export interface UserStats {
-  lastFreezeDate: any;
+  lastFreezeDate: number | null;
   user_id?: string;
   xp: number;
   level: number;
@@ -53,6 +53,9 @@ export interface UserStats {
   dailyRewardStreak: number;
   achievements: Achievement[]; // Массив объектов достижений
   survivalHealth: number;
+  timeFreeze?: number;
+  skipQuestion?: number;
+  fiftyFifty?: number;
 }
 
 export interface SM2State {

@@ -19,6 +19,16 @@ export function escapeRegExp(string: string): string {
 }
 
 /**
+ * Checks if the user has a slow internet connection (2g or slow-2g).
+ */
+export function isConnectionSlow(): boolean {
+  // @ts-ignore
+  const conn = navigator.connection;
+  if (!conn) return false;
+  return conn.saveData || ["slow-2g", "2g"].includes(conn.effectiveType);
+}
+
+/**
  * Wraps a promise with a timeout.
  * @param promise The promise to wrap.
  * @param ms The timeout in milliseconds.

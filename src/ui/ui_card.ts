@@ -136,6 +136,8 @@ function renderEmptyState(grid: HTMLElement) {
 function updateFilteredData() {
   const source = (state.searchResults || state.dataStore || []) as Word[];
 
+  // DEBUG: Analyze data types
+
   // Optimization: Pre-calculate set of all categorized IDs for O(1) lookup
   let allCategorizedIds: Set<number> | null = null;
   if (collectionsState.currentCollectionFilter === "uncategorized") {
@@ -616,7 +618,11 @@ function createCardFront(item: Word, index: number): HTMLElement {
   topRow.appendChild(addListBtn);
 
   // Если активен фильтр по списку, добавляем кнопку удаления из этого списка
-  if (collectionsState.currentCollectionFilter) {
+  if (
+    collectionsState.currentCollectionFilter &&
+    collectionsState.currentCollectionFilter !== "my-custom" &&
+    collectionsState.currentCollectionFilter !== "uncategorized"
+  ) {
     const removeListBtn = document.createElement("button");
     removeListBtn.className = "icon-btn";
     removeListBtn.textContent = "➖";
@@ -1588,7 +1594,7 @@ async function openAddToListModal(wordId: number) {
     .map((list, index) => {
       const hasWord = collectionsState.listItems[list.id]?.has(wordId);
       return `
-        <div class="multiselect-item" onclick="toggleWordInList('${list.id}', ${wordId}, this)" style="animation: fadeInUpList 0.3s ease-out ${index * 0.05}s backwards">
+        <div class="multiselect-item" data-action="toggle-word-in-list" data-list-id="${list.id}" data-word-id="${wordId}" style="animation: fadeInUpList 0.3s ease-out ${index * 0.05}s backwards">
             <input type="checkbox" ${hasWord ? "checked" : ""} style="pointer-events: none;">
             <span style="margin-left: 10px;">${list.icon || "📁"} ${list.title}</span>
         </div>
@@ -1597,30 +1603,29 @@ async function openAddToListModal(wordId: number) {
     .join("");
 
   openModal("add-to-list-modal");
+}
 
-  // Глобальная функция для клика (можно вынести в window)
-  (window as any).toggleWordInList = async (
-    listId: string,
-    wId: number,
-    el: HTMLElement,
-  ) => {
-    const checkbox = el.querySelector("input") as HTMLInputElement;
-    const isAdding = !checkbox.checked;
-    checkbox.checked = isAdding;
+export async function toggleWordInList(
+  listId: string,
+  wId: number,
+  el: HTMLElement,
+) {
+  const checkbox = el.querySelector("input") as HTMLInputElement;
+  const isAdding = !checkbox.checked;
+  checkbox.checked = isAdding;
 
-    if (isAdding) {
-      await client.from("list_items").insert({ list_id: listId, word_id: wId });
-      if (!collectionsState.listItems[listId])
-        collectionsState.listItems[listId] = new Set();
-      collectionsState.listItems[listId].add(wId);
-    } else {
-      await client
-        .from("list_items")
-        .delete()
-        .match({ list_id: listId, word_id: wId });
-      collectionsState.listItems[listId]?.delete(wId);
-    }
-  };
+  if (isAdding) {
+    await client.from("list_items").insert({ list_id: listId, word_id: wId });
+    if (!collectionsState.listItems[listId])
+      collectionsState.listItems[listId] = new Set();
+    collectionsState.listItems[listId].add(wId);
+  } else {
+    await client
+      .from("list_items")
+      .delete()
+      .match({ list_id: listId, word_id: wId });
+    collectionsState.listItems[listId]?.delete(wId);
+  }
 }
 
 function getAccuracy(id: string | number): number {

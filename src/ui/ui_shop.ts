@@ -16,11 +16,14 @@ let currentTab = "all";
 function createShopModal() {
   let modal = document.getElementById("shop-modal");
   // Проверяем целостность контента. Если ключевых элементов нет (например, загрузился пустой шаблон), пересоздаем.
+  // FIX: Также проверяем наличие старых вкладок (.shop-tabs), чтобы принудительно обновить структуру
+  const hasTabs = modal?.querySelector(".shop-tabs");
   const isContentInvalid =
     !document.getElementById("shop-user-points") ||
-    !document.getElementById("shop-items-container");
+    !document.getElementById("shop-items-container") ||
+    !hasTabs;
 
-  if (modal && !isContentInvalid) return;
+  if (modal && !isContentInvalid) return; // Если модалка есть и она валидна, ничего не делаем
 
   if (!modal) {
     modal = document.createElement("div");
@@ -34,20 +37,22 @@ function createShopModal() {
         <div class="modal-content shop-modal-content">
             <div class="modal-header">
                 <h3>Магазин</h3>
-                <div style="display: flex; align-items: center; gap: 10px; margin-left: auto;">
+                <div class="shop-header-right">
                     <div class="shop-points" id="shop-user-points">💰 ${state.userStats.coins || 0}</div>
-                    <button class="btn-icon" onclick="window.closeModal('shop-modal')" style="width: 32px; height: 32px; font-size: 16px; background: var(--surface-2);">✕</button>
+                    <button class="btn-icon close-modal-btn" data-close-modal="shop-modal">✕</button>
                 </div>
             </div>
             <div class="modal-body-container" id="shop-scroll-container">
                 <!-- Daily Reward Section -->
                 <div id="daily-reward-section"></div>
+                
                 <div class="shop-tabs">
-                    <button class="shop-tab active" onclick="window.switchShopTab('all')">Все</button>
-                    <button class="shop-tab" onclick="window.switchShopTab('theme')">Темы</button>
-                    <button class="shop-tab" onclick="window.switchShopTab('feature')">Улучшения</button>
+                    <button class="shop-tab active" data-action="switch-shop-tab" data-value="all">Все</button>
+                    <button class="shop-tab" data-action="switch-shop-tab" data-value="theme">Темы</button>
+                    <button class="shop-tab" data-action="switch-shop-tab" data-value="feature">Улучшения</button>
                 </div>
-                <div class="shop-items-container" id="shop-items-container">
+
+                <div class="shop-grid" id="shop-items-container">
                     <!-- Items will be rendered here -->
                 </div>
             </div>
@@ -71,7 +76,7 @@ export function switchShopTab(tab: string) {
   currentTab = tab;
   const tabs = document.querySelectorAll(".shop-tab");
   tabs.forEach((t) => {
-    if (t.getAttribute("onclick")?.includes(`'${tab}'`)) {
+    if (t.getAttribute("data-value") === tab) {
       t.classList.add("active");
     } else {
       t.classList.remove("active");
@@ -106,45 +111,41 @@ export function updateShopUI() {
   container.innerHTML = itemsToRender
     .map((item, index) => {
       const isPurchased = state.purchasedItems.includes(item.id);
-      const isConsumable = item.value === "streak_freeze"; // Особая логика для заморозки
       const canAfford = (state.userStats.coins || 0) >= item.price;
       const isTheme = item.type === "theme";
       const isActiveTheme = isTheme && state.themeColor === item.value;
 
       let btnHtml = "";
-      if (isPurchased && !isConsumable) {
-        if (isTheme) {
+      
+      if (isPurchased && item.type === "theme") {
           if (isActiveTheme) {
             btnHtml = `<button class="btn btn-quiz purchased" disabled>✓ Используется</button>`;
           } else {
-            btnHtml = `<button class="btn btn-quiz" onclick="window.applyShopTheme('${item.value}')">Применить</button>`;
+            btnHtml = `<button class="btn btn-quiz" data-action="apply-shop-theme" data-value="${item.value}">Применить</button>`;
           }
-        } else {
-          btnHtml = `<button class="btn btn-quiz purchased" disabled>✓ Куплено</button>`;
-        }
-      } else if (isConsumable) {
-        const count = state.userStats.streakFreeze || 0;
-        btnHtml = `<button class="btn btn-quiz shop-item-buy-btn" onclick="window.buyItem('${item.id}', this)" ${
+      } else if (item.value === "streak_freeze" || item.value === "survival_heal") {
+        // Расходники
+        const count = item.value === "streak_freeze" ? (state.userStats.streakFreeze || 0) : (state.userStats.survivalHealth || 0);
+        btnHtml = `<button class="btn btn-quiz shop-item-buy-btn" data-action="buy-item" data-value="${item.id}" ${
           !canAfford ? "disabled" : ""
         }>
                 💰 ${item.price} <span style="font-size: 0.8em; opacity: 0.8; margin-left: 5px;">(У вас: ${count})</span>
             </button>`;
       } else {
-        btnHtml = `<button class="btn btn-quiz shop-item-buy-btn" onclick="window.buyItem('${item.id}', this)" ${
+        // Обычная покупка (темы, которые еще не куплены)
+        if (isPurchased) {
+             btnHtml = `<button class="btn btn-quiz purchased" disabled>✓ Куплено</button>`;
+        } else {
+             btnHtml = `<button class="btn btn-quiz shop-item-buy-btn" data-action="buy-item" data-value="${item.id}" ${
           !canAfford ? "disabled" : ""
         }>
                 💰 ${item.price}
             </button>`;
+        }
       }
 
       return `
-            <div class="shop-item-card ${
-              !canAfford && !isPurchased ? "disabled" : ""
-            }" ${
-              isTheme
-                ? `data-action="preview-theme" data-value="${item.value}"`
-                : ""
-            } style="animation: popIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275) ${index * 0.05}s backwards;">
+            <div class="shop-item-card ${!canAfford && !isPurchased ? "disabled" : ""}" style="animation: popIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275) ${index * 0.05}s backwards;">
                 <div class="shop-item-icon">${item.icon}</div>
                 <h3 class="shop-item-name">${item.name}</h3>
                 <p class="shop-item-desc">${item.description}</p>
@@ -159,10 +160,9 @@ export function buyItem(id: string, _btn?: HTMLButtonElement) {
   const item = SHOP_ITEMS.find((i) => i.id === id);
   if (!item) return;
 
-  // Если предмет куплен и он НЕ расходуемый (как заморозка), то запрещаем покупку
-  if (state.purchasedItems.includes(id) && item.value !== "streak_freeze") {
-    showToast("Вы уже купили это улучшение");
-    return;
+  if (state.purchasedItems.includes(id) && item.type === "theme") {
+      showToast("Вы уже купили это");
+      return;
   }
 
   if ((state.userStats.coins || 0) < item.price) {
@@ -186,10 +186,12 @@ export function buyItem(id: string, _btn?: HTMLButtonElement) {
         showToast(
           `❄️ Заморозка добавлена! Всего: ${state.userStats.streakFreeze}`,
         );
+      } else if (item.value === "survival_heal") {
+        state.userStats.survivalHealth = (state.userStats.survivalHealth || 0) + 1;
+        showToast(
+          `❤️ Жизнь добавлена! Всего доп. жизней: ${state.userStats.survivalHealth}`,
+        );
       } else if (item.type === "theme") {
-        state.purchasedItems.push(item.id);
-        showToast(`🎉 Поздравляем! Вы купили «${item.name}»`);
-      } else {
         state.purchasedItems.push(item.id);
         showToast(`🎉 Поздравляем! Вы купили «${item.name}»`);
       }
@@ -315,7 +317,7 @@ function renderDailyRewardUI() {
 
   let actionHtml = "";
   if (isClaimable) {
-    actionHtml = `<button id="claim-reward-btn" class="btn btn-quiz" onclick="window.claimDailyReward()">🎁 Получить награду</button>`;
+    actionHtml = `<button id="claim-reward-btn" class="btn btn-quiz" data-action="claim-reward">🎁 Получить награду</button>`;
   } else {
     const now = new Date();
     const tomorrow = new Date(
@@ -383,7 +385,7 @@ function handleMysteryBox(): string {
   return `Таинственная коробка! Вы выиграли: ${reward.message}`;
 }
 
-export function claimDailyReward() {
+export function claimDailyReward(_btn?: HTMLElement) {
   if (!canClaimDailyReward()) {
     showToast("Вы уже получили награду сегодня");
     return;
@@ -443,17 +445,3 @@ export function claimDailyReward() {
   renderDailyRewardUI();
   updateShopUI(); // Обновляем баланс монет
 }
-
-declare global {
-  interface Window {
-    switchShopTab: typeof switchShopTab;
-    buyItem: typeof buyItem;
-    claimDailyReward: typeof claimDailyReward;
-    applyShopTheme: typeof applyShopTheme;
-  }
-}
-
-window.switchShopTab = switchShopTab;
-window.buyItem = buyItem;
-window.claimDailyReward = claimDailyReward;
-window.applyShopTheme = applyShopTheme;

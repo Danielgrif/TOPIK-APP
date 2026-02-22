@@ -148,7 +148,7 @@
         width: 100%;
         height: 100%;
         /* Фон теперь управляется SVG-слоем .onboarding-backdrop */
-        z-index: 21000; /* Выше чем тосты и индикаторы */
+        z-index: 9500; /* FIX: Ниже модальных окон (10001), но выше контента */
         display: none;
         justify-content: center;
         align-items: center;
@@ -160,6 +160,10 @@
         display: flex;
         opacity: 1;
         pointer-events: none; /* Контейнер пропускает клики, блокировка идет через SVG */
+      }
+      /* FIX: Ensure nothing blocks clicks when overlay is not active (fading out) */
+      #onboarding-overlay:not(.active) * {
+        pointer-events: none !important;
       }
       .onboarding-svg {
         position: absolute;
@@ -352,12 +356,12 @@
         display: flex;
         flex-direction: column;
         gap: 8px;
-        z-index: 20000;
+        z-index: 21000;
       "
     ></div>
 
     <!-- Offline Indicator -->
-    <div id="offline-indicator">
+    <div id="offline-indicator" style="z-index: 21005;">
       <span>📡</span> <span>Вы офлайн</span>
     </div>
 
@@ -388,7 +392,7 @@
     <div id="card-counter-indicator" class="card-counter-indicator">1 / 100</div>
 
     <label for="import-file" class="visually-hidden">Импорт данных из файла</label>
-    <input type="file" id="import-file" name="import-file" style="display: none" onchange="importProgress(event)" />
+    <input type="file" id="import-file" name="import-file" style="display: none" />
 
     <script type="module" src="/src/app.ts"></script>
   </body>

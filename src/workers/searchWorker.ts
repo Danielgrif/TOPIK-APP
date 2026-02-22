@@ -7,19 +7,19 @@ interface SearchWorkerGlobalScope extends DedicatedWorkerGlobalScope {
 const ctx = self as unknown as SearchWorkerGlobalScope;
 
 ctx.onmessage = (e: MessageEvent) => {
-  const { type, data, query } = e.data;
+  const { type, data, query, requestId } = e.data;
 
   if (type === "SET_DATA") {
     ctx.dataStore = data as Word[];
   } else if (type === "SEARCH") {
     if (!ctx.dataStore) {
-      ctx.postMessage([]);
+      ctx.postMessage({ results: [], requestId });
       return;
     }
 
     if (!query) {
       // Если запрос пустой, возвращаем null, чтобы UI использовал полный список
-      ctx.postMessage(null);
+      ctx.postMessage({ results: null, requestId });
       return;
     }
 
@@ -28,6 +28,6 @@ ctx.onmessage = (e: MessageEvent) => {
     const results = ctx.dataStore.filter(
       (w) => w._searchStr && w._searchStr.includes(lowerQuery),
     );
-    ctx.postMessage(results);
+    ctx.postMessage({ results, requestId });
   }
 };
