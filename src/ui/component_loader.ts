@@ -23,8 +23,6 @@ import selectionModalsHtml from "../html/modals/selection_modals.html?raw";
  * Вызывается в app.ts перед инициализацией UI.
  */
 export function injectComponents(): void {
-  // eslint-disable-next-line no-console
-
   if (!document.body) {
     return;
   }

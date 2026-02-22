@@ -7,7 +7,7 @@
     "build": "tsc && vite build",
     "preview": "vite preview",
     "check": "tsc --noEmit",
-    "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
+    "lint": "eslint . --report-unused-disable-directives --max-warnings 0",
     "format": "prettier --write .",
     "test": "vitest"
   },
@@ -22,6 +22,7 @@
     "eslint-plugin-prettier": "^5.2.1",
     "globals": "^17.0.0",
     "happy-dom": "^20.6.3",
+    "jiti": "^2.6.1",
     "prettier": "^3.2.5",
     "supabase": "^2.72.8",
     "typescript": "^5.3.0",

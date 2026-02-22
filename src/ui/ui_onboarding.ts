@@ -68,10 +68,8 @@ export function checkAndShowOnboarding() {
   // }
 }
 
-
-
 function nextOnboardingStep() {
-  console.log("🎓 [DEBUG] nextOnboardingStep");
+  console.info("🎓 [DEBUG] nextOnboardingStep");
   if (inactivityTimer) clearTimeout(inactivityTimer);
   if (currentStep < onboardingSteps.length - 1) {
     currentStep++;
@@ -82,7 +80,7 @@ function nextOnboardingStep() {
 }
 
 function updateOnboardingStep() {
-  console.log(`🎓 [DEBUG] updateOnboardingStep: ${currentStep}`);
+  console.info(`🎓 [DEBUG] updateOnboardingStep: ${currentStep}`);
   // Сбрасываем таймер и прячем руку при смене шага
   if (inactivityTimer) clearTimeout(inactivityTimer);
   const hand = document.getElementById("onboarding-hand");
@@ -112,7 +110,10 @@ function updateOnboardingStep() {
   let targetEl: HTMLElement | null = null;
   if (step.target) {
     targetEl = document.querySelector<HTMLElement>(step.target);
-    console.log(`🎓 [DEBUG] Target element for step ${currentStep}:`, targetEl);
+    console.info(
+      `🎓 [DEBUG] Target element for step ${currentStep}:`,
+      targetEl,
+    );
     // Проверяем, видим ли элемент на экране. Если нет, сбрасываем его.
     if (targetEl && !isElementVisible(targetEl)) {
       console.warn(
@@ -135,7 +136,7 @@ function updateOnboardingStep() {
     clickHandler = (_e: Event) => {
       // FIX: Разрешаем клику пройти, чтобы кнопка сработала!
       // Обучение просто перейдет к следующему шагу параллельно.
-      console.log("🎓 [DEBUG] Click on onboarding target detected");
+      console.info("🎓 [DEBUG] Click on onboarding target detected");
       nextOnboardingStep();
     };
     targetEl.addEventListener("click", clickHandler, true);
@@ -243,14 +244,16 @@ function updateOnboardingStep() {
 }
 
 function finishOnboarding() {
-  console.log("🎓 [DEBUG] finishOnboarding");
+  console.info("🎓 [DEBUG] finishOnboarding");
   if (inactivityTimer) clearTimeout(inactivityTimer);
   const overlay = document.getElementById("onboarding-overlay");
   if (overlay) {
     // FIX: Immediately disable pointer events to prevent blocking clicks during fade-out
     overlay.style.pointerEvents = "none";
     const children = overlay.querySelectorAll("*");
-    children.forEach((el) => ((el as HTMLElement).style.pointerEvents = "none"));
+    children.forEach(
+      (el) => ((el as HTMLElement).style.pointerEvents = "none"),
+    );
 
     overlay.classList.remove("active");
     if (activeElement && clickHandler) {

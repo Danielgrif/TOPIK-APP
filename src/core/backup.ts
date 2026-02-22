@@ -1,6 +1,5 @@
 import { LS_KEYS } from "./constants";
 
-/* eslint-disable no-console */
 export function createLocalBackup() {
   try {
     const keys = [

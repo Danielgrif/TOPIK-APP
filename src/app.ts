@@ -20,6 +20,7 @@ import {
   showError,
   saveAndRender,
   updatePingIndicator,
+  sortByLevel,
 } from "./ui/ui.ts";
 import {
   showUpdateNotification,
@@ -38,6 +39,7 @@ import {
   handleCategoryChange,
   setTypeFilter,
   setStarFilter,
+  resetFilters,
 } from "./ui/ui_filters.ts";
 import { checkAndShowOnboarding } from "./ui/ui_onboarding.ts";
 import {
@@ -46,6 +48,7 @@ import {
   resetSearchHandler,
   setupGridEffects,
   restoreScroll,
+  toggleWordInList,
 } from "./ui/ui_card.ts";
 import {
   openModal,
@@ -72,6 +75,10 @@ import {
   setTtsVolume,
   resetAllSettings,
   applyAccentColor,
+  updateTrashRetentionUI,
+  updateThemePickerUI,
+  resetOnboarding,
+  setTrashRetention,
 } from "./ui/ui_settings.ts";
 
 import {
@@ -108,13 +115,44 @@ import {
   checkSuperChallengeNotification,
   quitQuiz,
   buildQuizModes,
+  handleQuizSummaryContinue,
 } from "./ui/quiz.ts";
-import { canClaimDailyReward, claimDailyReward } from "./ui/ui_shop.ts";
-import { setupTrash } from "./ui/ui_trash.ts";
+import {
+  canClaimDailyReward,
+  claimDailyReward,
+  openShopModal,
+  switchShopTab,
+  buyItem,
+  applyShopTheme,
+} from "./ui/ui_shop.ts";
+import { setupTrash, restoreWord, permanentlyDeleteWord, emptyTrash } from "./ui/ui_trash.ts";
 import { checkPronunciation } from "./core/speech.ts";
 import { SW_MESSAGES, DB_TABLES } from "./core/constants.ts";
 import { Quote, User } from "./types/index.ts";
 import type { Session } from "@supabase/supabase-js";
+import { collectionsState } from "./core/collections_data.ts";
+import {
+  createList,
+  saveListChanges,
+  deleteList,
+  openEditListModal,
+  setCollectionFilter,
+  manageMyWords,
+  clearCollectionFilter,
+  editListTitleInline,
+} from "./ui/ui_collections.ts";
+import { openEditWordModal, saveWordChanges, deleteWord } from "./ui/ui_edit_word.ts";
+import {
+  toggleSelectMode,
+  bulkDelete,
+  bulkMoveToTopic,
+  bulkAddToList,
+  selectAll,
+  handleBulkAddToList,
+  createNewListForBulk,
+} from "./ui/ui_bulk.ts";
+import { startMistakeQuiz, openMistakesModal } from "./ui/ui_mistakes.ts";
+import { showRequestError } from "./ui/ui_custom_words.ts";
 
 let currentQuote: Quote | null = null;
 let welcomeAudioTimeout: number | null = null;
@@ -228,7 +266,7 @@ async function measurePing() {
   }
   try {
     const start = performance.now();
-    // @ts-ignore - supabaseUrl is protected but we need it for ping check
+    // @ts-expect-error - supabaseUrl is protected but we need it for ping check
     const baseUrl = client.supabaseUrl;
     if (!baseUrl) throw new Error("No URL");
     const apiUrl = `${baseUrl}/rest/v1/`;
@@ -300,7 +338,12 @@ function setupGlobalListeners() {
     );
     console.log("Target:", target);
     console.log("Path:", e.composedPath());
-    console.log("Onboarding Active:", document.getElementById("onboarding-overlay")?.classList.contains("active"));
+    console.log(
+      "Onboarding Active:",
+      document
+        .getElementById("onboarding-overlay")
+        ?.classList.contains("active"),
+    );
     console.log("Modal Active:", document.querySelector(".modal.active")?.id);
     console.groupEnd();
 
@@ -374,7 +417,7 @@ function setupGlobalListeners() {
           toggleFilterPanel();
           break;
         case "reset-filters":
-          import("./ui/ui_filters.ts").then((m) => m.resetFilters());
+          resetFilters();
           break;
         case "set-type-filter":
           if (value) setTypeFilter(value, actionTrigger as HTMLElement);
@@ -398,7 +441,7 @@ function setupGlobalListeners() {
           sortByTopic();
           break;
         case "sort-level":
-          import("./ui/ui.ts").then((m) => m.sortByLevel());
+          sortByLevel();
           break;
         case "sort-weak":
           sortByWeakWords();
@@ -411,17 +454,15 @@ function setupGlobalListeners() {
           updateBottomNav("open-review");
           break;
         case "open-shop":
-          import("./ui/ui_shop.ts").then((m) => m.openShopModal());
+          openShopModal();
           break;
         case "open-profile":
           openProfileModal();
-          import("./ui/ui_settings.ts").then((m) => {
-            m.updateTrashRetentionUI();
-            m.updateThemePickerUI();
-          });
+          updateTrashRetentionUI();
+          updateThemePickerUI();
           break;
         case "open-mistakes":
-          import("./ui/ui_mistakes").then((m) => m.openMistakesModal());
+          openMistakesModal();
           break;
         case "set-accent":
           if (value) setAccentColor(value);
@@ -534,48 +575,41 @@ function setupGlobalListeners() {
           resetAllSettings();
           break;
         case "reset-onboarding":
-          import("./ui/ui_settings.ts").then((m) => m.resetOnboarding());
+          resetOnboarding();
           break;
         case "create-list":
-          import("./ui/ui_collections.ts").then((m) => m.createList());
+          createList();
           break;
         case "save-list-changes":
-          import("./ui/ui_collections.ts").then((m) => m.saveListChanges());
+          saveListChanges();
           break;
         case "save-word-changes":
-          import("./ui/ui_edit_word.ts").then((m) => m.saveWordChanges());
+          saveWordChanges();
           break;
         case "delete-word":
-          import("./ui/ui_edit_word.ts").then((m) => m.deleteWord());
+          deleteWord();
           break;
         case "open-collections-filter":
-          import("./ui/ui_collections.ts").then((_m) => {
-            /* Logic to show filter selection modal */ openModal(
-              "collections-modal",
-            );
-          });
+          openModal("collections-modal");
           updateBottomNav("open-collections-filter");
           break;
         case "toggle-select-mode":
-          import("./ui/ui_bulk.ts").then((m) => m.toggleSelectMode());
+          toggleSelectMode();
           break;
         case "bulk-delete":
-          import("./ui/ui_bulk.ts").then((m) => m.bulkDelete());
+          bulkDelete();
           break;
         case "bulk-move":
-          import("./ui/ui_bulk.ts").then((m) => m.bulkMoveToTopic());
+          bulkMoveToTopic();
           break;
         case "bulk-list":
-          import("./ui/ui_bulk.ts").then((m) => m.bulkAddToList());
+          bulkAddToList();
           break;
         case "bulk-select-all":
-          import("./ui/ui_bulk.ts").then((m) => m.selectAll());
+          selectAll();
           break;
         case "set-trash-retention":
-          if (value)
-            import("./ui/ui_settings.ts").then((m) =>
-              m.setTrashRetention(value),
-            );
+          if (value) setTrashRetention(value);
           break;
         case "toggle-session":
           toggleSessionTimer();
@@ -584,117 +618,80 @@ function setupGlobalListeners() {
           resetSearchHandler();
           break;
         case "switch-shop-tab":
-          if (value)
-            import("./ui/ui_shop.ts").then((m) => (m as any).switchShopTab(value));
+          if (value) switchShopTab(value);
           break;
         case "delete-list":
           if (value)
-            import("./ui/ui_collections.ts").then((m) =>
-              m.deleteList(value, actionTrigger as HTMLElement),
-            );
+            deleteList(value, actionTrigger as HTMLElement);
           break;
         case "edit-list":
           {
             const title = actionTrigger.getAttribute("data-title") || "";
             const icon = actionTrigger.getAttribute("data-icon") || "";
             if (value)
-              import("./ui/ui_collections.ts").then((m) =>
-                m.openEditListModal(value, title, icon),
-              );
+              openEditListModal(value, title, icon);
           }
           break;
         case "set-collection-filter":
-          import("./ui/ui_collections.ts").then((m) =>
-            m.setCollectionFilter(value, e),
-          );
+          setCollectionFilter(value, e);
           break;
         case "edit-word":
           if (value)
-            import("./ui/ui_edit_word.ts").then((m) =>
-              m.openEditWordModal(value),
-            );
+            openEditWordModal(value);
           break;
         case "restore-word":
-          if (value)
-            import("./ui/ui_trash.ts").then((m) => m.restoreWord(value));
+          if (value) restoreWord(Number(value));
           break;
         case "delete-word-permanent":
-          if (value)
-            import("./ui/ui_trash.ts").then((m) =>
-              m.permanentlyDeleteWord(value, actionTrigger as HTMLElement),
-            );
+          if (value) permanentlyDeleteWord(Number(value), actionTrigger as HTMLElement);
           break;
         case "bulk-add-to-list-item":
           if (value)
-            import("./ui/ui_bulk.ts").then((m) =>
-              (m as any).handleBulkAddToList(value),
-            );
+            handleBulkAddToList(value);
           break;
         case "create-new-list-bulk":
-          import("./ui/ui_bulk.ts").then((m) =>
-            (m as any).createNewListForBulk(),
-          );
+          createNewListForBulk();
           break;
         case "toggle-word-in-list":
           {
             const listId = actionTrigger.getAttribute("data-list-id");
             const wordId = actionTrigger.getAttribute("data-word-id");
             if (listId && wordId) {
-              import("./ui/ui_card.ts").then((m) =>
-                (m as any).toggleWordInList(
-                  listId,
-                  Number(wordId),
-                  actionTrigger as HTMLElement,
-                ),
-              );
+              toggleWordInList(listId, Number(wordId), actionTrigger as HTMLElement);
             }
           }
           break;
         case "start-mistake-quiz":
-          import("./ui/ui_mistakes.ts").then((m) => m.startMistakeQuiz());
+          startMistakeQuiz();
           break;
         case "quiz-summary-continue":
-          import("./ui/quiz.ts").then((m) =>
-            (m as any).handleQuizSummaryContinue(),
-          );
+          handleQuizSummaryContinue();
           break;
         case "claim-reward":
-          import("./ui/ui_shop.ts").then((m) =>
-            m.claimDailyReward(actionTrigger as HTMLElement),
-          );
+          claimDailyReward(actionTrigger as HTMLElement);
           break;
         case "buy-item":
-          if (value)
-            import("./ui/ui_shop.ts").then((m) =>
-              m.buyItem(value, actionTrigger as HTMLButtonElement),
-            );
+          if (value) buyItem(value, actionTrigger as HTMLButtonElement);
           break;
         case "apply-shop-theme":
-          if (value)
-            import("./ui/ui_shop.ts").then((m) => (m as any).applyShopTheme(value));
+          if (value) applyShopTheme(value);
           break;
         case "manage-my-words":
-          import("./ui/ui_collections.ts").then((m) => m.manageMyWords(e));
+          manageMyWords(e);
           break;
         case "clear-collection-filter":
-          import("./ui/ui_collections.ts").then((m) =>
-            m.clearCollectionFilter(e),
-          );
+          clearCollectionFilter(e);
           break;
         case "edit-list-title-inline":
           if (value)
-            import("./ui/ui_collections.ts").then((m) =>
-              m.editListTitleInline(value, actionTrigger as HTMLElement, e),
-            );
+            editListTitleInline(value, actionTrigger as HTMLElement, e);
           break;
         case "empty-trash":
-          import("./ui/ui_trash.ts").then((m) => m.emptyTrash());
+          emptyTrash();
           break;
         case "show-request-error": {
           const errorMsg = actionTrigger.getAttribute("data-error") || "";
-          import("./ui/ui_custom_words.ts").then((m) =>
-            m.showRequestError(errorMsg),
-          );
+          showRequestError(errorMsg);
           break;
         }
         case "speak": {
@@ -1028,9 +1025,9 @@ function setupNetworkListeners() {
   });
 
   // Слушаем изменения качества соединения (Network Information API)
-  // @ts-ignore
+  // @ts-expect-error Navigator connection API is experimental
   if (navigator.connection) {
-    // @ts-ignore
+    // @ts-expect-error Navigator connection API is experimental
     const conn = navigator.connection;
     conn.addEventListener("change", () => {
       // Если интернет стал хорошим (3g или 4g) и не включена экономия данных
@@ -1138,29 +1135,21 @@ function setupRealtimeUpdates() {
         (payload: { new: any }) => {
           const newItem = payload.new;
           if (newItem && newItem.list_id && newItem.word_id) {
-            import("./core/collections_data.ts").then(
-              ({ collectionsState }) => {
-                if (!collectionsState.listItems[newItem.list_id]) {
-                  collectionsState.listItems[newItem.list_id] = new Set();
-                }
-                collectionsState.listItems[newItem.list_id].add(
-                  newItem.word_id,
-                );
+            if (!collectionsState.listItems[newItem.list_id]) {
+              collectionsState.listItems[newItem.list_id] = new Set();
+            }
+            collectionsState.listItems[newItem.list_id].add(newItem.word_id);
 
-                // Если мы сейчас смотрим этот список — обновляем экран
-                if (
-                  collectionsState.currentCollectionFilter === newItem.list_id
-                ) {
-                  const grid = document.getElementById("vocabulary-grid");
-                  const savedScroll = grid ? grid.scrollTop : 0;
-                  render();
-                  if (grid) grid.scrollTop = savedScroll;
-                }
-                // Обновляем счетчики в меню коллекций
-                import("./ui/ui_collections.ts").then((m) =>
-                  m.updateCollectionUI(),
-                );
-              },
+            // Если мы сейчас смотрим этот список — обновляем экран
+            if (collectionsState.currentCollectionFilter === newItem.list_id) {
+              const grid = document.getElementById("vocabulary-grid");
+              const savedScroll = grid ? grid.scrollTop : 0;
+              render();
+              if (grid) grid.scrollTop = savedScroll;
+            }
+            // Обновляем счетчики в меню коллекций
+            import("./ui/ui_collections.ts").then((m) =>
+              m.updateCollectionUI(),
             );
           }
         },

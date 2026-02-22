@@ -1,5 +1,5 @@
 /// <reference lib="webworker" />
-/* eslint-disable no-console */
+
 import { precacheAndRoute, cleanupOutdatedCaches } from "workbox-precaching";
 import { clientsClaim } from "workbox-core";
 import { registerRoute } from "workbox-routing";
@@ -24,7 +24,6 @@ self.skipWaiting();
 clientsClaim();
 cleanupOutdatedCaches();
 
-// @ts-ignore
 precacheAndRoute(self.__WB_MANIFEST);
 
 const AUDIO_CACHE_NAME = "topik-audio-v1";
@@ -226,7 +225,7 @@ self.addEventListener("fetch", (e: FetchEvent) => {
             if (response) return response;
 
             // 🐌 Проверка скорости сети: пропускаем загрузку тяжелых файлов на медленном интернете
-            // @ts-ignore
+            // @ts-expect-error Navigator connection API is experimental
             const conn = navigator.connection;
             if (
               conn &&

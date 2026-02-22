@@ -4,8 +4,7 @@ export const SHOP_ITEMS: ShopItem[] = [
   {
     id: "item_streak_freeze",
     name: "Заморозка серии",
-    description:
-      "Защищает серию при пропуске дня. Максимум 2 в инвентаре.",
+    description: "Защищает серию при пропуске дня. Максимум 2 в инвентаре.",
     price: 200,
     type: "feature",
     value: "streak_freeze",

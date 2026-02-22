@@ -1,6 +1,10 @@
 import { client } from "./supabaseClient.ts";
 import { state, Session, CURRENT_DB_VERSION } from "./state.ts";
-import { showToast, parseBilingualString, isConnectionSlow } from "../utils/utils.ts";
+import {
+  showToast,
+  parseBilingualString,
+  isConnectionSlow,
+} from "../utils/utils.ts";
 import { syncGlobalStats } from "./sync.ts";
 import { Scheduler } from "./scheduler.ts";
 import { LS_KEYS, DB_TABLES } from "./constants.ts";
@@ -127,6 +131,7 @@ export function immediateSaveState() {
     localStorage.setItem(LS_KEYS.VOCAB_CACHE, JSON.stringify(state.dataStore));
     localStorage.setItem(LS_KEYS.TTS_VOLUME, String(state.ttsVolume));
     localStorage.setItem(LS_KEYS.VOCAB_VERSION, VOCABULARY_CACHE_VERSION);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
   } catch (e: any) {
     console.error("Save error:", e);
     if (
@@ -362,10 +367,10 @@ export async function fetchVocabulary() {
         "Request aborted. This might be due to a timeout or navigation.",
       );
     } else if (typeof e === "object" && e !== null) {
-      // @ts-ignore
-      if ("message" in e) console.error("Error Message:", e.message);
-      // @ts-ignore
-      if ("details" in e) console.error("Error Details:", e.details);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      if ("message" in e) console.error("Error Message:", (e as any).message);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      if ("details" in e) console.error("Error Details:", (e as any).details);
     }
     if (state.dataStore.length > 0) {
       showToast("⚠️ Ошибка сети. Используются кэшированные данные.");

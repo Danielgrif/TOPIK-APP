@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import { client } from "../core/supabaseClient.ts";
 import { showToast, escapeHtml } from "../utils/utils.ts";
 import { openModal, openConfirm } from "./ui_modal.ts";

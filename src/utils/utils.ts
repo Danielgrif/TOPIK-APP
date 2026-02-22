@@ -22,7 +22,7 @@ export function escapeRegExp(string: string): string {
  * Checks if the user has a slow internet connection (2g or slow-2g).
  */
 export function isConnectionSlow(): boolean {
-  // @ts-ignore
+  // @ts-expect-error Navigator connection API is experimental
   const conn = navigator.connection;
   if (!conn) return false;
   return conn.saveData || ["slow-2g", "2g"].includes(conn.effectiveType);

@@ -560,7 +560,8 @@ export function startQuizMode(mode: string) {
           bar.style.backgroundColor = "";
         }
         // Reset color if frozen ended
-        if (!isTimeFrozen && bar.style.backgroundColor === "var(--info)") bar.style.backgroundColor = "";
+        if (!isTimeFrozen && bar.style.backgroundColor === "var(--info)")
+          bar.style.backgroundColor = "";
       }
 
       // Update sprint button timers if they exist
@@ -1107,7 +1108,13 @@ function renderPowerups() {
   container.innerHTML = "";
 
   // Helper to create button
-  const createBtn = (_id: string, icon: string, count: number, handler: () => void, disabled: boolean = false) => {
+  const createBtn = (
+    _id: string,
+    icon: string,
+    count: number,
+    handler: () => void,
+    disabled: boolean = false,
+  ) => {
     const btn = document.createElement("button");
     btn.className = "powerup-btn";
     if (count <= 0 || disabled) btn.disabled = true;
@@ -1121,23 +1128,50 @@ function renderPowerups() {
 
   // 1. Time Freeze (Only for countdown modes)
   if (currentConfig?.isTimerCountdown) {
-    const btn = createBtn("time_freeze", "⏳", state.userStats.timeFreeze || 0, () => useTimeFreeze());
+    const btn = createBtn(
+      "time_freeze",
+      "⏳",
+      state.userStats.timeFreeze || 0,
+      () => useTimeFreeze(),
+    );
     if (isTimeFrozen) btn.classList.add("active");
     container.appendChild(btn);
   }
 
   // 2. Skip Question
-  container.appendChild(createBtn("skip_question", "⏭️", state.userStats.skipQuestion || 0, () => useSkipQuestion()));
+  container.appendChild(
+    createBtn("skip_question", "⏭️", state.userStats.skipQuestion || 0, () =>
+      useSkipQuestion(),
+    ),
+  );
 
   // 3. 50/50 (Only for multiple choice with enough options)
-  const optionsCount = document.querySelectorAll("#quiz-opts .quiz-option").length;
-  if (optionsCount >= 4 && (currentQuizMode === "multiple-choice" || currentQuizMode === "survival" || currentQuizMode === "sprint")) {
-    container.appendChild(createBtn("fifty_fifty", "⚖️", state.userStats.fiftyFifty || 0, () => useFiftyFifty()));
+  const optionsCount = document.querySelectorAll(
+    "#quiz-opts .quiz-option",
+  ).length;
+  if (
+    optionsCount >= 4 &&
+    (currentQuizMode === "multiple-choice" ||
+      currentQuizMode === "survival" ||
+      currentQuizMode === "sprint")
+  ) {
+    container.appendChild(
+      createBtn("fifty_fifty", "⚖️", state.userStats.fiftyFifty || 0, () =>
+        useFiftyFifty(),
+      ),
+    );
   }
 
   // 4. Heal (Only for survival)
   if (currentQuizMode === "survival") {
-    container.appendChild(createBtn("survival_heal", "❤️", state.userStats.survivalHealth || 0, () => useHeal()));
+    container.appendChild(
+      createBtn(
+        "survival_heal",
+        "❤️",
+        state.userStats.survivalHealth || 0,
+        () => useHeal(),
+      ),
+    );
   }
 }
 
@@ -1185,8 +1219,12 @@ function useSkipQuestion() {
 function useFiftyFifty() {
   if ((state.userStats.fiftyFifty || 0) <= 0) return;
 
-  const options = Array.from(document.querySelectorAll("#quiz-opts .quiz-option")) as HTMLButtonElement[];
-  const incorrectOptions = options.filter(btn => btn.dataset.correct !== "true" && !btn.disabled);
+  const options = Array.from(
+    document.querySelectorAll("#quiz-opts .quiz-option"),
+  ) as HTMLButtonElement[];
+  const incorrectOptions = options.filter(
+    (btn) => btn.dataset.correct !== "true" && !btn.disabled,
+  );
 
   if (incorrectOptions.length < 2) {
     showToast("Недостаточно вариантов для 50/50");
@@ -1198,7 +1236,7 @@ function useFiftyFifty() {
 
   // Shuffle and pick 2 to hide
   incorrectOptions.sort(() => Math.random() - 0.5);
-  incorrectOptions.slice(0, 2).forEach(btn => {
+  incorrectOptions.slice(0, 2).forEach((btn) => {
     btn.style.opacity = "0.2";
     btn.style.pointerEvents = "none";
     btn.disabled = true;

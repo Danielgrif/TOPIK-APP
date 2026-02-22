@@ -766,10 +766,10 @@ export function renderLearnedChart() {
   for (let i = 0; i < data.length; i++) {
     const w = data[i];
     if (w.level && w.level in totals) {
-      // @ts-ignore
+      // @ts-expect-error Index signature mismatch
       totals[w.level]++;
       if (state.learned.has(w.id)) {
-        // @ts-ignore
+        // @ts-expect-error Index signature mismatch
         levels[w.level]++;
       }
     }
@@ -805,7 +805,6 @@ export function renderLearnedChart() {
           callbacks: {
             label: (context: ChartTooltipContext) => {
               const lvl = context.label as keyof typeof totals;
-              // @ts-ignore
               const total = totals[lvl] || 0;
               const val = context.raw;
               const pct = total > 0 ? Math.round((val / total) * 100) : 0;

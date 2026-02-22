@@ -1,4 +1,4 @@
-/* eslint-disable no-console, @typescript-eslint/no-explicit-any */
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import {
   Word,
   UserStats,
@@ -437,7 +437,8 @@ try {
   if (state.userStats.survivalHealth === undefined)
     state.userStats.survivalHealth = 0;
   if (state.userStats.timeFreeze === undefined) state.userStats.timeFreeze = 0;
-  if (state.userStats.skipQuestion === undefined) state.userStats.skipQuestion = 0;
+  if (state.userStats.skipQuestion === undefined)
+    state.userStats.skipQuestion = 0;
   if (state.userStats.fiftyFifty === undefined) state.userStats.fiftyFifty = 0;
 } catch (e) {
   console.error("State init error:", e);

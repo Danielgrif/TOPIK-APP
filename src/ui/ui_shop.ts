@@ -116,16 +116,22 @@ export function updateShopUI() {
       const isActiveTheme = isTheme && state.themeColor === item.value;
 
       let btnHtml = "";
-      
+
       if (isPurchased && item.type === "theme") {
-          if (isActiveTheme) {
-            btnHtml = `<button class="btn btn-quiz purchased" disabled>✓ Используется</button>`;
-          } else {
-            btnHtml = `<button class="btn btn-quiz" data-action="apply-shop-theme" data-value="${item.value}">Применить</button>`;
-          }
-      } else if (item.value === "streak_freeze" || item.value === "survival_heal") {
+        if (isActiveTheme) {
+          btnHtml = `<button class="btn btn-quiz purchased" disabled>✓ Используется</button>`;
+        } else {
+          btnHtml = `<button class="btn btn-quiz" data-action="apply-shop-theme" data-value="${item.value}">Применить</button>`;
+        }
+      } else if (
+        item.value === "streak_freeze" ||
+        item.value === "survival_heal"
+      ) {
         // Расходники
-        const count = item.value === "streak_freeze" ? (state.userStats.streakFreeze || 0) : (state.userStats.survivalHealth || 0);
+        const count =
+          item.value === "streak_freeze"
+            ? state.userStats.streakFreeze || 0
+            : state.userStats.survivalHealth || 0;
         btnHtml = `<button class="btn btn-quiz shop-item-buy-btn" data-action="buy-item" data-value="${item.id}" ${
           !canAfford ? "disabled" : ""
         }>
@@ -134,11 +140,11 @@ export function updateShopUI() {
       } else {
         // Обычная покупка (темы, которые еще не куплены)
         if (isPurchased) {
-             btnHtml = `<button class="btn btn-quiz purchased" disabled>✓ Куплено</button>`;
+          btnHtml = `<button class="btn btn-quiz purchased" disabled>✓ Куплено</button>`;
         } else {
-             btnHtml = `<button class="btn btn-quiz shop-item-buy-btn" data-action="buy-item" data-value="${item.id}" ${
-          !canAfford ? "disabled" : ""
-        }>
+          btnHtml = `<button class="btn btn-quiz shop-item-buy-btn" data-action="buy-item" data-value="${item.id}" ${
+            !canAfford ? "disabled" : ""
+          }>
                 💰 ${item.price}
             </button>`;
         }
@@ -161,8 +167,8 @@ export function buyItem(id: string, _btn?: HTMLButtonElement) {
   if (!item) return;
 
   if (state.purchasedItems.includes(id) && item.type === "theme") {
-      showToast("Вы уже купили это");
-      return;
+    showToast("Вы уже купили это");
+    return;
   }
 
   if ((state.userStats.coins || 0) < item.price) {
@@ -187,7 +193,8 @@ export function buyItem(id: string, _btn?: HTMLButtonElement) {
           `❄️ Заморозка добавлена! Всего: ${state.userStats.streakFreeze}`,
         );
       } else if (item.value === "survival_heal") {
-        state.userStats.survivalHealth = (state.userStats.survivalHealth || 0) + 1;
+        state.userStats.survivalHealth =
+          (state.userStats.survivalHealth || 0) + 1;
         showToast(
           `❤️ Жизнь добавлена! Всего доп. жизней: ${state.userStats.survivalHealth}`,
         );

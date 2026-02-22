@@ -1,7 +1,7 @@
 /* eslint-disable no-console, @typescript-eslint/no-explicit-any */
 import { state } from "./state.ts";
 import { loadFromSupabase } from "./db.ts";
-import { showToast, promiseWithTimeout } from "../utils/utils.ts";
+import { showToast } from "../utils/utils.ts";
 import { saveAndRender } from "../ui/ui.ts";
 import { openModal, closeModal, openConfirm } from "../ui/ui_modal.ts";
 import { applyTheme, updateVoiceUI } from "../ui/ui_settings.ts";
@@ -77,15 +77,16 @@ export function openProfileModal() {
   // АТОМАРНОЕ ИЗМЕНЕНИЕ: Синхронная проверка состояния.
   // Мы доверяем state.currentUser, который обновляется в app.ts.
   // Это гарантирует мгновенный отклик UI в том же цикле событий.
-  
-  console.log("👤 [DEBUG] openProfileModal called. Current User:", state.currentUser);
-  
+
+  console.log(
+    "👤 [DEBUG] openProfileModal called. Current User:",
+    state.currentUser,
+  );
+
   if (state.currentUser) {
     const user = state.currentUser;
     const displayName =
-      user.user_metadata?.full_name ||
-      user.email?.split("@")[0] ||
-      "Гость";
+      user.user_metadata?.full_name || user.email?.split("@")[0] || "Гость";
 
     const nameDisplay = document.getElementById("profile-name-display");
     const nameInput = document.getElementById(
@@ -147,7 +148,9 @@ export function openProfileModal() {
       roleEl.textContent = `${role} (LVL ${lvl})`;
     }
 
-    const input = document.getElementById("new-password") as HTMLInputElement | null;
+    const input = document.getElementById(
+      "new-password",
+    ) as HTMLInputElement | null;
     const bar = document.getElementById("new-strength-bar");
     const container = document.getElementById("new-strength-container");
 
@@ -233,7 +236,10 @@ async function performReset(email: string) {
   if (!email) return showAuthError("Введите Email для сброса пароля");
   showToast("⏳ Отправка письма...");
   try {
-    const { error } = await AuthService.resetPasswordForEmail(email, window.location.href);
+    const { error } = await AuthService.resetPasswordForEmail(
+      email,
+      window.location.href,
+    );
     if (error) throw error;
     alert(`Ссылка для входа отправлена на ${email}.\nПроверьте почту.`);
     closeModal("login-modal");
@@ -246,7 +252,10 @@ async function performLogin(email: string, password: string) {
   if (!email || !password) return showAuthError("Введите Email и пароль");
   showToast("⏳ Вход...");
   try {
-    const { data, error } = await AuthService.signInWithPassword(email, password);
+    const { data, error } = await AuthService.signInWithPassword(
+      email,
+      password,
+    );
     if (error) throw error;
     if (data.user) await finalizeAuth(data.user as any);
   } catch (e) {
@@ -337,7 +346,9 @@ function handleAuthError(e: unknown) {
 }
 
 export async function signInWithGoogle() {
-  const { error } = await AuthService.signInWithGoogle(window.location.origin + window.location.pathname);
+  const { error } = await AuthService.signInWithGoogle(
+    window.location.origin + window.location.pathname,
+  );
   if (error) {
     console.error("Google Sign-In Error:", error);
     alert("Ошибка Google входа: " + error.message);

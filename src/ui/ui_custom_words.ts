@@ -572,9 +572,9 @@ function trackProgress(
   const progressViewContainer =
     progressView.querySelector(".modal-body-container") || progressView;
   let errorCount = 0;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
   let vocabChannel: any = null;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
   let requestChannel: any = null;
   let safetyTimeout: number | null = null;
   let observer: MutationObserver | null = null;

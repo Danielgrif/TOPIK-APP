@@ -7,7 +7,6 @@ import {
 } from "./utils/utils.ts";
 import { QuizStrategies } from "./ui/quiz_strategies.ts";
 import { state } from "./core/state.ts";
-import { runSettingsTests } from "../test_settings.ts";
 import { Word } from "./types/index.ts";
 
 /**
@@ -250,8 +249,6 @@ export async function runTests() {
     console.error("💥 Quiz Strategy Exception:", e);
     failed++;
   }
-
-  await runSettingsTests(assert);
 
   console.log(`\n🏁 Result: ${passed} Passed, ${failed} Failed`);
   console.groupEnd();

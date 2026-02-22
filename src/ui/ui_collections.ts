@@ -1,4 +1,4 @@
-/* eslint-disable no-console, @typescript-eslint/no-explicit-any */
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { state } from "../core/state.ts";
 import { client } from "../core/supabaseClient.ts";
 import { showToast, showUndoToast, escapeHtml } from "../utils/utils.ts";

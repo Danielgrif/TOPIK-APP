@@ -13,6 +13,7 @@ import { checkPronunciation } from "../core/speech.ts";
 import { findConfusingWords } from "../core/confusing_words.ts";
 import { Word } from "../types/index.ts";
 import { quitQuiz } from "./quiz.ts";
+import { recordAttempt } from "../core/db.ts";
 
 function getAudioBtnHtml(url: string | undefined): string {
   if (!url) return "";
@@ -769,9 +770,7 @@ export const QuizStrategies: Record<string, Strategy> = {
 
                 // Record attempt for the word on the left (the "question" word)
                 if (leftId) {
-                  import("../core/db.ts").then((m) =>
-                    m.recordAttempt(leftId, true),
-                  );
+                  recordAttempt(leftId, true);
                 }
               } else {
                 playTone("failure", 100);

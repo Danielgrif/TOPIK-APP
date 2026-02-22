@@ -100,7 +100,7 @@ export async function syncGlobalStats() {
     }
   } catch (e) {
     console.error("Sync failed:", e);
-    // @ts-ignore
+    // @ts-expect-error Error type is unknown
     if (e?.message?.includes("JWT") || e?.code === "PGRST301") {
       // Токен мог истечь во время выполнения запроса
       showToast("⚠️ Ошибка синхронизации: требуется повторный вход");
