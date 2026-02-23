@@ -2,8 +2,11 @@
 <div id="toolbar">
   <div class="search-container">
     <label for="searchInput" class="visually-hidden">Поиск по словарю</label>
-    <span class="search-icon">🔍</span>
+    <span class="search-icon">
+      <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+    </span>
     <input type="search" id="searchInput" name="search" class="search-input" placeholder="Поиск по словарю..." autocomplete="off" />
+    <button class="search-clear-btn" data-action="reset-search" title="Очистить" tabindex="-1">✕</button>
     <div id="search-history-container"></div>
   </div>
   <div class="toolbar-actions">

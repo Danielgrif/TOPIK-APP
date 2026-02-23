@@ -315,7 +315,7 @@ export function updateCollectionUI() {
       let html = "";
 
       // --- Section: My Content ---
-      html += `<div class="section-title-sm" style="margin-top: 0;">👤 Мои материалы</div>`;
+      html += `<div class="section-title-sm" style="margin-top: 10px; margin-bottom: 12px;">👤 Мои материалы</div>`;
 
       // 1. My Custom Words (Virtual List)
       if (myCustomWordsCount > 0) {
@@ -339,7 +339,11 @@ export function updateCollectionUI() {
       // 2. My Lists
       if (myLists.length === 0) {
         html +=
-          '<div style="text-align:center; padding:15px; color:var(--text-sub); font-size: 13px; background: var(--surface-2); border-radius: 12px; margin-bottom: 15px;">У вас нет личных списков</div>';
+          `<div style="text-align:center; padding: 40px 20px; color:var(--text-sub); background: var(--surface-2); border-radius: 16px; border: 1px dashed var(--border-color); margin-bottom: 15px;">
+            <div style="font-size: 40px; margin-bottom: 10px; opacity: 0.6;">📭</div>
+            <div style="font-weight: 700; font-size: 15px; margin-bottom: 4px;">У вас нет личных списков</div>
+            <div style="font-size: 13px; opacity: 0.8;">Создайте первый список выше!</div>
+          </div>`;
       } else {
         html += '<div id="my-lists-container">';
         html += myLists

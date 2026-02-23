@@ -41,7 +41,7 @@ import {
   setStarFilter,
   resetFilters,
 } from "./ui/ui_filters.ts";
-import { checkAndShowOnboarding } from "./ui/ui_onboarding.ts";
+import { checkAndShowOnboarding, startOnboarding } from "./ui/ui_onboarding.ts";
 import {
   render,
   renderSkeletons,
@@ -77,7 +77,6 @@ import {
   applyAccentColor,
   updateTrashRetentionUI,
   updateThemePickerUI,
-  resetOnboarding,
   setTrashRetention,
 } from "./ui/ui_settings.ts";
 
@@ -353,6 +352,10 @@ function setupGlobalListeners() {
       if (modalId) {
         openModal(modalId);
         updateBottomNav(modalId);
+        // FIX: Render stats when modal opens
+        if (modalId === "stats-modal") {
+            renderDetailedStats();
+        }
       }
       return;
     }
@@ -575,7 +578,7 @@ function setupGlobalListeners() {
           resetAllSettings();
           break;
         case "reset-onboarding":
-          resetOnboarding();
+          startOnboarding();
           break;
         case "create-list":
           createList();
@@ -1216,23 +1219,33 @@ async function init() {
     // Принудительно обновляем содержимое панели согласно вашему списку
     nav.innerHTML = `
         <button class="nav-btn active" data-action="nav-home">
-            <span class="nav-icon">🏠</span>
+            <span class="nav-icon">
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+            </span>
             <span class="nav-label">Главная</span>
         </button>
         <button class="nav-btn" data-action="open-collections-filter">
-            <span class="nav-icon">📂</span>
+            <span class="nav-icon">
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></svg>
+            </span>
             <span class="nav-label">Списки</span>
         </button>
         <button class="nav-btn" data-modal-target="quiz-modal">
-            <span class="nav-icon">🎯</span>
+            <span class="nav-icon">
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="6" x2="10" y1="12" y2="12"/><line x1="8" x2="8" y1="10" y2="14"/><line x1="15" x2="15.01" y1="13" y2="13"/><line x1="18" x2="18.01" y1="11" y2="11"/><rect width="20" height="12" x="2" y="6" rx="2"/></svg>
+            </span>
             <span class="nav-label">Тренировка</span>
         </button>
         <button class="nav-btn" data-action="open-review">
-            <span class="nav-icon">🧠</span>
+            <span class="nav-icon">
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 16h5v5"/></svg>
+            </span>
             <span class="nav-label">Повторение</span>
         </button>
         <button class="nav-btn" data-modal-target="stats-modal">
-            <span class="nav-icon">📊</span>
+            <span class="nav-icon">
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" x2="18" y1="20" y2="10"/><line x1="12" x2="12" y1="20" y2="4"/><line x1="6" x2="6" y1="20" y2="14"/></svg>
+            </span>
             <span class="nav-label">Прогресс</span>
         </button>
     `;

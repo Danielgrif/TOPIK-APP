@@ -2,10 +2,10 @@
 import { defineConfig } from "vite";
 import { VitePWA } from "vite-plugin-pwa";
 
-export default defineConfig({
+export default defineConfig(({ mode }) => ({
   plugins: [
-    // Если деплоите на https://<USERNAME>.github.io/<REPO>/, раскомментируйте и укажите имя репозитория:
-    // base: '/<REPO>/',
+    // Базовый путь для GitHub Pages (название репозитория)
+    // base: '/TOPIK-APP/', 
     VitePWA({
       strategies: "injectManifest",
       srcDir: "src",
@@ -37,10 +37,10 @@ export default defineConfig({
       },
     }),
   ],
+  base: mode === "production" ? "/TOPIK-APP/" : "/",
   build: {
     target: "esnext",
   },
-  // @ts-expect-error Vitest config in Vite
   test: {
     // This is a Vitest specific configuration, not a standard Vite config property.
     // Ignoring TypeScript error as it's handled by Vitest.
@@ -55,4 +55,4 @@ export default defineConfig({
       all: true,
     },
   },
-});
+}));

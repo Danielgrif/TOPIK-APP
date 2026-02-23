@@ -119,11 +119,12 @@ export function populateFilters() {
   // Update Topic Button Text
   const topicBtn = document.getElementById("topic-filter-btn");
   if (topicBtn) {
+    const valEl = topicBtn.querySelector(".fs-value");
     const countLabel =
       state.currentTopic.includes("all") || state.currentTopic.length === 0
         ? "Все темы"
         : `Выбрано: ${state.currentTopic.length}`;
-    topicBtn.innerHTML = `<span>${countLabel}</span> <span>›</span>`;
+    if (valEl) valEl.textContent = countLabel;
   }
 
   // Render Topic Modal Content
@@ -248,6 +249,7 @@ function populateCategoryFilter() {
   // Update Category Button Text
   const catBtn = document.getElementById("category-filter-btn");
   if (catBtn) {
+    const valEl = catBtn.querySelector(".fs-value");
     let currentLabel = "Все категории";
     if (
       !state.currentCategory.includes("all") &&
@@ -255,7 +257,7 @@ function populateCategoryFilter() {
     ) {
       currentLabel = `Выбрано: ${state.currentCategory.length}`;
     }
-    catBtn.innerHTML = `<span>${currentLabel}</span> <span>›</span>`;
+    if (valEl) valEl.textContent = currentLabel;
   }
 
   // Render Category Modal Content
@@ -428,8 +430,9 @@ export function setTypeFilter(type: string, btn: HTMLElement) {
 
 export function setStarFilter(star: string, btn: HTMLElement) {
   state.currentStar = star;
+  // Сбрасываем активный класс у всех кнопок фильтрации (и уровни, и статусы)
   document
-    .querySelectorAll("#level-filters button")
+    .querySelectorAll(".filter-chip")
     .forEach((b) => b.classList.remove("active"));
   btn.classList.add("active");
   render();
@@ -447,7 +450,7 @@ export function resetFilters() {
   });
 
   // Обновляем UI фильтров уровня
-  document.querySelectorAll("#level-filters .filter-chip").forEach((b) => {
+  document.querySelectorAll(".filter-chip").forEach((b) => {
     b.classList.toggle("active", b.getAttribute("data-value") === "all");
   });
 
@@ -458,8 +461,9 @@ export function resetFilters() {
 }
 
 export function updateFilterCounts() {
-  const levelFiltersContainer = document.getElementById("level-filters");
-  if (!levelFiltersContainer) return;
+  // Ищем все кнопки фильтров (и в level-grid, и в status-grid)
+  const buttons = document.querySelectorAll<HTMLButtonElement>(".filter-chip");
+  if (buttons.length === 0) return;
 
   // Используем requestAnimationFrame, чтобы не блокировать UI при открытии панели
   requestAnimationFrame(() => {
@@ -492,8 +496,6 @@ export function updateFilterCounts() {
       }
     }
 
-    const buttons =
-      levelFiltersContainer.querySelectorAll<HTMLButtonElement>(".filter-chip");
     buttons.forEach((btn) => {
       const filterValue = btn.dataset.value;
       if (filterValue && counts[filterValue] !== undefined) {

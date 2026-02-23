@@ -35,22 +35,26 @@ function createShopModal() {
 
   modal.innerHTML = `
         <div class="modal-content shop-modal-content">
-            <div class="modal-header">
+            <div class="modal-header shop-header">
                 <h3>Магазин</h3>
                 <div class="shop-header-right">
                     <div class="shop-points" id="shop-user-points">💰 ${state.userStats.coins || 0}</div>
                     <button class="btn-icon close-modal-btn" data-close-modal="shop-modal">✕</button>
                 </div>
             </div>
-            <div class="modal-body-container" id="shop-scroll-container">
-                <!-- Daily Reward Section -->
-                <div id="daily-reward-section"></div>
-                
-                <div class="shop-tabs">
-                    <button class="shop-tab active" data-action="switch-shop-tab" data-value="all">Все</button>
-                    <button class="shop-tab" data-action="switch-shop-tab" data-value="theme">Темы</button>
-                    <button class="shop-tab" data-action="switch-shop-tab" data-value="feature">Улучшения</button>
+            
+            <div class="shop-tabs">
+                <div class="segment-control">
+                    <button class="segment-btn active" data-action="switch-shop-tab" data-value="all">Все</button>
+                    <button class="segment-btn" data-action="switch-shop-tab" data-value="theme">Темы</button>
+                    <button class="segment-btn" data-action="switch-shop-tab" data-value="feature">Улучшения</button>
+                    <button class="segment-btn" data-action="switch-shop-tab" data-value="rewards">🎁 Награды</button>
                 </div>
+            </div>
+
+            <div class="modal-body-container" id="shop-scroll-container">
+                <!-- Daily Reward Section (Hidden by default unless tab is active) -->
+                <div id="daily-reward-section" style="display: none;"></div>
 
                 <div class="shop-grid" id="shop-items-container">
                     <!-- Items will be rendered here -->
@@ -74,7 +78,7 @@ export function openShopModal() {
 
 export function switchShopTab(tab: string) {
   currentTab = tab;
-  const tabs = document.querySelectorAll(".shop-tab");
+  const tabs = document.querySelectorAll(".shop-tabs .segment-btn");
   tabs.forEach((t) => {
     if (t.getAttribute("data-value") === tab) {
       t.classList.add("active");
@@ -94,9 +98,22 @@ export function switchShopTab(tab: string) {
 export function updateShopUI() {
   const container = document.getElementById("shop-items-container");
   const pointsEl = document.getElementById("shop-user-points");
-  if (!container || !pointsEl) return;
+  const rewardSection = document.getElementById("daily-reward-section");
+  
+  if (!container || !pointsEl || !rewardSection) return;
 
   pointsEl.innerHTML = `💰 ${state.userStats.coins || 0}`;
+
+  // Логика переключения вкладок
+  if (currentTab === "rewards") {
+      container.style.display = "none";
+      rewardSection.style.display = "block";
+      renderDailyRewardUI(); // Убеждаемся, что награды отрисованы
+      return;
+  }
+
+  container.style.display = "grid";
+  rewardSection.style.display = "none";
 
   const itemsToRender = SHOP_ITEMS.filter((item) => {
     if (currentTab === "all") return true;
@@ -119,9 +136,9 @@ export function updateShopUI() {
 
       if (isPurchased && item.type === "theme") {
         if (isActiveTheme) {
-          btnHtml = `<button class="btn btn-quiz purchased" disabled>✓ Используется</button>`;
+          btnHtml = `<button class="btn purchased" disabled style="width:100%; padding:10px; border-radius:12px; font-size:13px; font-weight:700;">✓ Используется</button>`;
         } else {
-          btnHtml = `<button class="btn btn-quiz" data-action="apply-shop-theme" data-value="${item.value}">Применить</button>`;
+          btnHtml = `<button class="btn btn-quiz" data-action="apply-shop-theme" data-value="${item.value}" style="width:100%; padding:10px; border-radius:12px;">Применить</button>`;
         }
       } else if (
         item.value === "streak_freeze" ||
@@ -140,7 +157,7 @@ export function updateShopUI() {
       } else {
         // Обычная покупка (темы, которые еще не куплены)
         if (isPurchased) {
-          btnHtml = `<button class="btn btn-quiz purchased" disabled>✓ Куплено</button>`;
+          btnHtml = `<button class="btn purchased" disabled style="width:100%; padding:10px; border-radius:12px; font-size:13px; font-weight:700;">✓ Куплено</button>`;
         } else {
           btnHtml = `<button class="btn btn-quiz shop-item-buy-btn" data-action="buy-item" data-value="${item.id}" ${
             !canAfford ? "disabled" : ""
@@ -153,8 +170,10 @@ export function updateShopUI() {
       return `
             <div class="shop-item-card ${!canAfford && !isPurchased ? "disabled" : ""}" style="animation: popIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275) ${index * 0.05}s backwards;">
                 <div class="shop-item-icon">${item.icon}</div>
-                <h3 class="shop-item-name">${item.name}</h3>
-                <p class="shop-item-desc">${item.description}</p>
+                <div style="flex-grow: 1; display: flex; flex-direction: column; align-items: center; width: 100%;">
+                    <h3 class="shop-item-name">${item.name}</h3>
+                    <p class="shop-item-desc">${item.description}</p>
+                </div>
                 ${btnHtml}
             </div>
         `;
@@ -337,7 +356,7 @@ function renderDailyRewardUI() {
     const minutes = Math.floor(
       (msUntilTomorrow % (1000 * 60 * 60)) / (1000 * 60),
     );
-    actionHtml = `<div id="next-reward-timer">Следующая награда через: ${hours}ч ${minutes}м</div>`;
+    actionHtml = `<div style="text-align:center;"><div id="next-reward-timer">⏳ Следующая награда: ${hours}ч ${minutes}м</div></div>`;
   }
 
   section.innerHTML = `

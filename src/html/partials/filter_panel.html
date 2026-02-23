@@ -1,49 +1,95 @@
 <!-- Filter Panel (hidden by default) -->
 <div id="filter-panel">
   <div class="filter-panel-header">
-    <div style="display: flex; align-items: center; gap: 12px;">
+    <div class="filter-header-title">
         <h3>🔍 Фильтры</h3>
-        <button class="btn-text" data-action="reset-filters" style="font-size: 13px; background: var(--surface-2); padding: 6px 12px; border-radius: 8px;">↺ Сброс</button>
+        <button class="reset-filters-btn" data-action="reset-filters" title="Сбросить все">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+        </button>
     </div>
-    <button class="btn btn-icon close-modal-btn" data-action="toggle-filter-panel">✕</button>
+    <button class="btn-icon close-panel-btn" data-action="toggle-filter-panel">✕</button>
   </div>
   <div class="filter-panel-content">
-    <div class="filter-section">
+    
+    <div class="filter-group">
       <div class="filter-label">Тип контента</div>
       <div class="segment-control" id="type-filters">
-          <button class="segment-btn active" data-action="set-type-filter" data-value="word">📖 Слова</button>
-          <button class="segment-btn" data-action="set-type-filter" data-value="grammar">📘 Грамматика</button>
+          <button class="segment-btn active" data-action="set-type-filter" data-value="word">
+            <span class="segment-icon">📖</span> Слова
+          </button>
+          <button class="segment-btn" data-action="set-type-filter" data-value="grammar">
+            <span class="segment-icon">📘</span> Грамматика
+          </button>
       </div>
     </div>
-    <div class="filter-section">
-      <div class="filter-label">Уровень сложности</div>
-      <div class="filter-chips" id="level-filters">
-          <button class="filter-chip active" data-action="set-star-filter" data-value="all">Все</button>
-          <button class="filter-chip" data-action="set-star-filter" data-value="★★★">★★★</button>
-          <button class="filter-chip" data-action="set-star-filter" data-value="★★☆">★★☆</button>
-          <button class="filter-chip" data-action="set-star-filter" data-value="★☆☆">★☆☆</button>
-          <button class="filter-chip fav-chip" data-action="set-star-filter" data-value="favorites">❤️ Избранное</button>
-          <button class="filter-chip mistake-chip" data-action="set-star-filter" data-value="mistakes">⚠️ Ошибки</button>
+
+    <div class="filter-group">
+      <div class="filter-label">Сложность и Статус</div>
+      <div class="level-grid" id="level-filters">
+          <button class="filter-chip level-btn active" data-action="set-star-filter" data-value="all">Все</button>
+          <button class="filter-chip level-btn" data-action="set-star-filter" data-value="★★★">★★★</button>
+          <button class="filter-chip level-btn" data-action="set-star-filter" data-value="★★☆">★★☆</button>
+          <button class="filter-chip level-btn" data-action="set-star-filter" data-value="★☆☆">★☆☆</button>
+      </div>
+      <div class="status-grid">
+          <button class="filter-chip status-btn fav" data-action="set-star-filter" data-value="favorites">
+            <span class="status-icon">❤️</span> Избранное
+          </button>
+          <button class="filter-chip status-btn mistake" data-action="set-star-filter" data-value="mistakes">
+            <span class="status-icon">⚠️</span> Ошибки
+          </button>
       </div>
     </div>
-    <div class="filter-section">
-      <div class="filter-label">Тема</div>
-      <button id="topic-filter-btn" class="search-box" style="text-align: left; cursor: pointer; display: flex; justify-content: space-between; align-items: center;" data-modal-target="topic-modal"><span>Все темы</span> <span>›</span></button>
+
+    <div class="filter-group">
+      <div class="filter-label">Параметры</div>
+      <div class="filter-select-stack">
+        <button id="topic-filter-btn" class="filter-select-btn" data-modal-target="topic-modal">
+            <div class="fs-icon">🏷️</div>
+            <div class="fs-content">
+                <span class="fs-label">Тема</span>
+                <span class="fs-value">Все темы</span>
+            </div>
+            <div class="fs-arrow">›</div>
+        </button>
+        <button id="category-filter-btn" class="filter-select-btn" data-modal-target="category-modal">
+            <div class="fs-icon">🔹</div>
+            <div class="fs-content">
+                <span class="fs-label">Категория</span>
+                <span class="fs-value">Все категории</span>
+            </div>
+            <div class="fs-arrow">›</div>
+        </button>
+        <button id="collection-filter-btn" class="filter-select-btn" data-action="open-collections-filter">
+            <div class="fs-icon">📂</div>
+            <div class="fs-content">
+                <span class="fs-label">Коллекция</span>
+                <span class="fs-value">Все слова</span>
+            </div>
+            <div class="fs-arrow">›</div>
+        </button>
+      </div>
     </div>
-    <div class="filter-section">
-      <div class="filter-label">Категория</div>
-      <button id="category-filter-btn" class="search-box" style="text-align: left; cursor: pointer; display: flex; justify-content: space-between; align-items: center;" data-modal-target="category-modal"><span>Все категории</span> <span>›</span></button>
-    </div>
-    <div class="filter-section">
-      <div class="filter-label">Коллекции</div>
-      <button id="collection-filter-btn" class="search-box" style="text-align: left; cursor: pointer; display: flex; justify-content: space-between; align-items: center;" data-action="open-collections-filter"><span>Все слова</span> <span>›</span></button>
-    </div>
-    <div class="filter-section">
+
+    <div class="filter-group">
       <div class="filter-label">Сортировка</div>
-      <div class="sort-actions">
-        <button class="sort-btn" data-action="sort-topic"><span class="sort-icon">🏷️</span><span>По темам</span></button>
-        <button class="sort-btn" data-action="sort-weak"><span class="sort-icon">💪</span><span>Слабые</span></button>
-        <button class="sort-btn" data-action="shuffle"><span class="sort-icon">🔀</span><span>Перемешать</span></button>
+      <div class="sort-grid">
+        <button class="sort-card" data-action="sort-topic">
+            <span class="sort-icon">🔤</span>
+            <span>По теме</span>
+        </button>
+        <button class="sort-card" data-action="sort-level">
+            <span class="sort-icon">⭐</span>
+            <span>Сложность</span>
+        </button>
+        <button class="sort-card" data-action="sort-weak">
+            <span class="sort-icon">💪</span>
+            <span>Слабые</span>
+        </button>
+        <button class="sort-card" data-action="shuffle">
+            <span class="sort-icon">🔀</span>
+            <span>Микс</span>
+        </button>
       </div>
     </div>
   </div>

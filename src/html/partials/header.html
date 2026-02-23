@@ -1,27 +1,38 @@
 <!-- Main Header -->
 <header id="main-header">
-  <!-- XP and Level Widget -->
-  <div id="xp-level-widget" data-modal-target="stats-modal">
-    <div class="level-indicator">
-      <span class="lvl-label-mini">LVL</span>
-      <span id="user-level">1</span>
+  <div class="header-left">
+    <div class="logo-container">
+        <img src="/app-logo.svg" alt="Logo" class="header-logo">
     </div>
-    <div class="xp-progress-wrapper">
-      <div class="xp-track"><div id="xp-fill" class="xp-bar-fill"></div></div>
-      <div id="xp-text" class="xp-label">0 / 100</div>
+    <div class="header-branding">
+        <span class="brand-main">TOPIK</span>
+        <span class="brand-sub">Master</span>
     </div>
   </div>
 
-  <!-- Right side actions -->
   <div class="header-right">
+    <!-- XP Widget (Ring) -->
+    <div id="xp-level-widget" class="header-stat-item" data-modal-target="stats-modal" title="Статистика">
+        <div class="xp-ring-wrapper">
+            <svg class="xp-circular-chart" viewBox="0 0 36 36">
+                <path class="xp-circle-bg" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
+                <path id="xp-fill" class="xp-circle-fill" stroke-dasharray="0, 100" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
+            </svg>
+            <div class="xp-level-num" id="user-level">1</div>
+        </div>
+        <div class="xp-meta">
+            <span class="xp-label">LVL</span>
+            <span id="xp-text" class="xp-val-text">0 XP</span>
+        </div>
+    </div>
+
     <button class="coin-pill" data-action="open-shop" title="Магазин">
       <span class="coin-icon">💰</span>
       <span id="coins-count-header">0</span>
     </button>
-    <button id="header-dark-mode-toggle" class="btn-icon theme-toggle-btn" data-action="toggle-dark-mode" title="Сменить тему">☀️</button>
-    <button id="profile-button" class="profile-btn" data-action="open-profile">
+    
+    <button id="profile-button" class="profile-btn-icon" data-action="open-profile">
       <div id="profile-avatar" class="profile-avatar">👤</div>
-      <span id="profile-name" class="profile-name">Профиль</span>
     </button>
   </div>
 </header>

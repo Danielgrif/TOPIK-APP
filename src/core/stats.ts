@@ -55,12 +55,12 @@ export function updateXPUI() {
 
   const bar = document.getElementById("xp-fill");
   if (bar) {
-    const targetWidth = `${(xp / denom) * 100}%`;
-    if (!bar.style.width)
-      setTimeout(() => {
-        bar.style.width = targetWidth;
-      }, 500);
-    else bar.style.width = targetWidth;
+    const pct = Math.min(100, Math.max(0, (xp / denom) * 100));
+    if (bar.tagName === "path" || bar.tagName === "PATH") {
+        bar.setAttribute("stroke-dasharray", `${pct}, 100`);
+    } else {
+        bar.style.width = `${pct}%`;
+    }
   }
 }
 
