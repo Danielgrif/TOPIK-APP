@@ -9,12 +9,20 @@
 </div>
 
 <!-- Welcome Overlay -->
-<div id="welcome-overlay" class="level-up-overlay">
-  <div class="level-up-content">
-    <h2 class="level-up-title">С возвращением!</h2>
-    <p class="level-up-text">Рады видеть вас, <strong id="welcome-username">Гость</strong>!</p>
+<div id="welcome-overlay" class="level-up-overlay welcome-overlay">
+  <div class="level-up-content welcome-content">
+    <div class="welcome-header-group">
+        <div class="welcome-icon">👋</div>
+        <h2 class="level-up-title" id="welcome-greeting">С возвращением!</h2>
+        <p class="welcome-subtitle">Рады видеть вас, <strong id="welcome-username">Гость</strong>!</p>
+    </div>
+    
     <div id="welcome-quote" class="welcome-quote-container"></div>
-    <button class="btn" data-action="close-welcome">Начать</button>
+    
+    <button class="welcome-btn" data-action="close-welcome">
+        <span>Поехали</span>
+        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
+    </button>
   </div>
 </div>
 

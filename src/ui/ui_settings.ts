@@ -1,10 +1,11 @@
 /* eslint-disable no-console */
 import { state } from "../core/state.ts";
-import { showToast } from "../utils/utils.ts";
+import { showToast, speak } from "../utils/utils.ts";
 import { render } from "./ui_card.ts";
 import { scheduleSaveState } from "../core/db.ts";
 import { openConfirm } from "./ui_modal.ts";
 import { LS_KEYS } from "../core/constants.ts";
+import { RARE_THEMES, SHOP_ITEMS } from "../core/shop_data.ts";
 
 const THEME_PALETTES: Record<
   string,
@@ -86,6 +87,32 @@ const THEME_PALETTES: Record<
     textMain: "#500724",
     textSub: "#be185d",
     textTertiary: "#db2777",
+  },
+  ruby: {
+    main: "#e11d48",
+    hover: "#be123c",
+    light: "rgba(225, 29, 72, 0.15)",
+    accent: "#f43f5e",
+    bg: "#fff1f2",
+    surface: "#ffffff",
+    surface2: "#ffe4e6",
+    border: "#fecdd3",
+    textMain: "#881337",
+    textSub: "#9f1239",
+    textTertiary: "#be123c",
+  },
+  amethyst: {
+    main: "#9333ea",
+    hover: "#7e22ce",
+    light: "rgba(147, 51, 234, 0.15)",
+    accent: "#a855f7",
+    bg: "#f5f3ff",
+    surface: "#ffffff",
+    surface2: "#ede9fe",
+    border: "#ddd6fe",
+    textMain: "#4c1d95",
+    textSub: "#5b21b6",
+    textTertiary: "#6d28d9",
   },
 };
 
@@ -170,11 +197,114 @@ const THEME_PALETTES_DARK: Record<
     textSub: "#f472b6",
     textTertiary: "#ec4899",
   },
+  ruby: {
+    main: "#fb7185",
+    hover: "#f43f5e",
+    light: "rgba(225, 29, 72, 0.15)",
+    accent: "#fda4af",
+    bg: "#4c0519",
+    surface: "#881337",
+    surface2: "#9f1239",
+    border: "#be123c",
+    textMain: "#fff1f2",
+    textSub: "#fda4af",
+    textTertiary: "#fb7185",
+  },
+  amethyst: {
+    main: "#c084fc",
+    hover: "#a855f7",
+    light: "rgba(147, 51, 234, 0.15)",
+    accent: "#d8b4fe",
+    bg: "#3b0764",
+    surface: "#581c87",
+    surface2: "#6b21a8",
+    border: "#7e22ce",
+    textMain: "#faf5ff",
+    textSub: "#d8b4fe",
+    textTertiary: "#c084fc",
+  },
 };
 
 function updateSettingsTimestamp() {
   state.settingsUpdatedAt = Date.now();
   localStorage.setItem("settings_updated_at", String(state.settingsUpdatedAt));
+}
+
+/**
+ * Synchronizes all settings UI elements with the current state.
+ * Handles dependencies like disabling Dark Mode toggle when Auto Theme is on.
+ */
+export function updateSettingsUI() {
+  const darkModeCheckbox = document.getElementById(
+    "dark-mode-toggle-switch",
+  ) as HTMLInputElement;
+  const autoThemeCheckbox = document.getElementById(
+    "auto-theme-toggle-switch",
+  ) as HTMLInputElement;
+  const autoThemeTimes = document.getElementById("auto-theme-times");
+  const autoThemeStartInput = document.getElementById(
+    "auto-theme-start",
+  ) as HTMLInputElement;
+  const autoThemeEndInput = document.getElementById(
+    "auto-theme-end",
+  ) as HTMLInputElement;
+
+  const hanjaCheckbox = document.getElementById(
+    "hanja-setting-check",
+  ) as HTMLInputElement;
+  const musicCheckbox = document.getElementById(
+    "background-music-check",
+  ) as HTMLInputElement;
+  const autoUpdateCheckbox = document.getElementById(
+    "auto-update-check",
+  ) as HTMLInputElement;
+  const speedSlider = document.getElementById(
+    "speed-slider",
+  ) as HTMLInputElement;
+  const speedVal = document.getElementById("speed-val");
+  const musicVolumeSlider = document.getElementById(
+    "background-music-volume-slider",
+  ) as HTMLInputElement;
+
+  // Dark Mode & Auto Theme Logic
+  if (darkModeCheckbox) {
+    darkModeCheckbox.checked = state.darkMode;
+    const row = darkModeCheckbox.closest(".setting-item") as HTMLElement;
+    const label = row?.querySelector(".setting-label");
+
+    if (state.autoTheme) {
+      darkModeCheckbox.disabled = true;
+      if (row) row.style.opacity = "0.5";
+      if (label) label.textContent = "Ночной режим (Авто)";
+    } else {
+      darkModeCheckbox.disabled = false;
+      if (row) row.style.opacity = "1";
+      if (label) label.textContent = "Ночной режим";
+    }
+  }
+
+  if (autoThemeCheckbox) autoThemeCheckbox.checked = state.autoTheme;
+  if (autoThemeTimes)
+    autoThemeTimes.style.display = state.autoTheme ? "flex" : "none";
+  if (autoThemeStartInput)
+    autoThemeStartInput.value = String(state.autoThemeStart);
+  if (autoThemeEndInput) autoThemeEndInput.value = String(state.autoThemeEnd);
+
+  if (hanjaCheckbox) hanjaCheckbox.checked = state.hanjaMode;
+  if (musicCheckbox) musicCheckbox.checked = state.backgroundMusicEnabled;
+  if (autoUpdateCheckbox) autoUpdateCheckbox.checked = state.autoUpdate;
+
+  if (speedSlider) speedSlider.value = String(state.audioSpeed);
+  if (speedVal) speedVal.textContent = state.audioSpeed + "x";
+
+  if (musicVolumeSlider) {
+    musicVolumeSlider.value = String(state.backgroundMusicVolume);
+  }
+
+  updateMusicUI(); // Updates music slider state
+  updateVoiceUI();
+  updateThemePickerUI();
+  updateTrashRetentionUI();
 }
 
 /**
@@ -190,27 +320,38 @@ export function toggleHanjaMode(el: HTMLInputElement) {
 }
 
 /**
- * Toggles the TTS voice between male and female.
+ * Sets the TTS voice.
+ * @param {string} voice - 'female' or 'male'
  */
-export function toggleVoice() {
-  state.currentVoice = state.currentVoice === "female" ? "male" : "female";
+export function setVoice(voice: string) {
+  if (voice !== "female" && voice !== "male") return;
+
+  state.currentVoice = voice;
   localStorage.setItem(LS_KEYS.VOICE_PREF, state.currentVoice);
   updateVoiceUI();
-  showToast(
-    `Голос: ${state.currentVoice === "female" ? "Женский" : "Мужской"}`,
-  );
+  showToast(`Голос: ${voice === "female" ? "Женский" : "Мужской"}`);
   updateSettingsTimestamp();
   scheduleSaveState();
+
+  // Проигрываем тестовый пример
+  speak("안녕하세요", null);
+  render();
 }
 
 /**
- * Updates the voice selection button UI.
+ * Updates the voice selection UI (segment control).
  */
 export function updateVoiceUI() {
-  const btn = document.getElementById("voice-setting-btn");
-  if (btn)
-    btn.textContent =
-      state.currentVoice === "female" ? "👩 Женский" : "👨 Мужской";
+  const container = document.getElementById("voice-selection");
+  if (container) {
+    container.querySelectorAll(".segment-btn").forEach((btn) => {
+      if (btn.getAttribute("data-value") === state.currentVoice) {
+        btn.classList.add("active");
+      } else {
+        btn.classList.remove("active");
+      }
+    });
+  }
 }
 
 /**
@@ -246,29 +387,90 @@ export function setTtsVolume(val: string | number) {
 export function toggleAutoTheme(el: HTMLInputElement) {
   state.autoTheme = el.checked;
   localStorage.setItem(LS_KEYS.AUTO_THEME, String(state.autoTheme));
+
+  let changed = false;
   if (state.autoTheme) {
-    checkAutoTheme();
+    changed = checkAutoTheme();
   }
-  showToast(`Авто-тема: ${state.autoTheme ? "ВКЛ" : "ВЫКЛ"}`);
+
+  // Показываем общее уведомление только если тема НЕ изменилась (чтобы не было дублей)
+  if (!changed) {
+    showToast(`Авто-тема: ${state.autoTheme ? "ВКЛ" : "ВЫКЛ"}`);
+  }
+
+  updateSettingsUI();
   updateSettingsTimestamp();
   scheduleSaveState();
 }
 
-export function checkAutoTheme() {
-  if (!state.autoTheme) return;
+export function setAutoThemeStart(val: string) {
+  let hour = parseInt(val, 10);
+  if (isNaN(hour)) return;
+  hour = Math.max(0, Math.min(23, hour));
+  state.autoThemeStart = hour;
+  localStorage.setItem(LS_KEYS.AUTO_THEME_START, String(hour));
+  checkAutoTheme();
+  updateSettingsTimestamp();
+  scheduleSaveState();
+}
+
+export function setAutoThemeEnd(val: string) {
+  let hour = parseInt(val, 10);
+  if (isNaN(hour)) return;
+  hour = Math.max(0, Math.min(23, hour));
+  state.autoThemeEnd = hour;
+  localStorage.setItem(LS_KEYS.AUTO_THEME_END, String(hour));
+  checkAutoTheme();
+  updateSettingsTimestamp();
+  scheduleSaveState();
+}
+
+export function checkAutoTheme(): boolean {
+  if (!state.autoTheme) return false;
   const hour = new Date().getHours();
-  const isNight = hour >= 20 || hour < 6; // Ночь с 20:00 до 06:00
+
+  let isNight = false;
+  // Если начало больше конца (например, 20:00 -> 06:00), то ночь это ">= 20 ИЛИ < 6"
+  if (state.autoThemeStart > state.autoThemeEnd)
+    isNight = hour >= state.autoThemeStart || hour < state.autoThemeEnd;
+  else isNight = hour >= state.autoThemeStart && hour < state.autoThemeEnd;
 
   if (state.darkMode !== isNight) {
     state.darkMode = isNight;
     localStorage.setItem(LS_KEYS.DARK_MODE, String(state.darkMode));
     applyTheme();
+    showToast(`Авто-тема: ${isNight ? "Ночь 🌙" : "День ☀️"}`);
+    updateSettingsUI();
+    return true;
+  }
+  // Ensure UI is in sync (e.g. if modal is open)
+  updateSettingsUI();
+  return false;
+}
 
-    // Обновляем чекбокс в настройках, если он есть в DOM
-    const checkbox = document.querySelector(
-      'input[onchange*="toggleDarkMode"]',
-    ) as HTMLInputElement;
-    if (checkbox) checkbox.checked = state.darkMode;
+/**
+ * Sets up a listener for system theme changes.
+ */
+export function setupSystemThemeListener() {
+  if (!window.matchMedia) return;
+
+  const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
+
+  const handleChange = (e: MediaQueryListEvent) => {
+    // Если пользователь не установил тему вручную (нет записи в localStorage)
+    // и не включена авто-тема по времени
+    if (localStorage.getItem(LS_KEYS.DARK_MODE) === null && !state.autoTheme) {
+      state.darkMode = e.matches;
+      applyTheme();
+      updateSettingsUI();
+    }
+  };
+
+  if (mediaQuery.addEventListener) {
+    mediaQuery.addEventListener("change", handleChange);
+  } else {
+    // Fallback
+    mediaQuery.addListener(handleChange);
   }
 }
 
@@ -277,18 +479,18 @@ export function checkAutoTheme() {
  * @param {HTMLInputElement} [el] - The checkbox element.
  */
 export function toggleDarkMode(el?: HTMLInputElement) {
+  // Если включена авто-тема, любое ручное переключение должно её отключать
+  if (state.autoTheme) {
+    state.autoTheme = false;
+    localStorage.setItem(LS_KEYS.AUTO_THEME, "false");
+    showToast("Авто-тема отключена");
+  }
+
   state.darkMode = el && el.type === "checkbox" ? el.checked : !state.darkMode;
   localStorage.setItem(LS_KEYS.DARK_MODE, String(state.darkMode));
   applyTheme();
 
-  // Синхронизируем чекбокс, если переключение вызвано не им (например, кнопкой в хедере)
-  if (!el || el.type !== "checkbox") {
-    const checkbox = document.querySelector(
-      'input[onchange*="toggleDarkMode"]',
-    ) as HTMLInputElement;
-    if (checkbox) checkbox.checked = state.darkMode;
-  }
-
+  updateSettingsUI();
   updateSettingsTimestamp();
   scheduleSaveState();
 }
@@ -309,36 +511,8 @@ export function toggleAutoUpdate(el: HTMLInputElement) {
  * Applies the current theme (dark/light) and accent color to the UI.
  */
 export function applyTheme() {
-  const root = document.documentElement.style;
-
-  if (state.darkMode) {
-    document.body.classList.add("dark-mode");
-
-    // Цвета для темной темы (Пастельные/Светлые для контраста)
-    root.setProperty("--section-info-border", "#74b9ff");
-    root.setProperty("--section-relation-border", "#fab1a0");
-    root.setProperty("--section-extra-border", "#55efc4");
-
-    // Фон: низкая прозрачность, чтобы не конфликтовать с насыщенными фонами темных тем
-    root.setProperty("--section-info-bg", "rgba(116, 185, 255, 0.1)");
-    root.setProperty("--section-relation-bg", "rgba(250, 177, 160, 0.1)");
-    root.setProperty("--section-extra-bg", "rgba(85, 239, 196, 0.1)");
-  } else {
-    document.body.classList.remove("dark-mode");
-
-    // Цвета для светлой темы (Чуть темнее для четкости на белом)
-    root.setProperty("--section-info-border", "#0984e3");
-    root.setProperty("--section-relation-border", "#e17055");
-    root.setProperty("--section-extra-border", "#00b894");
-
-    // Фон: очень легкий оттенок
-    root.setProperty("--section-info-bg", "rgba(9, 132, 227, 0.06)");
-    root.setProperty("--section-relation-bg", "rgba(225, 112, 85, 0.06)");
-    root.setProperty("--section-extra-bg", "rgba(0, 184, 148, 0.06)");
-  }
-
+  document.body.classList.toggle("dark-mode", state.darkMode);
   const icon = state.darkMode ? "🌙" : "☀️";
-
   const headerBtn = document.getElementById("header-dark-mode-toggle");
   if (headerBtn) {
     headerBtn.textContent = icon;
@@ -346,7 +520,6 @@ export function applyTheme() {
     void headerBtn.offsetWidth; // Force reflow to restart animation
     headerBtn.classList.add("rotate-icon");
   }
-
   applyAccentColor();
 }
 
@@ -355,13 +528,18 @@ export function applyTheme() {
  * @param {string} colorKey
  */
 export function setAccentColor(colorKey: string) {
-  if (!Object.keys(THEME_PALETTES).includes(colorKey)) return;
+  if (!THEME_PALETTES[colorKey]) return;
 
   // Проверка прав на тему
   if (colorKey !== "purple") {
     const shopId = `theme_${colorKey}`;
     if (!state.purchasedItems.includes(shopId)) {
-      showToast("Эта тема доступна в магазине");
+      const isRare = RARE_THEMES.some((t) => t.value === colorKey);
+      if (isRare) {
+        showToast("🎁 Эту тему можно найти в Таинственной коробке (День 7)!");
+      } else {
+        showToast("Эта тема доступна в магазине");
+      }
       return;
     }
   }
@@ -445,31 +623,43 @@ export function previewAccentColor(colorKey: string) {
  * Updates the theme picker UI to lock unpurchased themes.
  */
 export function updateThemePickerUI() {
-  const buttons = document.querySelectorAll(".color-option, .stats-color-btn");
-  buttons.forEach((btn) => {
-    const el = btn as HTMLElement;
-    const color = el.getAttribute("data-value");
-    if (!color) return;
+  const container = document.getElementById("theme-picker-container");
+  if (!container) return;
 
-    const isDefault = color === "purple";
-    const shopId = `theme_${color}`;
-    const isPurchased = state.purchasedItems.includes(shopId);
+  const allThemes = [
+    { id: "theme_default", name: "Стандарт", value: "purple", price: 0 },
+    ...SHOP_ITEMS.filter((item) => item.type === "theme"),
+    ...RARE_THEMES,
+  ];
 
-    if (isDefault || isPurchased) {
-      el.classList.remove("locked");
-      el.style.pointerEvents = "";
-      el.style.opacity = "";
-      el.style.filter = "";
-      const lock = el.querySelector(".lock-icon");
-      if (lock) lock.remove();
+  container.innerHTML = ""; // Clear before re-rendering
+
+  allThemes.forEach((theme) => {
+    const isRare = RARE_THEMES.some((rt) => rt.id === theme.id);
+    const isPurchased =
+      state.purchasedItems.includes(theme.id) || (theme.price === 0 && !isRare);
+    const isActive = state.themeColor === theme.value;
+
+    const btn = document.createElement("button");
+    btn.className = "color-option";
+    if (isActive) btn.classList.add("active");
+    btn.dataset.value = theme.value;
+    btn.title = theme.name;
+
+    if (isPurchased) {
+      btn.dataset.action = "set-accent";
     } else {
-      el.classList.add("locked");
-      el.style.pointerEvents = "auto"; // Разрешаем клики для кнопки покупки
-      el.style.opacity = "0.6";
-      el.style.filter = "grayscale(0.8)";
-
-      // Добавляем кнопку "Купить", если ее еще нет
-      if (!el.querySelector(".buy-theme-btn")) {
+      btn.classList.add("locked");
+      btn.style.opacity = "0.6";
+      btn.style.filter = "grayscale(1)";
+      if (isRare) {
+        btn.innerHTML = `<span style="font-size: 16px;">?</span>`;
+        btn.title = `${theme.name} (редкая награда)`;
+        btn.onclick = (e) => {
+          e.stopPropagation();
+          showToast("🎁 Эту тему можно найти в Таинственной коробке (День 7)!");
+        };
+      } else {
         const buyBtn = document.createElement("button");
         buyBtn.className = "buy-theme-btn";
         buyBtn.innerHTML = "💰";
@@ -481,9 +671,11 @@ export function updateThemePickerUI() {
             setTimeout(() => shop.switchShopTab("theme"), 100);
           });
         };
-        el.appendChild(buyBtn);
+        btn.appendChild(buyBtn);
+        btn.title = `${theme.name} (в магазине)`;
       }
     }
+    container.appendChild(btn);
   });
 }
 
@@ -544,10 +736,27 @@ export function toggleBackgroundMusic(el?: HTMLInputElement) {
     LS_KEYS.MUSIC_ENABLED,
     String(state.backgroundMusicEnabled),
   );
+  updateMusicUI();
   applyBackgroundMusic();
   showToast(`Музыка: ${state.backgroundMusicEnabled ? "ВКЛ" : "ВЫКЛ"}`);
   updateSettingsTimestamp();
   scheduleSaveState();
+}
+
+/**
+ * Updates the music UI state (disables volume slider if music is off).
+ */
+export function updateMusicUI() {
+  const volSlider = document.getElementById(
+    "background-music-volume-slider",
+  ) as HTMLInputElement;
+  if (volSlider) {
+    volSlider.disabled = !state.backgroundMusicEnabled;
+    volSlider.style.opacity = state.backgroundMusicEnabled ? "1" : "0.5";
+    volSlider.style.cursor = state.backgroundMusicEnabled
+      ? "pointer"
+      : "not-allowed";
+  }
 }
 
 let activePlayerId = "a";

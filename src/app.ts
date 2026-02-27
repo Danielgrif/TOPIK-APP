@@ -58,7 +58,7 @@ import {
 } from "./ui/ui_modal.ts";
 import {
   toggleHanjaMode,
-  toggleVoice,
+  setVoice,
   updateVoiceUI,
   toggleDarkMode,
   toggleAutoTheme,
@@ -66,6 +66,7 @@ import {
   toggleAutoUpdate,
   applyTheme,
   toggleFocusMode,
+  updateMusicUI,
   toggleBackgroundMusic,
   setBackgroundMusicVolume,
   applyBackgroundMusic,
@@ -75,9 +76,12 @@ import {
   setTtsVolume,
   resetAllSettings,
   applyAccentColor,
+  setAutoThemeStart,
+  setAutoThemeEnd,
   updateTrashRetentionUI,
   updateThemePickerUI,
   setTrashRetention,
+  setupSystemThemeListener,
 } from "./ui/ui_settings.ts";
 
 import {
@@ -124,7 +128,12 @@ import {
   buyItem,
   applyShopTheme,
 } from "./ui/ui_shop.ts";
-import { setupTrash, restoreWord, permanentlyDeleteWord, emptyTrash } from "./ui/ui_trash.ts";
+import {
+  setupTrash,
+  restoreWord,
+  permanentlyDeleteWord,
+  emptyTrash,
+} from "./ui/ui_trash.ts";
 import { checkPronunciation } from "./core/speech.ts";
 import { SW_MESSAGES, DB_TABLES } from "./core/constants.ts";
 import { Quote, User } from "./types/index.ts";
@@ -140,7 +149,11 @@ import {
   clearCollectionFilter,
   editListTitleInline,
 } from "./ui/ui_collections.ts";
-import { openEditWordModal, saveWordChanges, deleteWord } from "./ui/ui_edit_word.ts";
+import {
+  openEditWordModal,
+  saveWordChanges,
+  deleteWord,
+} from "./ui/ui_edit_word.ts";
 import {
   toggleSelectMode,
   bulkDelete,
@@ -354,7 +367,8 @@ function setupGlobalListeners() {
         updateBottomNav(modalId);
         // FIX: Render stats when modal opens
         if (modalId === "stats-modal") {
-            renderDetailedStats();
+          renderDetailedStats();
+          updateThemePickerUI(); // Обновляем кнопки тем в статистике
         }
       }
       return;
@@ -462,7 +476,6 @@ function setupGlobalListeners() {
         case "open-profile":
           openProfileModal();
           updateTrashRetentionUI();
-          updateThemePickerUI();
           break;
         case "open-mistakes":
           openMistakesModal();
@@ -546,8 +559,8 @@ function setupGlobalListeners() {
         case "toggle-reset-mode":
           toggleResetMode(value === "true");
           break;
-        case "toggle-voice":
-          toggleVoice();
+        case "set-voice":
+          if (value) setVoice(value);
           break;
         case "export-data":
           import("./ui/ui_data.ts").then((m) => m.exportProgress());
@@ -624,33 +637,30 @@ function setupGlobalListeners() {
           if (value) switchShopTab(value);
           break;
         case "delete-list":
-          if (value)
-            deleteList(value, actionTrigger as HTMLElement);
+          if (value) deleteList(value, actionTrigger as HTMLElement);
           break;
         case "edit-list":
           {
             const title = actionTrigger.getAttribute("data-title") || "";
             const icon = actionTrigger.getAttribute("data-icon") || "";
-            if (value)
-              openEditListModal(value, title, icon);
+            if (value) openEditListModal(value, title, icon);
           }
           break;
         case "set-collection-filter":
           setCollectionFilter(value, e);
           break;
         case "edit-word":
-          if (value)
-            openEditWordModal(value);
+          if (value) openEditWordModal(value);
           break;
         case "restore-word":
           if (value) restoreWord(Number(value));
           break;
         case "delete-word-permanent":
-          if (value) permanentlyDeleteWord(Number(value), actionTrigger as HTMLElement);
+          if (value)
+            permanentlyDeleteWord(Number(value), actionTrigger as HTMLElement);
           break;
         case "bulk-add-to-list-item":
-          if (value)
-            handleBulkAddToList(value);
+          if (value) handleBulkAddToList(value);
           break;
         case "create-new-list-bulk":
           createNewListForBulk();
@@ -660,7 +670,11 @@ function setupGlobalListeners() {
             const listId = actionTrigger.getAttribute("data-list-id");
             const wordId = actionTrigger.getAttribute("data-word-id");
             if (listId && wordId) {
-              toggleWordInList(listId, Number(wordId), actionTrigger as HTMLElement);
+              toggleWordInList(
+                listId,
+                Number(wordId),
+                actionTrigger as HTMLElement,
+              );
             }
           }
           break;
@@ -699,7 +713,12 @@ function setupGlobalListeners() {
         }
         case "speak": {
           const url = actionTrigger.getAttribute("data-url");
-          if (url) speak(null, url);
+          if (url) {
+            actionTrigger.classList.add("playing");
+            speak(null, url).then(() => {
+              actionTrigger.classList.remove("playing");
+            });
+          }
           break;
         }
       }
@@ -748,7 +767,7 @@ function setupGlobalListeners() {
     const target = e.target as HTMLInputElement;
     const action = target.getAttribute("data-action");
 
-    if (action === "toggle-dark-mode") toggleDarkMode();
+    if (action === "toggle-dark-mode") toggleDarkMode(target);
     if (action === "toggle-auto-theme") toggleAutoTheme(target);
     if (action === "toggle-hanja") toggleHanjaMode(target);
     if (action === "toggle-music") toggleBackgroundMusic(target);
@@ -761,6 +780,8 @@ function setupGlobalListeners() {
         });
       }
     }
+    if (action === "set-auto-theme-start") setAutoThemeStart(target.value);
+    if (action === "set-auto-theme-end") setAutoThemeEnd(target.value);
   });
 
   // Handle Enter key for creating a new list
@@ -1257,6 +1278,7 @@ async function init() {
 
   setupGlobalListeners();
   setupNetworkListeners();
+  setupSystemThemeListener();
   setupRealtimeUpdates(); // <--- Включаем прослушку обновлений
 
   renderSkeletons();
@@ -1355,6 +1377,7 @@ async function init() {
   renderTopicMastery();
   buildQuizModes();
   updateSRSBadge();
+  updateMusicUI();
   updateVoiceUI();
   applyTheme();
   if (canClaimDailyReward()) {
@@ -1363,6 +1386,9 @@ async function init() {
   checkAutoTheme();
   updateDailyChallengeUI();
   checkSuperChallengeNotification();
+
+  // Запускаем проверку авто-темы каждую минуту (для переключения в реальном времени)
+  setInterval(checkAutoTheme, 60000);
 
   render();
   restoreScroll();
@@ -1569,7 +1595,7 @@ Object.assign(window, {
   setTypeFilter,
   handleCategoryChange,
   toggleHanjaMode,
-  toggleVoice,
+  setVoice,
   toggleFilterPanel,
   toggleDarkMode,
   toggleAutoUpdate: (el: HTMLInputElement) => {

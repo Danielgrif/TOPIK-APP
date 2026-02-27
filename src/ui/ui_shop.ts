@@ -4,6 +4,7 @@ import {
   SHOP_ITEMS,
   DAILY_REWARDS,
   MYSTERY_BOX_REWARDS,
+  RARE_THEMES,
 } from "../core/shop_data.ts";
 import { showToast, playTone } from "../utils/utils.ts";
 import { setAccentColor, applyTheme } from "./ui_settings.ts";
@@ -99,17 +100,18 @@ export function updateShopUI() {
   const container = document.getElementById("shop-items-container");
   const pointsEl = document.getElementById("shop-user-points");
   const rewardSection = document.getElementById("daily-reward-section");
-  
+
   if (!container || !pointsEl || !rewardSection) return;
 
   pointsEl.innerHTML = `💰 ${state.userStats.coins || 0}`;
 
   // Логика переключения вкладок
   if (currentTab === "rewards") {
-      container.style.display = "none";
-      rewardSection.style.display = "block";
-      renderDailyRewardUI(); // Убеждаемся, что награды отрисованы
-      return;
+    container.style.display = "none";
+    rewardSection.style.display =
+      "flex"; /* Важно: flex, чтобы работали gap и justify-content */
+    renderDailyRewardUI(); // Убеждаемся, что награды отрисованы
+    return;
   }
 
   container.style.display = "grid";
@@ -220,6 +222,8 @@ export function buyItem(id: string, _btn?: HTMLButtonElement) {
       } else if (item.type === "theme") {
         state.purchasedItems.push(item.id);
         showToast(`🎉 Поздравляем! Вы купили «${item.name}»`);
+        // Автоматически применяем купленную тему
+        applyShopTheme(item.value);
       }
 
       playTone("cash-register");
@@ -359,9 +363,14 @@ function renderDailyRewardUI() {
     actionHtml = `<div style="text-align:center;"><div id="next-reward-timer">⏳ Следующая награда: ${hours}ч ${minutes}м</div></div>`;
   }
 
+  const rewardsText = MYSTERY_BOX_REWARDS.map((r) =>
+    r.message.replace("!", ""),
+  ).join(", ");
+
   section.innerHTML = `
     <div class="daily-reward-header">📅 Ежедневная награда</div>
     <div class="daily-reward-calendar">${calendarHtml}</div>
+    <div class="daily-reward-note">🎁 День 7: ${rewardsText}, 🎨 Редкая тема</div>
     ${actionHtml}
   `;
 }
@@ -374,32 +383,42 @@ interface MysteryReward {
 }
 
 function handleMysteryBox(): string {
-  const rewardsPool: MysteryReward[] = [...MYSTERY_BOX_REWARDS];
-  const unpurchasedThemes = SHOP_ITEMS.filter(
-    (item) => item.type === "theme" && !state.purchasedItems.includes(item.id),
+  const rewardsPool: MysteryReward[] = MYSTERY_BOX_REWARDS.filter(
+    (r) => r.type !== "rare_theme",
   );
 
-  if (unpurchasedThemes.length > 0) {
+  // Find a rare theme the user doesn't own yet
+  const unownedRareThemes = RARE_THEMES.filter(
+    (theme) => !state.purchasedItems.includes(theme.id),
+  );
+
+  let finalReward: MysteryReward;
+
+  // If there are unowned rare themes, there's a 25% chance to win one.
+  if (unownedRareThemes.length > 0 && Math.random() < 0.25) {
     const randomTheme =
-      unpurchasedThemes[Math.floor(Math.random() * unpurchasedThemes.length)];
-    rewardsPool.push({
+      unownedRareThemes[Math.floor(Math.random() * unownedRareThemes.length)];
+    finalReward = {
       type: "theme",
       item: randomTheme,
-      message: `🎨 Новая тема: «${randomTheme.name}»!`,
-    });
+      message: `🎨 Редкая тема: «${randomTheme.name}»!`,
+    };
+  } else {
+    // Otherwise, pick from the standard pool
+    finalReward = rewardsPool[Math.floor(Math.random() * rewardsPool.length)];
   }
 
-  const reward = rewardsPool[Math.floor(Math.random() * rewardsPool.length)];
-
-  if (reward.type === "coins") {
-    state.userStats.coins = (state.userStats.coins || 0) + (reward.amount || 0);
-  } else if (reward.type === "xp") {
-    addXP(reward.amount || 0);
-  } else if (reward.type === "streakFreeze") {
+  // Apply the reward
+  if (finalReward.type === "coins") {
+    state.userStats.coins =
+      (state.userStats.coins || 0) + (finalReward.amount || 0);
+  } else if (finalReward.type === "xp") {
+    addXP(finalReward.amount || 0);
+  } else if (finalReward.type === "streakFreeze") {
     state.userStats.streakFreeze =
-      (state.userStats.streakFreeze || 0) + (reward.amount || 0);
-  } else if (reward.type === "theme" && reward.item) {
-    const themeItem = reward.item;
+      (state.userStats.streakFreeze || 0) + (finalReward.amount || 0);
+  } else if (finalReward.type === "theme" && finalReward.item) {
+    const themeItem = finalReward.item;
     if (!state.purchasedItems.includes(themeItem.id)) {
       state.purchasedItems.push(themeItem.id);
       setAccentColor(themeItem.value);
@@ -408,7 +427,7 @@ function handleMysteryBox(): string {
     }
   }
 
-  return `Таинственная коробка! Вы выиграли: ${reward.message}`;
+  return `Таинственная коробка! Вы выиграли: ${finalReward.message}`;
 }
 
 export function claimDailyReward(_btn?: HTMLElement) {

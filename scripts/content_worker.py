@@ -272,6 +272,92 @@ def clean_text_for_tts(text):
     text = re.sub(r'\s*[\(\[].*?[\)\]]', '', text)
     return text.strip()
 
+# --- Hangul Composition Logic (QWERTY -> 2-Set Korean) ---
+KO_KEY_MAP = {
+    'q': 'ㅂ', 'w': 'ㅈ', 'e': 'ㄷ', 'r': 'ㄱ', 't': 'ㅅ', 'y': 'ㅛ', 'u': 'ㅕ', 'i': 'ㅑ', 'o': 'ㅐ', 'p': 'ㅔ',
+    'a': 'ㅁ', 's': 'ㄴ', 'd': 'ㅇ', 'f': 'ㄹ', 'g': 'ㅎ', 'h': 'ㅗ', 'j': 'ㅓ', 'k': 'ㅏ', 'l': 'ㅣ',
+    'z': 'ㅋ', 'x': 'ㅌ', 'c': 'ㅊ', 'v': 'ㅍ', 'b': 'ㅠ', 'n': 'ㅜ', 'm': 'ㅡ',
+    'Q': 'ㅃ', 'W': 'ㅉ', 'E': 'ㄸ', 'R': 'ㄲ', 'T': 'ㅆ', 'O': 'ㅒ', 'P': 'ㅖ'
+}
+CHO_LIST = "ㄱㄲㄴㄷㄸㄹㅁㅂㅃㅅㅆㅇㅈㅉㅊㅋㅌㅍㅎ"
+JUNG_LIST = "ㅏㅐㅑㅒㅓㅔㅕㅖㅗㅘㅙㅚㅛㅜㅝㅞㅟㅠㅡㅢㅣ"
+JONG_LIST = " ㄱㄲㄳㄴㄵㄶㄷㄹㄺㄻㄼㄽㄾㄿㅀㅁㅂㅄㅅㅆㅇㅈㅊㅋㅌㅍㅎ" # Пробел в начале для отсутствия патчима
+
+DOUBLE_JUNG = {
+    'ㅗㅏ': 'ㅘ', 'ㅗㅐ': 'ㅙ', 'ㅗㅣ': 'ㅚ', 'ㅜㅓ': 'ㅝ', 'ㅜㅔ': 'ㅞ', 'ㅜㅣ': 'ㅟ', 'ㅡㅣ': 'ㅢ',
+    'ㅘㅣ': 'ㅙ', 'ㅝㅣ': 'ㅞ', 'ㅑㅣ': 'ㅒ', 'ㅕㅣ': 'ㅖ'
+}
+DOUBLE_JONG = {
+    'ㄱㅅ': 'ㄳ', 'ㄴㅈ': 'ㄵ', 'ㄴㅎ': 'ㄶ', 'ㄹㄱ': 'ㄺ', 'ㄹㅁ': 'ㄻ', 'ㄹㅂ': 'ㄼ', 'ㄹㅅ': 'ㄽ',
+    'ㄹㅌ': 'ㄾ', 'ㄹㅍ': 'ㄿ', 'ㄹㅎ': 'ㅀ', 'ㅂㅅ': 'ㅄ'
+}
+
+def try_fix_keyboard_layout(text):
+    """Попытка конвертировать английский текст в корейский (QWERTY -> 2-Set)."""
+    if not text: return None
+    
+    result = []
+    state = 0 # 0:Start, 1:Cho, 2:Jung, 3:Jong, 4:Jong+Jong
+    cho = -1; jung = -1; jong = 0
+    
+    def combine():
+        return chr(0xAC00 + cho * 21 * 28 + jung * 28 + jong)
+    
+    for char in text:
+        jamo = KO_KEY_MAP.get(char)
+        if not jamo:
+            if state in [2, 3, 4]: result.append(combine())
+            elif state == 1: result.append(CHO_LIST[cho])
+            result.append(char)
+            state = 0; cho = -1; jung = -1; jong = 0
+            continue
+            
+        is_cho = jamo in CHO_LIST
+        is_jung = jamo in JUNG_LIST
+        jong_idx = JONG_LIST.find(jamo)
+        
+        if state == 0:
+            if is_cho: cho = CHO_LIST.index(jamo); state = 1
+            elif is_jung: result.append(jamo) # Гласная без согласной
+        elif state == 1:
+            if is_jung: jung = JUNG_LIST.index(jamo); state = 2
+            elif is_cho: result.append(CHO_LIST[cho]); cho = CHO_LIST.index(jamo)
+        elif state == 2:
+            if is_jung:
+                if JUNG_LIST[jung] + jamo in DOUBLE_JUNG: jung = JUNG_LIST.index(DOUBLE_JUNG[JUNG_LIST[jung] + jamo])
+                else: result.append(combine()); cho = -1; jung = JUNG_LIST.index(jamo); state = 0; result.append(jamo)
+            elif jong_idx > 0: jong = jong_idx; state = 3
+            elif is_cho: result.append(combine()); cho = CHO_LIST.index(jamo); jung = -1; jong = 0; state = 1
+        elif state == 3:
+            if is_jung:
+                prev_jong = JONG_LIST[jong]
+                result.append(chr(0xAC00 + cho * 21 * 28 + jung * 28 + 0))
+                cho = CHO_LIST.index(prev_jong); jung = JUNG_LIST.index(jamo); jong = 0; state = 2
+            elif jong_idx > 0 and JONG_LIST[jong] + jamo in DOUBLE_JONG:
+                jong = JONG_LIST.index(DOUBLE_JONG[JONG_LIST[jong] + jamo]); state = 4
+            elif is_cho:
+                result.append(combine()); cho = CHO_LIST.index(jamo); jung = -1; jong = 0; state = 1
+        elif state == 4:
+            if is_jung:
+                # Разбиваем двойной патчим
+                curr_jong = JONG_LIST[jong]
+                # Находим компоненты (обратный поиск)
+                parts = next((k for k, v in DOUBLE_JONG.items() if v == curr_jong), None)
+                if parts:
+                    result.append(chr(0xAC00 + cho * 21 * 28 + jung * 28 + JONG_LIST.index(parts[0])))
+                    cho = CHO_LIST.index(parts[1]); jung = JUNG_LIST.index(jamo); jong = 0; state = 2
+                else:
+                    result.append(combine()); cho = -1; jung = JUNG_LIST.index(jamo); state = 0; result.append(jamo)
+            else:
+                result.append(combine())
+                if is_cho: cho = CHO_LIST.index(jamo); jung = -1; jong = 0; state = 1
+                else: cho = -1; jung = -1; jong = 0; state = 0; result.append(jamo)
+
+    if state in [2, 3, 4]: result.append(combine())
+    elif state == 1: result.append(CHO_LIST[cho])
+    
+    return "".join(result)
+
 async def delete_old_file(bucket, url):
     """Удаляет старый файл из хранилища перед загрузкой нового"""
     if not url: return
@@ -309,6 +395,17 @@ async def generate_audio_bytes(text, voice="ko-KR-SunHiNeural") -> bytes:
     """Генерация аудио в память через Microsoft Edge TTS"""
     clean_text = clean_text_for_tts(text)
     if not clean_text: return None
+
+    # Пропускаем, если текст содержит латиницу, но не содержит хангыль (например, аббревиатуры "TOPIK", "TV")
+    if re.search(r'[A-Za-z]', clean_text) and not re.search(r'[가-힣]', clean_text):
+        # Попытка исправить раскладку (например, gks -> 한)
+        fixed_text = try_fix_keyboard_layout(clean_text)
+        if fixed_text and re.search(r'[가-힣]', fixed_text):
+            logging.info(f"🔧 Исправлена раскладка: '{clean_text}' -> '{fixed_text}'")
+            clean_text = fixed_text
+        else:
+            logging.info(f"⏩ Пропуск аудио для '{clean_text}': латиница без хангыля.")
+            return None
 
     for i in range(3): # 3 попытки при ошибке сети
         try:
@@ -387,7 +484,7 @@ async def generate_dialogue_bytes(text) -> bytes:
         logging.warning(f"⚠️ Ошибка диалога (SSML): {e}")
         return None
 
-def check_integrity(bucket_name, table_name='vocabulary'):
+def check_integrity(bucket_name):
     """Проверка целостности файлов и ссылок в БД."""
     logging.info(f"🧹 Запуск проверки целостности для бакета '{bucket_name}'...")
     
@@ -409,53 +506,60 @@ def check_integrity(bucket_name, table_name='vocabulary'):
         logging.error(f"❌ Ошибка получения списка файлов: {e}")
         return
 
-    # 2. Проверяем ссылки в БД
-    try:
-        # Получаем все записи (пагинация может потребоваться для очень больших БД)
-        rows = []
-        offset = 0
-        while True:
-            res = supabase.table(DB_TABLES.get(table_name.upper(), table_name)).select("*").range(offset, offset + 999).execute()
-            if not res.data: break
-            rows.extend(res.data)
-            offset += 1000
-    except Exception as e:
-        logging.error(f"❌ Ошибка чтения БД: {e}")
-        return
-
+    # 2. Проверяем ссылки во всех таблицах
     referenced_files = set()
     fixed_count = 0
 
-    # Колонки, которые содержат ссылки на файлы в этом бакете
-    target_cols = ['audio_url', 'audio_male', 'example_audio'] if bucket_name == DB_BUCKETS['AUDIO'] else ['image']
+    # Определяем таблицы и колонки для проверки
+    tables_to_check = []
+    if bucket_name == DB_BUCKETS['AUDIO']:
+        tables_to_check = [
+            (DB_TABLES['VOCABULARY'], ['audio_url', 'audio_male', 'example_audio']),
+            (DB_TABLES['USER_VOCABULARY'], ['audio_url', 'audio_male', 'example_audio']),
+            (DB_TABLES['QUOTES'], ['audio_url'])
+        ]
+    elif bucket_name == DB_BUCKETS['IMAGES']:
+        tables_to_check = [
+            (DB_TABLES['VOCABULARY'], ['image']),
+            (DB_TABLES['USER_VOCABULARY'], ['image'])
+        ]
 
-    for row in rows:
-        if not isinstance(row, dict): continue
-        row_id = row.get('id')
-        updates = {}
-        for col in target_cols:
-            url = row.get(col)
-            if not url or not isinstance(url, str): continue
+    for table_name, target_cols in tables_to_check:
+        try:
+            rows = []
+            offset = 0
+            while True:
+                # Выбираем только нужные колонки + id
+                cols_query = "id," + ",".join(target_cols)
+                res = supabase.table(table_name).select(cols_query).range(offset, offset + 999).execute()
+                if not res.data: break
+                rows.extend(res.data)
+                offset += 1000
             
-            filename = unquote(url.split('/')[-1].split('?')[0]) # Убираем query params и декодируем
+            for row in rows:
+                row_id = row.get('id')
+                updates = {}
+                for col in target_cols:
+                    url = row.get(col)
+                    if not url or not isinstance(url, str): continue
+                    
+                    filename = unquote(url.split('/')[-1].split('?')[0])
+                    min_size = 100 if bucket_name == DB_BUCKETS['AUDIO'] else 0
+                    
+                    if filename not in storage_files or storage_files[filename] <= min_size:
+                        logging.warning(f"⚠️ Битая ссылка или пустой файл в '{table_name}': id={row_id} col={col} file={filename}")
+                        updates[col] = None
+                        if col == 'image':
+                            updates['image_source'] = None
+                    else:
+                        referenced_files.add(filename)
+                
+                if updates:
+                    supabase.table(table_name).update(updates).eq('id', row_id).execute()
+                    fixed_count += 1
 
-            # Проверка: файл существует и не пустой (для аудио > 100 байт)
-            min_size = 100 if bucket_name == DB_BUCKETS['AUDIO'] else 0
-            
-            if filename not in storage_files or storage_files[filename] <= min_size:
-                logging.warning(f"⚠️ Битая ссылка или пустой файл: id={row_id} col={col} file={filename}")
-                updates[col] = None # Сбрасываем ссылку, чтобы скрипт пересоздал её
-                if col == 'image':
-                    updates['image_source'] = None # Сбрасываем источник, чтобы разрешить перезапись
-            else:
-                referenced_files.add(filename) # Файл валиден, сохраняем его от удаления
-        
-        if updates:
-            try:
-                supabase.table(DB_TABLES.get(table_name.upper(), table_name)).update(updates).eq('id', row_id).execute()
-                fixed_count += 1
-            except Exception as e:
-                logging.error(f"Ошибка обновления id={row_id}: {e}")
+        except Exception as e:
+            logging.error(f"❌ Ошибка проверки таблицы '{table_name}': {e}")
 
     logging.info(f"✅ Исправлено записей в БД: {fixed_count}")
 
@@ -480,6 +584,12 @@ def optimize_image_data(data):
         img = Image.open(BytesIO(data))
         if img.mode != 'RGB':
             img = img.convert('RGB')
+
+        # Ресайз если изображение слишком большое (>1024px)
+        max_size = 1024
+        if img.width > max_size or img.height > max_size:
+            img.thumbnail((max_size, max_size), Image.Resampling.LANCZOS)
+
         output = BytesIO()
         img.save(output, format='JPEG', quality=80, optimize=True)
         return output.getvalue()
@@ -488,8 +598,8 @@ def optimize_image_data(data):
         return data
 
 if args.check:
-    check_integrity(DB_BUCKETS['AUDIO'], DB_TABLES['VOCABULARY'])
-    check_integrity(DB_BUCKETS['IMAGES'], DB_TABLES['VOCABULARY'])
+    check_integrity(DB_BUCKETS['AUDIO'])
+    check_integrity(DB_BUCKETS['IMAGES'])
     logging.info("🏁 Проверка завершена. Переход к восстановлению контента...")
 
 async def upload_to_supabase(bucket, path, data, content_type):
@@ -509,7 +619,7 @@ async def upload_to_supabase(bucket, path, data, content_type):
 
     await loop.run_in_executor(None, _do_upload)
 
-async def handle_main_audio(session, row, word, word_hash, force_audio=False):
+async def handle_main_audio(row, word, word_hash, force_audio=False):
     """Обработка основного аудио (Женский голос - SunHi)"""
     if row.get('audio_url') and not force_audio: return {}
     
@@ -605,6 +715,11 @@ async def handle_image(session, row, translation, word_hash, force_images):
             if resp.status == 200:
                 data = await resp.json()
                 logging.info(f"✅ Image (Edge Auto): {translation} -> {data.get('source')}")
+                
+                # Удаляем старое изображение, если оно было
+                if current_image and current_image != data.get('finalUrl'):
+                    await delete_old_file(DB_BUCKETS['IMAGES'], current_image)
+                    
                 return {}
             else:
                 if resp.status != 404:
@@ -640,7 +755,7 @@ async def _generate_content_for_word(session, row):
     word_hash = hashlib.md5(word.encode('utf-8')).hexdigest()
 
     tasks = [
-        handle_main_audio(session, row, word, word_hash, args.force_audio),
+        handle_main_audio(row, word, word_hash, args.force_audio),
         handle_male_audio(row, word, word_hash, args.force_audio),
         handle_example_audio(row, example, args.force_audio),
         handle_image(session, row, translation, word_hash, args.force_images)
@@ -1238,6 +1353,10 @@ def check_schema_health():
             'id', 'word_kr', 'translation', 'image', 'image_source', 
             'audio_url', 'audio_male', 'example_audio', 'type',
             'grammar_info' # Добавлено для проверки
+        ],
+        DB_TABLES['USER_VOCABULARY']: [
+            'id', 'word_kr', 'translation', 'image', 'image_source', 
+            'audio_url', 'audio_male', 'example_audio', 'type'
         ],
         DB_TABLES['WORD_REQUESTS']: [
             'id', 'word_kr', 'status', 'my_notes', 'target_list_id', 'user_id', 'translation'

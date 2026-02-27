@@ -35,6 +35,8 @@ export const LS_KEYS = {
   THEME_COLOR: "theme_color_v1",
   AUTO_UPDATE: "auto_update_v1",
   AUTO_THEME: "auto_theme_v1",
+  AUTO_THEME_START: "auto_theme_start_v1",
+  AUTO_THEME_END: "auto_theme_end_v1",
   MUSIC_ENABLED: "background_music_enabled_v1",
   MUSIC_VOLUME: "background_music_volume_v1",
   TTS_VOLUME: "tts_volume_v1",

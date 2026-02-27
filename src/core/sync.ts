@@ -30,6 +30,8 @@ export async function syncGlobalStats() {
       currentVoice: state.currentVoice,
       autoUpdate: state.autoUpdate,
       autoTheme: state.autoTheme,
+      autoThemeStart: state.autoThemeStart,
+      autoThemeEnd: state.autoThemeEnd,
       studyGoal: state.studyGoal,
       lastDailyReward: state.userStats.lastDailyReward,
       themeColor: state.themeColor,

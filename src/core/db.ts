@@ -476,6 +476,20 @@ export async function loadFromSupabase(user: { id: string }) {
             state.autoTheme = s.autoTheme;
             localStorage.setItem(LS_KEYS.AUTO_THEME, String(state.autoTheme));
           }
+          if (s.autoThemeStart !== undefined) {
+            state.autoThemeStart = s.autoThemeStart;
+            localStorage.setItem(
+              LS_KEYS.AUTO_THEME_START,
+              String(state.autoThemeStart),
+            );
+          }
+          if (s.autoThemeEnd !== undefined) {
+            state.autoThemeEnd = s.autoThemeEnd;
+            localStorage.setItem(
+              LS_KEYS.AUTO_THEME_END,
+              String(state.autoThemeEnd),
+            );
+          }
           if (s.studyGoal !== undefined) {
             state.studyGoal = s.studyGoal;
             localStorage.setItem(

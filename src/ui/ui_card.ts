@@ -593,7 +593,7 @@ function createCardFront(item: Word, index: number): HTMLElement {
 
   const speakBtn = document.createElement("button");
   speakBtn.className = "icon-btn";
-  speakBtn.textContent = "🔊";
+  speakBtn.textContent = state.currentVoice === "male" ? "👨" : "👩";
   speakBtn.onclick = (e) => {
     e.stopPropagation();
     speakBtn.classList.add("playing");
@@ -1448,10 +1448,15 @@ function createListItem(item: Word, index: number): HTMLElement {
 
   const speakBtn = document.createElement("button");
   speakBtn.className = "btn-icon list-action-btn";
-  speakBtn.textContent = "🔊";
+  speakBtn.textContent = state.currentVoice === "male" ? "👨" : "👩";
   speakBtn.onclick = (e) => {
     e.stopPropagation();
-    speak(item.word_kr, item.audio_url || null);
+    speakBtn.classList.add("playing");
+    let url = item.audio_url;
+    if (state.currentVoice === "male" && item.audio_male) url = item.audio_male;
+    speak(item.word_kr, url || null).then(() => {
+      speakBtn.classList.remove("playing");
+    });
     prefetchNextAudio(index);
   };
 

@@ -35,7 +35,12 @@ export function renderFavoriteQuotes() {
     `;
 
     const speakBtn = el.querySelector(".speak-quote-btn") as HTMLElement;
-    speakBtn.onclick = () => speak(quote.quote_kr, quote.audio_url);
+    speakBtn.onclick = () => {
+      speakBtn.classList.add("playing");
+      speak(quote.quote_kr, quote.audio_url).then(() => {
+        speakBtn.classList.remove("playing");
+      });
+    };
 
     const delBtn = el.querySelector(".delete-quote-btn") as HTMLElement;
     delBtn.onclick = () => removeQuote(quote.id);

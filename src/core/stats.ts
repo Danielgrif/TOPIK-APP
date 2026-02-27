@@ -1,9 +1,10 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { state } from "./state.ts";
-import { showToast, playTone } from "../utils/utils.ts";
+import { showToast, playTone, showComboEffect } from "../utils/utils.ts";
 import { showLevelUpAnimation } from "../ui/ui_interactions.ts";
 import { Scheduler } from "./scheduler.ts";
 import { scheduleSaveState } from "./db.ts";
+import { openModal } from "../ui/ui_modal.ts";
 
 export function getXPForNextLevel(lvl: number): number {
   // Было: 100 + lvl * 50 (Линейная)
@@ -16,6 +17,7 @@ export function addXP(val: number) {
   if (val > 0) state.userStats.coins = (state.userStats.coins || 0) + val;
 
   let currentLevel = Number(state.userStats.level || 1);
+  const oldRole = getRole(currentLevel);
   let requiredForCurrentLevel = getXPForNextLevel(currentLevel);
   let leveledUp = false;
 
@@ -30,6 +32,21 @@ export function addXP(val: number) {
 
   state.userStats.level = currentLevel;
   updateXPUI();
+
+  const newRole = getRole(currentLevel);
+  if (newRole.name !== oldRole.name) {
+    setTimeout(() => {
+      showComboEffect(`🏆 Новое звание: ${newRole.name}!`);
+      playTone("achievement-unlock");
+      if (typeof window.confetti === "function") {
+        window.confetti({
+          particleCount: 200,
+          spread: 100,
+          origin: { y: 0.6 },
+        });
+      }
+    }, 1000); // Show after level up animation
+  }
 
   if (leveledUp) {
     const bar = document.getElementById("xp-fill");
@@ -53,13 +70,21 @@ export function updateXPUI() {
   const xpText = document.getElementById("xp-text");
   if (xpText) xpText.innerText = `${xp}/${denom}`;
 
+  const role = getRole(lvl);
+  const xpLabel = document.querySelector("#xp-level-widget .xp-label");
+  if (xpLabel) {
+    xpLabel.textContent = `${role.icon} LVL`;
+  }
+
   const bar = document.getElementById("xp-fill");
   if (bar) {
     const pct = Math.min(100, Math.max(0, (xp / denom) * 100));
     if (bar.tagName === "path" || bar.tagName === "PATH") {
-        bar.setAttribute("stroke-dasharray", `${pct}, 100`);
+      bar.setAttribute("stroke-dasharray", `${pct}, 100`);
+      bar.style.stroke = role.color;
     } else {
-        bar.style.width = `${pct}%`;
+      bar.style.width = `${pct}%`;
+      bar.style.backgroundColor = role.color;
     }
   }
 }
@@ -113,21 +138,21 @@ export function updateStats() {
       .map((s) => {
         if (s.isChart) {
           return `
-                <div class="stat-card-primary" style="border-bottom: 3px solid ${s.color}">
+                <div class="stat-card-primary">
                     <div class="stat-chart-wrapper">
                         <svg viewBox="0 0 36 36" class="circular-chart">
                             <path class="circle-bg" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
                             <path class="circle-fill" stroke="${s.color}" stroke-dasharray="${s.value}, 100" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
                         </svg>
-                        <div class="stat-chart-text">${s.value}%</div>
+                        <div class="stat-chart-text" style="color: ${s.color}">${s.value}%</div>
                     </div>
                     <div class="stat-label-primary">${s.label}</div>
                 </div>
             `;
         }
         return `
-          <div class="stat-card-primary" style="border-bottom: 3px solid ${s.color}">
-              <div class="stat-icon-primary">${s.icon}</div>
+          <div class="stat-card-primary">
+              <div class="stat-icon-primary" style="background: ${s.color}20; color: ${s.color};">${s.icon}</div>
               <div class="stat-info-primary">
                   <div class="stat-value-primary">${s.value}</div>
                   <div class="stat-label-primary">${s.label}</div>
@@ -478,12 +503,12 @@ export function renderTopicMastery() {
   Object.entries(topics).forEach(([topic, stats]) => {
     const pct = Math.round((stats.learned / stats.total) * 100);
     html += `
-        <div class="topic-mastery-item">
-            <div class="topic-name">${topic}</div>
+        <div class="topic-mastery-card">
+            <div class="topic-header"><span class="topic-name">${topic}</span> <span class="topic-pct">${pct}%</span></div>
             <div class="topic-progress">
-                <div class="topic-bar" style="width: ${pct}%"></div>
+                <div class="topic-bar" style="width: ${pct}%; background-color: hsl(${pct * 1.2}, 70%, 50%);"></div>
             </div>
-            <div class="topic-stats">${stats.learned}/${stats.total}</div>
+            <div class="topic-stats">${stats.learned} из ${stats.total} слов</div>
         </div>`;
   });
 
@@ -561,24 +586,23 @@ export function renderDetailedStats() {
 
   const days = getLast7DaysActivity();
   const additionalHtml = ""; // Define additionalHtml to prevent error
+
   let streakHtml = `
-    <div id="streak-calendar-card" class="streak-calendar-card" style="background: var(--surface-1); padding: 20px; border-radius: 16px; border: 1px solid var(--border-color); margin-bottom: 20px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 15px;">
-      <div style="display: flex; align-items: center; gap: 15px;">
-        <div style="font-size: 32px;">🔥</div>
+    <div id="streak-calendar-card" class="streak-calendar-card">
+      <div class="streak-info">
+        <div class="streak-icon-lg">🔥</div>
         <div>
-          <div style="font-size: 14px; color: var(--text-sub);">Текущая серия</div>
-          <div style="font-size: 24px; font-weight: 800;">${state.streak.count} дн.</div>
+          <div class="streak-label">Текущая серия</div>
+          <div class="streak-value">${state.streak.count} дн.</div>
         </div>
       </div>
-      <div style="display: flex; gap: 8px;">
+      <div class="streak-days-grid">
         ${days
           .map(
             (d) => `
-          <div style="display: flex; flex-direction: column; align-items: center; gap: 5px;">
-            <div style="font-size: 10px; color: var(--text-sub); text-transform: uppercase;">${d.day}</div>
-            <div style="width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 14px; 
-              ${d.active ? "background: var(--danger); color: white; box-shadow: 0 2px 8px rgba(225, 112, 85, 0.4);" : "background: var(--surface-2); color: var(--text-sub);"} 
-              ${d.isToday && !d.active ? "border: 2px solid var(--danger);" : ""}">
+          <div class="streak-day-col">
+            <div class="streak-day-name">${d.day}</div>
+            <div class="streak-day-circle ${d.active ? "active" : ""} ${d.isToday ? "today" : ""}">
               ${d.active ? "✓" : d.date}
             </div>
           </div>
@@ -592,7 +616,7 @@ export function renderDetailedStats() {
   // Add Mistake Analysis Button if there are mistakes
   if (state.mistakes.size > 0) {
     streakHtml += `
-      <button class="btn" data-action="open-mistakes" style="width: 100%; margin-bottom: 20px; background: rgba(239, 68, 68, 0.1); color: var(--danger); border: 1px solid var(--danger);">
+      <button class="btn" data-action="open-mistakes" style="width: 100%; margin-bottom: 24px; background: rgba(239, 68, 68, 0.1); color: var(--danger); border: 1px solid var(--danger);">
         ⚠️ Анализ ошибок (${state.mistakes.size})
       </button>
     `;
@@ -605,34 +629,34 @@ export function renderDetailedStats() {
     container.innerHTML = `
       ${streakHtml}
       ${additionalHtml}
-      <div class="charts-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; margin-top: 20px;">
-        <div class="chart-card" style="background: var(--surface-1); padding: 15px; border-radius: 16px; border: 1px solid var(--border-color);">
-          <h3 style="margin: 0 0 15px 0; font-size: 16px; font-weight: 700;">📊 Активность (7 дней)</h3>
-          <div style="position: relative; height: 200px;">
+      <div class="charts-grid">
+        <div class="chart-card">
+          <h3 class="chart-title">📊 Активность (7 дней)</h3>
+          <div class="chart-container">
             <canvas id="activityChart"></canvas>
           </div>
         </div>
-        <div class="chart-card" style="background: var(--surface-1); padding: 15px; border-radius: 16px; border: 1px solid var(--border-color);">
-          <h3 style="margin: 0 0 15px 0; font-size: 16px; font-weight: 700;">📅 Изучено слов</h3>
-          <div style="position: relative; height: 200px;">
+        <div class="chart-card">
+          <h3 class="chart-title">📅 Изучено слов</h3>
+          <div class="chart-container">
             <canvas id="learnedChart"></canvas>
           </div>
         </div>
-        <div class="chart-card" style="background: var(--surface-1); padding: 15px; border-radius: 16px; border: 1px solid var(--border-color);">
-          <h3 style="margin: 0 0 15px 0; font-size: 16px; font-weight: 700;">🧠 Распределение SRS</h3>
-          <div style="position: relative; height: 200px;">
+        <div class="chart-card">
+          <h3 class="chart-title">🧠 Распределение SRS</h3>
+          <div class="chart-container">
             <canvas id="srsChart"></canvas>
           </div>
         </div>
-        <div class="chart-card" style="background: var(--surface-1); padding: 15px; border-radius: 16px; border: 1px solid var(--border-color);">
-          <h3 style="margin: 0 0 15px 0; font-size: 16px; font-weight: 700;">📉 Кривая забывания</h3>
-          <div style="position: relative; height: 200px;">
+        <div class="chart-card">
+          <h3 class="chart-title">📉 Кривая забывания</h3>
+          <div class="chart-container">
             <canvas id="forgettingChart"></canvas>
           </div>
         </div>
-        <div class="chart-card" style="background: var(--surface-1); padding: 15px; border-radius: 16px; border: 1px solid var(--border-color);">
-          <h3 style="margin: 0 0 15px 0; font-size: 16px; font-weight: 700;">🎯 Точность сессий</h3>
-          <div style="position: relative; height: 200px;">
+        <div class="chart-card">
+          <h3 class="chart-title">🎯 Точность сессий</h3>
+          <div class="chart-container">
             <canvas id="accuracyChart"></canvas>
           </div>
         </div>
@@ -641,6 +665,15 @@ export function renderDetailedStats() {
   } else {
     container.insertAdjacentHTML("afterbegin", streakHtml + additionalHtml);
   }
+
+  // FIX: Явно вызываем рендеринг графиков после вставки HTML
+  requestAnimationFrame(() => {
+    renderActivityChart();
+    renderLearnedChart();
+    renderSRSDistributionChart();
+    renderForgettingCurve();
+    renderAccuracyChart();
+  });
 }
 
 export function renderActivityChart() {
@@ -729,8 +762,15 @@ export function renderActivityChart() {
         },
       },
       animation: {
-        duration: 1000,
+        duration: 2000,
         easing: "easeOutQuart",
+        delay: (context: any) => {
+          let delay = 0;
+          if (context.type === "data" && context.mode === "default") {
+            delay = context.dataIndex * 100 + context.datasetIndex * 100;
+          }
+          return delay;
+        },
       },
       tooltip: {
         backgroundColor: theme.tooltipBg,
@@ -792,6 +832,17 @@ export function renderLearnedChart() {
     options: {
       responsive: true,
       maintainAspectRatio: false,
+      animation: {
+        duration: 1500,
+        easing: "easeOutBounce",
+        delay: (context: any) => {
+          let delay = 0;
+          if (context.type === "data" && context.mode === "default") {
+            delay = context.dataIndex * 150;
+          }
+          return delay;
+        },
+      },
       plugins: {
         legend: { display: false },
         tooltip: {
@@ -882,6 +933,13 @@ export function renderAccuracyChart() {
     options: {
       responsive: true,
       maintainAspectRatio: false,
+      animation: {
+        duration: 2000,
+        easing: "easeOutCubic",
+        y: {
+          from: (ctx: any) => (ctx.type === "data" ? 0 : null),
+        },
+      },
       plugins: {
         legend: { display: false },
         tooltip: {
@@ -987,6 +1045,11 @@ export function renderForgettingCurve() {
     options: {
       responsive: true,
       maintainAspectRatio: false,
+      animation: {
+        duration: 2500,
+        easing: "easeInOutQuart",
+        loop: false,
+      },
       plugins: {
         legend: {
           display: true,
@@ -1067,6 +1130,12 @@ export function renderSRSDistributionChart() {
     options: {
       responsive: true,
       maintainAspectRatio: false,
+      animation: {
+        animateRotate: true,
+        animateScale: true,
+        duration: 1500,
+        easing: "easeOutCirc",
+      },
       cutout: "75%",
       plugins: {
         legend: {
@@ -1098,11 +1167,6 @@ export function renderSRSDistributionChart() {
             },
           },
         },
-      },
-      animation: {
-        animateRotate: true,
-        animateScale: true,
-        duration: 1200,
       },
     },
     plugins: [
@@ -1137,4 +1201,123 @@ export function renderSRSDistributionChart() {
       },
     ],
   });
+}
+
+export const ROLES = [
+  { minLevel: 100, name: "Божество", icon: "👑", color: "#FFD700" },
+  { minLevel: 75, name: "Титан", icon: "⚡", color: "#E11D48" },
+  { minLevel: 50, name: "Легенда", icon: "🏆", color: "#9333EA" },
+  { minLevel: 40, name: "Мудрец", icon: "📜", color: "#2563EB" },
+  { minLevel: 30, name: "Грандмастер", icon: "🔮", color: "#059669" },
+  { minLevel: 20, name: "Мастер", icon: "🥋", color: "#0D9488" },
+  { minLevel: 15, name: "Эксперт", icon: "🎓", color: "#CA8A04" },
+  { minLevel: 10, name: "Знаток", icon: "🧠", color: "#EA580C" },
+  { minLevel: 5, name: "Студент", icon: "📚", color: "#4F46E5" },
+  { minLevel: 3, name: "Ученик", icon: "📝", color: "#64748B" },
+  { minLevel: 0, name: "Новичок", icon: "🌱", color: "#94A3B8" },
+];
+
+export function getRole(lvl: number) {
+  return ROLES.find((r) => lvl >= r.minLevel) || ROLES[ROLES.length - 1];
+}
+
+export function openRolesModal() {
+  let modal = document.getElementById("roles-modal");
+  if (!modal) {
+    modal = document.createElement("div");
+    modal.id = "roles-modal";
+    modal.className = "modal";
+    modal.setAttribute("data-close-modal", "roles-modal");
+    document.body.appendChild(modal);
+  }
+
+  const currentLevel = state.userStats.level;
+  const currentRole = getRole(currentLevel);
+  const currentRoleIndex = ROLES.indexOf(currentRole);
+  const nextRole = currentRoleIndex > 0 ? ROLES[currentRoleIndex - 1] : null;
+
+  let progressHtml = "";
+  if (nextRole) {
+    const prevRoleMinLevel = currentRole.minLevel;
+    const nextRoleMinLevel = nextRole.minLevel;
+    const totalLevels = nextRoleMinLevel - prevRoleMinLevel;
+    const gainedLevels = currentLevel - prevRoleMinLevel;
+    const percent = Math.min(
+      100,
+      Math.max(0, (gainedLevels / totalLevels) * 100),
+    );
+    const levelsLeft = nextRoleMinLevel - currentLevel;
+
+    progressHtml = `
+      <div style="margin-bottom: 20px; padding: 15px; background: var(--surface-2); border-radius: 16px; text-align: center; border: 1px solid var(--border-color);">
+        <div style="font-size: 13px; color: var(--text-sub); margin-bottom: 10px;">
+          До звания <strong style="color: ${nextRole.color}">${nextRole.name}</strong> осталось уровней: <strong>${levelsLeft}</strong>
+        </div>
+        <div class="xp-bar-container" style="height: 10px; background: var(--surface-3); border-radius: 5px; overflow: hidden; position: relative;">
+          <div class="xp-bar-fill" style="width: ${percent}%; background: ${nextRole.color}; height: 100%; transition: width 0.5s ease;"></div>
+        </div>
+        <div style="display: flex; justify-content: space-between; margin-top: 8px; font-size: 11px; color: var(--text-tertiary); font-weight: 600;">
+          <span>${currentRole.icon} ${currentRole.name} (L${prevRoleMinLevel})</span>
+          <span>${nextRole.icon} ${nextRole.name} (L${nextRoleMinLevel})</span>
+        </div>
+      </div>
+    `;
+  } else {
+    progressHtml = `
+      <div style="margin-bottom: 20px; padding: 15px; background: linear-gradient(135deg, var(--surface-2), var(--surface-1)); border-radius: 16px; text-align: center; border: 1px solid var(--gold);">
+        <div style="font-size: 24px; margin-bottom: 5px;">👑</div>
+        <div style="font-size: 15px; font-weight: 800; color: var(--gold);">Вы достигли вершины!</div>
+        <div style="font-size: 12px; color: var(--text-sub);">Вы — легенда этого мира.</div>
+      </div>
+    `;
+  }
+
+  // Отображаем от меньшего к большему, чтобы был виден путь
+  const rolesList = [...ROLES].reverse();
+
+  const rolesHtml = rolesList
+    .map((role) => {
+      const isCurrent =
+        currentLevel >= role.minLevel &&
+        ROLES.find((r) => currentLevel >= r.minLevel) === role;
+      const isUnlocked = currentLevel >= role.minLevel;
+
+      return `
+            <div class="role-item" style="
+                display: flex; 
+                align-items: center; 
+                padding: 12px; 
+                margin-bottom: 8px; 
+                background: var(--surface-2); 
+                border-radius: 12px; 
+                border: 2px solid ${isCurrent ? role.color : "transparent"};
+                opacity: ${isUnlocked ? 1 : 0.5};
+                filter: ${isUnlocked ? "none" : "grayscale(0.8)"};
+            ">
+                <div style="font-size: 24px; margin-right: 15px; width: 40px; text-align: center;">${role.icon}</div>
+                <div style="flex: 1;">
+                    <div style="font-weight: 800; color: var(--text-main);">${role.name}</div>
+                    <div style="font-size: 12px; color: var(--text-sub);">Уровень ${role.minLevel}+</div>
+                </div>
+                ${isCurrent ? `<div style="font-size: 11px; font-weight: bold; color: white; background: ${role.color}; padding: 4px 8px; border-radius: 8px;">Вы здесь</div>` : ""}
+                ${!isUnlocked ? `<div style="font-size: 16px;">🔒</div>` : ""}
+            </div>
+        `;
+    })
+    .join("");
+
+  modal.innerHTML = `
+        <div class="modal-content" style="max-width: 400px;">
+            <div class="modal-header">
+                <h3>🏆 Звания</h3>
+                <button class="btn btn-icon close-modal-btn" data-close-modal="roles-modal">✕</button>
+            </div>
+            <div class="modal-body" style="max-height: 60vh; overflow-y: auto; padding-right: 5px;">
+                ${progressHtml}
+                ${rolesHtml}
+            </div>
+        </div>
+    `;
+
+  openModal("roles-modal");
 }

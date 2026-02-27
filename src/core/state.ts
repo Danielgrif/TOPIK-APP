@@ -65,6 +65,8 @@ export interface AppState {
   themeColor: string;
   autoUpdate: boolean;
   autoTheme: boolean;
+  autoThemeStart: number;
+  autoThemeEnd: number;
   backgroundMusicEnabled: boolean;
   backgroundMusicVolume: number;
   ttsVolume: number;
@@ -145,13 +147,27 @@ export const state: AppState = {
     safeGetItem(LS_KEYS.AUDIO_SPEED) !== null
       ? Number(safeGetItem(LS_KEYS.AUDIO_SPEED))
       : 0.9,
-  darkMode: safeGetItem(LS_KEYS.DARK_MODE) === "true",
+  darkMode:
+    safeGetItem(LS_KEYS.DARK_MODE) !== null
+      ? safeGetItem(LS_KEYS.DARK_MODE) === "true"
+      : window.matchMedia &&
+          window.matchMedia("(prefers-color-scheme: dark)").matches
+        ? true
+        : false,
   focusMode: false, // Отключаем сохранение состояния при перезагрузке
   zenMode: safeGetItem(LS_KEYS.ZEN_MODE) === "true",
   viewMode: safeGetItem(LS_KEYS.VIEW_MODE) || "grid",
   themeColor: safeGetItem(LS_KEYS.THEME_COLOR) || "purple",
   autoUpdate: safeGetItem(LS_KEYS.AUTO_UPDATE) !== "false",
   autoTheme: safeGetItem(LS_KEYS.AUTO_THEME) === "true",
+  autoThemeStart:
+    safeGetItem(LS_KEYS.AUTO_THEME_START) !== null
+      ? Number(safeGetItem(LS_KEYS.AUTO_THEME_START))
+      : 20,
+  autoThemeEnd:
+    safeGetItem(LS_KEYS.AUTO_THEME_END) !== null
+      ? Number(safeGetItem(LS_KEYS.AUTO_THEME_END))
+      : 6,
   backgroundMusicEnabled: safeGetItem(LS_KEYS.MUSIC_ENABLED) === "true",
   backgroundMusicVolume:
     safeGetItem(LS_KEYS.MUSIC_VOLUME) !== null

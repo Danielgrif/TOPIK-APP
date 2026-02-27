@@ -7,11 +7,10 @@
     "build": "tsc && vite build",
     "preview": "vite preview",
     "check": "tsc --noEmit",
+    "deploy": "npm run build && npx gh-pages -d dist",
     "lint": "eslint . --report-unused-disable-directives --max-warnings 0",
     "format": "prettier --write .",
-    "test": "vitest",
-    "predeploy": "npm run build",
-    "deploy": "gh-pages -d dist"
+    "test": "vitest"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.2",

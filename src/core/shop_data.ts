@@ -57,6 +57,27 @@ export const SHOP_ITEMS: ShopItem[] = [
   },
 ];
 
+export const RARE_THEMES: ShopItem[] = [
+  {
+    id: "theme_ruby",
+    name: "Тема: Рубин",
+    description: "Роскошный красный дизайн. Редкая награда.",
+    price: 0, // Not for sale
+    type: "theme",
+    value: "ruby",
+    icon: "💎",
+  },
+  {
+    id: "theme_amethyst",
+    name: "Тема: Аметист",
+    description: "Королевский фиолетовый. Редкая награда.",
+    price: 0, // Not for sale
+    type: "theme",
+    value: "amethyst",
+    icon: "🔮",
+  },
+];
+
 export const DAILY_REWARDS = [
   { day: 1, type: "coins", amount: 50, icon: "💰" },
   { day: 2, type: "coins", amount: 75, icon: "💰" },
@@ -71,4 +92,5 @@ export const MYSTERY_BOX_REWARDS = [
   { type: "coins", amount: 500, message: "💰 500 монет!" },
   { type: "xp", amount: 500, message: "✨ 500 XP!" },
   { type: "streakFreeze", amount: 2, message: "❄️ 2 заморозки серии!" },
+  { type: "rare_theme", amount: 1, message: "🎨 Редкая тема!" },
 ];

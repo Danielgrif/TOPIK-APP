@@ -166,13 +166,13 @@ export function showUndoToast(
 
   const el = document.createElement("div");
   el.className = "toast-item";
-  el.style.cssText =
-    "display: flex; align-items: center; justify-content: space-between; gap: 15px; min-width: 280px; padding-right: 10px;";
+  // Стили теперь в CSS, но для Undo-тоста нужна специфическая структура
+  el.style.paddingRight = "10px"; // Немного меньше паддинг справа для кнопки
 
   el.innerHTML = `
     <span>${msg}</span>
-    <button style="background: rgba(255,255,255,0.2); border: none; color: inherit; padding: 5px 10px; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: bold;">↩ Отмена</button>
-    <div style="position: absolute; bottom: 0; left: 0; height: 3px; background: rgba(255,255,255,0.7); width: 100%; transition: width ${timeout}ms linear;"></div>
+    <button class="toast-undo-btn">↩ Отмена</button>
+    <div class="toast-undo-bar" style="transition: width ${timeout}ms linear;"></div>
   `;
 
   container.appendChild(el);
@@ -656,6 +656,25 @@ export function speak(
       window.speechSynthesis.cancel();
       const u = new SpeechSynthesisUtterance(t);
       u.lang = "ko-KR";
+
+      // Попытка выбрать голос в соответствии с настройками
+      const voices = window.speechSynthesis.getVoices();
+      const koreanVoices = voices.filter((v) => v.lang.includes("ko"));
+
+      if (koreanVoices.length > 0) {
+        let targetVoice = null;
+        if (state.currentVoice === "male") {
+          targetVoice = koreanVoices.find((v) =>
+            v.name.toLowerCase().includes("male"),
+          );
+        } else {
+          targetVoice = koreanVoices.find((v) =>
+            v.name.toLowerCase().includes("female"),
+          );
+        }
+        if (targetVoice) u.voice = targetVoice;
+      }
+
       u.rate = state.audioSpeed || 0.9;
       u.volume = state.ttsVolume;
       u.onend = () => resolve();

@@ -92,17 +92,21 @@
                         <span class="slider"></span>
                     </label>
                 </div>
-                <div class="setting-item" style="display: block;">
-                    <div style="display: flex; justify-content: space-between; margin-bottom: 10px;">
+                <div class="setting-item column" id="auto-theme-times" style="display: none; background: var(--surface-2); border-top: none; margin-top: -10px; border-radius: 0 0 20px 20px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; width: 100%; margin-bottom: 10px;">
+                        <div class="setting-left" style="font-size: 13px; color: var(--text-sub);">🌙 Начало (час)</div>
+                        <input type="number" id="auto-theme-start" class="search-box" style="width: 70px; padding: 6px; text-align: center;" min="0" max="23" data-action="set-auto-theme-start">
+                    </div>
+                    <div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
+                        <div class="setting-left" style="font-size: 13px; color: var(--text-sub);">☀️ Конец (час)</div>
+                        <input type="number" id="auto-theme-end" class="search-box" style="width: 70px; padding: 6px; text-align: center;" min="0" max="23" data-action="set-auto-theme-end">
+                    </div>
+                </div>
+                <div class="setting-item block">
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 15px;">
                         <div class="setting-left"><span class="setting-icon">🎨</span><span class="setting-label">Цветовая тема</span></div>
                     </div>
-                    <div style="display: flex; gap: 10px; justify-content: space-between; flex-wrap: wrap;">
-                        <button class="color-option" data-action="set-accent" data-value="purple"></button>
-                        <button class="color-option" data-action="set-accent" data-value="blue"></button>
-                        <button class="color-option" data-action="set-accent" data-value="green"></button>
-                        <button class="color-option" data-action="set-accent" data-value="orange"></button>
-                        <button class="color-option" data-action="set-accent" data-value="pink"></button>
-                    </div>
+                    <div id="theme-picker-container" style="display: flex; gap: 12px; justify-content: center; flex-wrap: wrap;"></div>
                 </div>
             </div>
         </div>
@@ -118,21 +122,22 @@
                         <span class="slider"></span>
                     </label>
                 </div>
-                <div class="setting-item" onclick="document.getElementById('voice-setting-btn').click()" style="cursor: pointer;">
-                    <div class="setting-left"><span class="setting-icon">🗣️</span><span class="setting-label">Голос</span></div>
-                    <div class="setting-right">
-                        <button id="voice-setting-btn" class="btn-text" data-action="toggle-voice">👩 Женский</button>
+                <div class="setting-item block">
+                    <div class="setting-left" style="margin-bottom: 10px;"><span class="setting-icon">🗣️</span><span class="setting-label">Голос озвучки</span></div>
+                    <div class="segment-control" id="voice-selection">
+                        <button class="segment-btn" data-action="set-voice" data-value="female">👩 Женский</button>
+                        <button class="segment-btn" data-action="set-voice" data-value="male">👨 Мужской</button>
                     </div>
                 </div>
-                <div class="setting-item" style="display: block;">
-                    <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
+                <div class="setting-item block">
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 10px;">
                         <div class="setting-left"><span class="setting-icon">⏩</span><span class="setting-label">Скорость</span></div>
                         <span id="speed-val" class="setting-value">1.0x</span>
                     </div>
-                    <div style="display: flex; align-items: center; gap: 10px;">
-                        <span style="font-size: 12px;">🐢</span>
+                    <div style="display: flex; align-items: center; gap: 15px;">
+                        <span style="font-size: 14px;">🐢</span>
                         <input type="range" id="speed-slider" min="0.5" max="1.5" step="0.1" value="0.9" style="flex: 1;" data-action="set-speed">
-                        <span style="font-size: 12px;">🐇</span>
+                        <span style="font-size: 14px;">🐇</span>
                     </div>
                 </div>
                 <div class="setting-item">
@@ -177,7 +182,7 @@
                     <div class="setting-left"><span class="setting-icon">🗑️</span><span class="setting-label">Корзина</span></div>
                     <div class="setting-right"><span id="trash-count-badge" class="badge-count" style="display: none;">0</span><span class="setting-arrow">›</span></div>
                 </div>
-                <div class="setting-item" style="display: block;">
+                <div class="setting-item block">
                     <div class="setting-left" style="margin-bottom: 10px;"><span class="setting-icon">⏳</span><span class="setting-label">Хранение в корзине</span></div>
                     <div class="segment-control" id="trash-retention-options">
                         <button class="segment-btn" data-action="set-trash-retention" data-value="7">7 дн.</button>
@@ -206,14 +211,14 @@
         <div class="settings-section">
             <div class="settings-section-title">Аккаунт</div>
             <div class="settings-list">
-                <div class="setting-item" style="flex-direction: column; align-items: stretch; gap: 10px;">
-                    <label for="new-password" class="setting-left"><span class="setting-icon">🔐</span><span class="setting-label">Смена пароля</span></label>
+                <div class="setting-item column">
+                    <label for="new-password" class="setting-left" style="width: 100%;"><span class="setting-icon">🔐</span><span class="setting-label">Смена пароля</span></label>
                     <form onsubmit="return false;" style="display: flex; gap: 10px; width: 100%;">
                         <div style="position: relative; flex: 1;">
                             <input type="password" id="new-password" name="new-password" class="search-box" placeholder="Новый пароль" autocomplete="new-password" style="padding-right: 35px;">
                             <button type="button" data-action="toggle-password" data-value="new-password" class="password-toggle">👁️</button>
                         </div>
-                        <button class="btn" data-action="change-password" style="padding: 8px 12px;">OK</button>
+                        <button class="btn btn-quiz" data-action="change-password" style="padding: 8px 16px;">OK</button>
                     </form>
                     <div class="password-strength" id="new-strength-container" style="margin-top: 0;"><div id="new-strength-bar"></div></div>
                 </div>

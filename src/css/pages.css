@@ -27,41 +27,59 @@
 /* Stats Strip */
 .stats-strip {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
-    gap: 15px;
-    margin-bottom: 25px;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
+    margin-bottom: 24px;
+}
+@media (min-width: 600px) {
+    .stats-strip { grid-template-columns: repeat(4, 1fr); }
 }
 
 .stat-card-primary {
     background: var(--surface-1);
-    border-radius: 16px;
-    padding: 15px;
+    border-radius: 20px;
+    padding: 16px;
     display: flex;
     flex-direction: column;
     align-items: center;
-    text-align: center;
+    justify-content: center;
     gap: 8px;
     border: 1px solid var(--border-color);
     box-shadow: var(--shadow-sm);
+    transition: transform 0.2s;
 }
+.stat-card-primary:hover { transform: translateY(-2px); }
 
 .stat-icon-primary {
-    font-size: 24px;
+    font-size: 20px;
+    width: 40px;
+    height: 40px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 4px;
 }
 
 .stat-info-primary {
-    display: contents; /* To flatten the structure for flex layout */
+    display: flex;
+    flex-direction: column;
+    align-items: center;
 }
 
 .stat-value-primary {
-    font-size: 22px;
+    font-size: 20px;
     font-weight: 800;
+    color: var(--text-main);
+    line-height: 1.2;
 }
 
 .stat-label-primary {
-    font-size: 12px;
+    font-size: 11px;
     color: var(--text-sub);
     font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
 }
 
 .stat-chart-wrapper {
@@ -97,6 +115,146 @@
     stroke-width: 2.8;
     stroke-linecap: round;
     animation: progress 1s ease-out forwards;
+}
+
+/* --- Streak Calendar Redesign --- */
+.streak-calendar-card {
+    background: var(--surface-1);
+    padding: 24px;
+    border-radius: 24px;
+    border: 1px solid var(--border-color);
+    margin-bottom: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 20px;
+    box-shadow: var(--shadow-sm);
+}
+
+.streak-info {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+}
+
+.streak-icon-lg {
+    font-size: 42px;
+    filter: drop-shadow(0 4px 8px rgba(255, 118, 117, 0.3));
+    animation: pulse-fire 3s infinite;
+}
+
+.streak-label { font-size: 13px; color: var(--text-sub); font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
+.streak-value { font-size: 28px; font-weight: 900; color: var(--text-main); line-height: 1; }
+
+.streak-days-grid {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.streak-day-col {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+}
+
+.streak-day-name {
+    font-size: 10px;
+    color: var(--text-tertiary);
+    text-transform: uppercase;
+    font-weight: 700;
+}
+
+.streak-day-circle {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 14px;
+    background: var(--surface-2);
+    color: var(--text-sub);
+    transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.streak-day-circle.active {
+    background: var(--danger);
+    color: white;
+    box-shadow: 0 4px 10px rgba(239, 68, 68, 0.3);
+    transform: scale(1.1);
+}
+
+.streak-day-circle.today:not(.active) {
+    border: 2px solid var(--danger);
+    color: var(--danger);
+    background: transparent;
+}
+
+/* --- Charts Grid --- */
+.charts-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 20px;
+    margin-top: 20px;
+}
+
+.chart-card {
+    background: var(--surface-1);
+    padding: 20px;
+    border-radius: 24px;
+    border: 1px solid var(--border-color);
+    box-shadow: var(--shadow-sm);
+}
+
+.chart-title { margin: 0 0 20px 0; font-size: 16px; font-weight: 800; color: var(--text-main); }
+.chart-container { position: relative; height: 220px; width: 100%; }
+
+/* --- Topic Mastery Redesign --- */
+.topic-mastery-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.topic-mastery-card {
+    background: var(--surface-1);
+    border: 1px solid var(--border-color);
+    border-radius: 16px;
+    padding: 16px;
+}
+
+.topic-header {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 8px;
+    font-size: 14px;
+    font-weight: 700;
+}
+
+.topic-pct { color: var(--primary); }
+
+.topic-progress {
+    height: 8px;
+    background: var(--surface-2);
+    border-radius: 4px;
+    overflow: hidden;
+    margin-bottom: 6px;
+}
+
+.topic-bar {
+    height: 100%;
+    border-radius: 4px;
+    transition: width 1s ease-out;
+}
+
+.topic-stats {
+    font-size: 11px;
+    color: var(--text-tertiary);
+    text-align: right;
 }
 
 /* --- Hanja Explorer Modal Redesign --- */

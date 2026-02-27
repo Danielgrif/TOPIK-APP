@@ -4,10 +4,15 @@ import { loadFromSupabase } from "./db.ts";
 import { showToast } from "../utils/utils.ts";
 import { saveAndRender } from "../ui/ui.ts";
 import { openModal, closeModal, openConfirm } from "../ui/ui_modal.ts";
-import { applyTheme, updateVoiceUI } from "../ui/ui_settings.ts";
+import {
+  applyTheme,
+  updateVoiceUI,
+  updateSettingsUI,
+} from "../ui/ui_settings.ts";
 import { User } from "../types/index.ts";
 import { LS_KEYS } from "./constants.ts";
 import { AuthService } from "./auth_service.ts";
+import { getRole, openRolesModal } from "./stats.ts";
 
 export function updateAuthUI(user: User | null) {
   // Keep a reference to the current user in the global state
@@ -140,12 +145,15 @@ export function openProfileModal() {
     const roleEl = document.getElementById("profile-role");
     if (roleEl) {
       const lvl = state.userStats.level;
-      let role = "Новичок";
-      if (lvl >= 5) role = "Студент";
-      if (lvl >= 10) role = "Знаток";
-      if (lvl >= 20) role = "Мастер";
-      if (lvl >= 50) role = "Легенда";
-      roleEl.textContent = `${role} (LVL ${lvl})`;
+      const role = getRole(lvl);
+      roleEl.textContent = `${role.icon} ${role.name} (LVL ${lvl})`;
+      roleEl.style.color = role.color;
+      roleEl.style.backgroundColor = role.color + "20";
+      roleEl.style.border = `1px solid ${role.color}30`;
+
+      roleEl.style.cursor = "pointer";
+      roleEl.title = "Нажмите, чтобы посмотреть все звания";
+      roleEl.onclick = () => openRolesModal();
     }
 
     const input = document.getElementById(
@@ -164,6 +172,7 @@ export function openProfileModal() {
     const scrollContainer = document.getElementById("profile-scroll-container");
     if (scrollContainer) scrollContainer.scrollTop = 0;
 
+    updateSettingsUI();
     openModal("profile-modal");
   } else {
     // Если пользователя нет в стейте - сразу открываем вход.
@@ -290,6 +299,7 @@ async function finalizeAuth(user: User) {
   await loadFromSupabase(user);
   applyTheme();
   updateVoiceUI();
+  updateSettingsUI();
   saveAndRender();
   closeModal("login-modal");
 }
