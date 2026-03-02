@@ -1,7 +1,7 @@
 import { state } from "../core/state.ts";
 import { setTypeFilter } from "./ui_filters.ts";
 import { closeModal } from "./ui_modal.ts";
-import { showToast, playTone } from "../utils/utils.ts";
+import { showToast } from "../utils/utils.ts";
 import { LS_KEYS, SW_MESSAGES } from "../core/constants.ts";
 
 export function showUpdateNotification(worker: ServiceWorker) {
@@ -228,23 +228,4 @@ export function dismissInstallBanner() {
   const banner = document.getElementById("install-banner");
   if (banner) banner.classList.remove("show");
   localStorage.setItem(LS_KEYS.PWA_BANNER_DISMISSED, "true");
-}
-
-export function showLevelUpAnimation(level: number) {
-  const overlay = document.getElementById("level-up-overlay");
-  const valEl = document.getElementById("level-up-val");
-  if (!overlay || !valEl) return;
-
-  valEl.textContent = String(level);
-  overlay.classList.add("active");
-  playTone("success", 300);
-
-  if (typeof window.confetti === "function") {
-    window.confetti({
-      particleCount: 200,
-      spread: 100,
-      origin: { y: 0.6 },
-      zIndex: 20020,
-    });
-  }
 }

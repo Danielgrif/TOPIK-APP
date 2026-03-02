@@ -1,4 +1,4 @@
-/* eslint-disable no-console, @typescript-eslint/no-explicit-any */
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { state } from "../core/state.ts";
 import { render, getFilteredData } from "./ui_card.ts";
 import { showToast, showUndoToast, escapeHtml } from "../utils/utils.ts";
@@ -68,7 +68,6 @@ function updateBulkBar() {
           removeBtn.title = "Исключить из текущего списка";
           removeBtn.innerHTML = "➖";
           removeBtn.style.color = "var(--warning)";
-          removeBtn.onclick = () => bulkRemoveFromList();
           // Вставляем перед кнопкой удаления (обычно последняя)
           const deleteBtn = bar.querySelector('[data-action="bulk-delete"]');
           if (deleteBtn) actionsDiv.insertBefore(removeBtn, deleteBtn);
@@ -90,19 +89,40 @@ function updateBulkBar() {
 export function bulkDelete() {
   if (state.selectedWords.size === 0) return;
 
+  // Фильтруем только слова пользователя
+  const allIds = Array.from(state.selectedWords);
+  const editableIds = allIds.filter((id) => {
+    const w = state.dataStore.find((word) => word.id === id);
+    return (
+      w &&
+      w.created_by &&
+      state.currentUser &&
+      w.created_by === state.currentUser.id
+    );
+  });
+
+  if (editableIds.length === 0) {
+    showToast("⛔ Выбраны только системные слова (удаление запрещено)");
+    return;
+  }
+
+  if (editableIds.length < allIds.length) {
+    showToast(
+      `ℹ️ Пропущено системных слов: ${allIds.length - editableIds.length}`,
+    );
+  }
+
   const executeDelete = async () => {
-    const ids = Array.from(state.selectedWords);
+    const ids = editableIds;
 
     // Бэкап для отмены
-    const backup = state.dataStore.filter((w) => state.selectedWords.has(w.id));
+    const backup = state.dataStore.filter((w) => ids.includes(w.id));
 
     // Оптимистичное удаление из локального стейта
-    state.dataStore = state.dataStore.filter(
-      (w) => !state.selectedWords.has(w.id),
-    );
+    state.dataStore = state.dataStore.filter((w) => !ids.includes(w.id));
     if (state.searchResults) {
       state.searchResults = state.searchResults.filter(
-        (w) => !state.selectedWords.has(w.id),
+        (w) => !ids.includes(w.id),
       );
     }
 
@@ -124,16 +144,12 @@ export function bulkDelete() {
       async () => {
         // Commit: Soft Delete (перемещение в корзину)
         try {
-          console.log(`🔥 Массовое удаление (Soft): ${ids.length} слов`);
-
           // FIX: Используем soft delete (deleted_at), не удаляем связи и прогресс!
           const { error, count } = await client
             .from(DB_TABLES.VOCABULARY)
             .update({ deleted_at: new Date().toISOString() })
             .in("id", ids)
             .select("id");
-
-          console.log("   - Результат удаления:", { error, count });
 
           if (error) {
             console.error("Server delete error:", error);
@@ -148,11 +164,11 @@ export function bulkDelete() {
     );
   };
 
-  if (state.selectedWords.size < 5) {
+  if (editableIds.length < 5) {
     executeDelete();
   } else {
     openConfirm(
-      `Переместить выбранные слова (${state.selectedWords.size}) в корзину?`,
+      `Переместить выбранные слова (${editableIds.length}) в корзину?`,
       executeDelete,
     );
   }
@@ -207,19 +223,36 @@ export function bulkRemoveFromList() {
 export function bulkMoveToTopic() {
   if (state.selectedWords.size === 0) return;
 
+  // Фильтруем только слова пользователя
+  const allIds = Array.from(state.selectedWords);
+  const editableIds = allIds.filter((id) => {
+    const w = state.dataStore.find((word) => word.id === id);
+    return (
+      w &&
+      w.created_by &&
+      state.currentUser &&
+      w.created_by === state.currentUser.id
+    );
+  });
+
+  if (editableIds.length === 0) {
+    showToast("⛔ Выбраны только системные слова (изменение запрещено)");
+    return;
+  }
+
   openConfirm("Введите новую тему для выбранных слов:", () => {}, {
     showInput: true,
     inputPlaceholder: "Например: Мои слова",
     onValidate: async (newTopic) => {
       if (!newTopic.trim()) return false;
 
-      const ids = Array.from(state.selectedWords);
-      const updates = { topic: newTopic.trim() };
+      const ids = editableIds;
+      const updates = { topic_ru: newTopic.trim() }; // Обновляем только RU
 
       // Обновляем локально
       state.dataStore.forEach((w) => {
-        if (state.selectedWords.has(w.id)) {
-          w.topic = newTopic.trim();
+        if (ids.includes(w.id)) {
+          w.topic_ru = newTopic.trim();
         }
       });
 

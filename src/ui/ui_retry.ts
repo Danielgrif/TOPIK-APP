@@ -1,8 +1,19 @@
 import { state } from "../core/state.ts";
 import { scheduleSaveState } from "../core/db.ts";
-import { escapeHtml } from "../utils/utils.ts";
+import { escapeHtml, showToast } from "../utils/utils.ts";
+import { client } from "../core/supabaseClient.ts";
+import { DB_TABLES, WORD_REQUEST_STATUS } from "../core/constants.ts";
 
-export function addFailedRequest(word: string, error: string) {
+export function addFailedRequest(
+  word: string,
+  error: string,
+  meta?: {
+    targetListId?: string;
+    topic?: string;
+    category?: string;
+    level?: string;
+  },
+) {
   // Avoid duplicates
   if (state.wordRequests.some((r) => r.word === word && r.status === "error"))
     return;
@@ -18,6 +29,7 @@ export function addFailedRequest(word: string, error: string) {
     status: "error",
     error,
     timestamp: Date.now(),
+    ...meta,
   });
   scheduleSaveState();
   renderRequestErrors();
@@ -93,4 +105,51 @@ export function renderRequestErrors() {
 
     container.appendChild(div);
   });
+}
+
+export async function syncOfflineRequests() {
+  if (!navigator.onLine) return;
+
+  // Фильтруем заявки, у которых есть необходимые данные для авто-отправки
+  const offlineRequests = state.wordRequests.filter(
+    (r) => r.status === "error" && r.targetListId,
+  );
+
+  if (offlineRequests.length === 0) return;
+
+  const { data } = await client.auth.getSession();
+  const user = data?.session?.user;
+  if (!user) return;
+
+  showToast(`🔄 Синхронизация ${offlineRequests.length} офлайн-заявок...`);
+
+  const payload = offlineRequests.map((req) => ({
+    user_id: user.id,
+    word_kr: req.word,
+    status: WORD_REQUEST_STATUS.PENDING,
+    target_list_id: req.targetListId,
+    topic: req.topic || "Мои слова (My Words)",
+    category: req.category,
+    level: req.level || "★★★",
+  }));
+
+  try {
+    const { error } = await client
+      .from(DB_TABLES.WORD_REQUESTS)
+      .insert(payload);
+
+    if (error) throw error;
+
+    // Удаляем успешно отправленные заявки из локального списка ошибок
+    const syncedIds = new Set(offlineRequests.map((r) => r.id));
+    state.wordRequests = state.wordRequests.filter((r) => !syncedIds.has(r.id));
+    scheduleSaveState();
+
+    showToast(`✅ ${offlineRequests.length} заявок отправлено на сервер`);
+    renderRequestErrors(); // Обновляем UI, если он открыт
+  } catch (e: unknown) {
+    console.error("Offline sync failed", e);
+    const message = e instanceof Error ? e.message : String(e);
+    showToast("❌ Ошибка синхронизации: " + message);
+  }
 }

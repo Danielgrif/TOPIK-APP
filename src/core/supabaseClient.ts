@@ -19,7 +19,7 @@ const fetchWithRetries = async (
   initialDelay = 1500,
 ) => {
   const url = typeof resource === "string" ? resource : resource.url;
-  let timeout = 20000; // Таймаут по умолчанию: 20 секунд
+  let timeout = 10000; // Оптимизация: 10 сек (было 20), чтобы успеть сделать больше попыток при сбоях
   let retries = defaultRetries;
 
   // Устанавливаем разные таймауты и количество повторов в зависимости от типа запроса

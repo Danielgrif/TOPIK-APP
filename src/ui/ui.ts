@@ -177,11 +177,11 @@ export function enableQuizKeyboard(container: HTMLElement) {
  */
 export function sortByTopic() {
   state.dataStore.sort((a, b) => {
-    const topicA = a.topic || a.topic_ru || a.topic_kr || "zzz";
-    const topicB = b.topic || b.topic_ru || b.topic_kr || "zzz";
+    const topicA = a.topic_ru || a.topic_kr || "zzz";
+    const topicB = b.topic_ru || b.topic_kr || "zzz";
     if (topicA !== topicB) return topicA.localeCompare(topicB);
-    const catA = a.category || a.category_ru || a.category_kr || "zzz";
-    const catB = b.category || b.category_ru || b.category_kr || "zzz";
+    const catA = a.category_ru || a.category_kr || "zzz";
+    const catB = b.category_ru || b.category_kr || "zzz";
     if (catA !== catB) return catA.localeCompare(catB);
     return (a.word_kr || "").localeCompare(b.word_kr || "");
   });
@@ -199,6 +199,21 @@ export function sortByLevel() {
     // Если нужно от сложного к простому (1 звезда -> 3 звезды), используем localeCompare
     if (la !== lb) return la.localeCompare(lb);
     return (a.word_kr || "").localeCompare(b.word_kr || "");
+  });
+  render();
+}
+
+/**
+ * Sorts the word list by Date Added (Newest first).
+ */
+export function sortByDate() {
+  state.dataStore.sort((a, b) => {
+    const dateA = a.created_at || "";
+    const dateB = b.created_at || "";
+    // Newest first (descending)
+    if (dateA === dateB)
+      return (a.word_kr || "").localeCompare(b.word_kr || "");
+    return dateB.localeCompare(dateA);
   });
   render();
 }

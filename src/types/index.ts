@@ -1,5 +1,4 @@
 export interface Word {
-  user_id: string;
   id: string | number;
   word_kr: string;
   translation: string;
@@ -18,6 +17,9 @@ export interface Word {
   antonyms?: string;
   collocations?: string;
   grammar_info?: string;
+  user_id?: string;
+  created_at?: string;
+  updated_at?: string;
 
   // Внутренние поля (поиск, парсинг)
   _searchStr?: string;
@@ -26,13 +28,13 @@ export interface Word {
   isLocal?: boolean;
 
   // Поля для совместимости с разными версиями БД
-  topic?: string;
   topic_ru?: string;
   topic_kr?: string;
-  category?: string;
   category_ru?: string;
   category_kr?: string;
   deleted_at?: string;
+  created_by?: string | null;
+  is_public?: boolean;
 }
 
 export interface Achievement {
@@ -56,6 +58,9 @@ export interface UserStats {
   timeFreeze?: number;
   skipQuestion?: number;
   fiftyFifty?: number;
+  weeklyXp?: number;
+  league?: string;
+  lastWeekId?: string;
 }
 
 export interface SM2State {

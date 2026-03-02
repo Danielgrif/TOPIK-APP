@@ -10,6 +10,7 @@ import {
   loadFromSupabase,
   immediateSaveState,
   fetchRandomQuote,
+  isDatabaseActive,
 } from "./core/db.ts";
 import {
   toggleSessionTimer,
@@ -21,6 +22,7 @@ import {
   saveAndRender,
   updatePingIndicator,
   sortByLevel,
+  sortByDate,
 } from "./ui/ui.ts";
 import {
   showUpdateNotification,
@@ -88,7 +90,11 @@ import {
   handleAuth,
   openProfileModal,
   handleChangePassword,
+  handleChangeEmail,
+  openFailedRequestsModal,
   handleLogout,
+
+  handleDeleteAccount,
   toggleResetMode,
   togglePasswordVisibility,
   signInWithGoogle,
@@ -111,6 +117,7 @@ import {
   updateSRSBadge,
   renderDetailedStats,
   renderTopicMastery,
+  processWeeklyResetUI,
 } from "./core/stats.ts";
 import {
   startDailyChallenge,
@@ -162,6 +169,7 @@ import {
   selectAll,
   handleBulkAddToList,
   createNewListForBulk,
+  bulkRemoveFromList,
 } from "./ui/ui_bulk.ts";
 import { startMistakeQuiz, openMistakesModal } from "./ui/ui_mistakes.ts";
 import { showRequestError } from "./ui/ui_custom_words.ts";
@@ -344,21 +352,6 @@ function setupGlobalListeners() {
   document.body.addEventListener("click", (e) => {
     const target = e.target as HTMLElement;
 
-    // [DEBUG] Логирование клика для отладки
-    console.groupCollapsed(
-      `🖱️ [DEBUG] Click: <${target.tagName.toLowerCase()}> .${target.className}`,
-    );
-    console.log("Target:", target);
-    console.log("Path:", e.composedPath());
-    console.log(
-      "Onboarding Active:",
-      document
-        .getElementById("onboarding-overlay")
-        ?.classList.contains("active"),
-    );
-    console.log("Modal Active:", document.querySelector(".modal.active")?.id);
-    console.groupEnd();
-
     const modalTrigger = target.closest("[data-modal-target]");
     if (modalTrigger) {
       const modalId = modalTrigger.getAttribute("data-modal-target");
@@ -459,6 +452,9 @@ function setupGlobalListeners() {
           break;
         case "sort-level":
           sortByLevel();
+          break;
+        case "sort-date":
+          sortByDate();
           break;
         case "sort-weak":
           sortByWeakWords();
@@ -571,8 +567,25 @@ function setupGlobalListeners() {
         case "logout":
           handleLogout();
           break;
+        case "delete-account":
+          handleDeleteAccount();
+          break;
         case "change-password":
           handleChangePassword();
+          break;
+        case "change-email":
+          handleChangeEmail();
+          break;
+        case "open-leaderboard":
+          console.log("🏆 Opening leaderboard...");
+          import("./ui/ui_leaderboard.ts")
+            .then((m) => m.openLeaderboard())
+            .catch((e) => {
+              console.error("Failed to load leaderboard module:", e);
+              showToast(
+                "❌ Ошибка загрузки таблицы лидеров. Проверьте интернет.",
+              );
+            });
           break;
         case "close-confirm":
           // То же самое исправление для окна подтверждения
@@ -608,6 +621,9 @@ function setupGlobalListeners() {
         case "open-collections-filter":
           openModal("collections-modal");
           updateBottomNav("open-collections-filter");
+          break;
+        case "open-failed-requests":
+          import("./ui/ui_failed_requests.ts").then((m) => m.openFailedRequestsModal());
           break;
         case "toggle-select-mode":
           toggleSelectMode();
@@ -647,10 +663,38 @@ function setupGlobalListeners() {
           }
           break;
         case "set-collection-filter":
+          // FIX: Если пользователь открывает список, подгружаем его личные слова,
+          // так как мы скрыли их на главном экране при загрузке.
+          if (value) {
+            client.auth.getUser().then(async ({ data: { user } }) => {
+              if (user) {
+                const { data } = await client
+                  .from(DB_TABLES.VOCABULARY)
+                  .select("*")
+                  .eq("created_by", user.id)
+                  .eq("is_public", false);
+
+                if (data && state.dataStore) {
+                  const currentIds = new Set(state.dataStore.map((w) => w.id));
+                  const toAdd = data.filter((w) => !currentIds.has(w.id));
+                  if (toAdd.length > 0) {
+                    state.dataStore.push(...toAdd);
+                    if (searchWorker)
+                      searchWorker.postMessage({
+                        type: "SET_DATA",
+                        data: state.dataStore,
+                      });
+                    // ADDED: Принудительно обновляем сетку, чтобы показать подгруженные слова
+                    render();
+                  }
+                }
+              }
+            });
+          }
           setCollectionFilter(value, e);
           break;
         case "edit-word":
-          if (value) openEditWordModal(value);
+          if (value) openEditWordModal(value, render);
           break;
         case "restore-word":
           if (value) restoreWord(Number(value));
@@ -661,6 +705,9 @@ function setupGlobalListeners() {
           break;
         case "bulk-add-to-list-item":
           if (value) handleBulkAddToList(value);
+          break;
+        case "bulk-remove-list":
+          bulkRemoveFromList();
           break;
         case "create-new-list-bulk":
           createNewListForBulk();
@@ -694,6 +741,24 @@ function setupGlobalListeners() {
           if (value) applyShopTheme(value);
           break;
         case "manage-my-words":
+          // FIX: Подгружаем слова и для менеджера слов
+          client.auth.getUser().then(async ({ data: { user } }) => {
+            if (user) {
+              const { data } = await client
+                .from(DB_TABLES.VOCABULARY)
+                .select("*")
+                .eq("created_by", user.id)
+                .eq("is_public", false);
+
+              if (data && state.dataStore) {
+                const currentIds = new Set(state.dataStore.map((w) => w.id));
+                const toAdd = data.filter((w) => !currentIds.has(w.id));
+                if (toAdd.length > 0) {
+                  state.dataStore.push(...toAdd);
+                }
+              }
+            }
+          });
           manageMyWords(e);
           break;
         case "clear-collection-filter":
@@ -1026,6 +1091,16 @@ function showWelcomeScreen(user?: User) {
   }
 }
 
+function updateDbStatus(status: "active" | "waking" | "error") {
+  const el = document.getElementById("db-status-indicator");
+  if (!el) return;
+  el.classList.remove("active", "waking", "error");
+  el.classList.add(status);
+  if (status === "active") el.title = "🟢 База данных активна";
+  if (status === "waking") el.title = "🟡 Подключение к базе...";
+  if (status === "error") el.title = "🔴 Нет соединения с базой";
+}
+
 function setupNetworkListeners() {
   const indicator = document.getElementById("offline-indicator");
 
@@ -1042,10 +1117,17 @@ function setupNetworkListeners() {
     showToast("🌐 Соединение восстановлено");
     // Принудительно восстанавливаем Realtime соединение при появлении сети
     client.realtime.connect();
+    updateDbStatus("waking");
+    isDatabaseActive(5000).then((active) =>
+      updateDbStatus(active ? "active" : "error"),
+    );
+    // Запускаем синхронизацию сохраненных заявок
+    import("./ui/ui_retry.ts").then((m) => m.syncOfflineRequests());
   });
   window.addEventListener("offline", () => {
     updateStatus();
     showToast("📡 Вы перешли в офлайн режим");
+    updateDbStatus("error");
   });
 
   // Слушаем изменения качества соединения (Network Information API)
@@ -1113,6 +1195,10 @@ function setupRealtimeUpdates() {
   const handleNewWord = (payload: { new: any }) => {
     const newWord = payload.new;
     if (newWord) {
+      // FIX: Не добавляем приватные слова (слова пользователя) в общий поток на главном экране.
+      // Они должны быть доступны только через списки.
+      if (newWord.is_public === false) return;
+
       newWordsBuffer.push(newWord);
       processBuffer();
     }
@@ -1127,16 +1213,11 @@ function setupRealtimeUpdates() {
         { event: "INSERT", schema: "public", table: DB_TABLES.VOCABULARY },
         handleNewWord,
       )
-      .on(
-        "postgres_changes",
-        { event: "INSERT", schema: "public", table: DB_TABLES.USER_VOCABULARY },
-        handleNewWord,
-      )
       .subscribe((status, err) => {
         if (status === "SUBSCRIBED") {
           console.log("✅ Realtime: Подписка на 'public:vocabulary' активна.");
         } else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
-          console.error(
+          console.warn(
             `❌ Realtime: Ошибка канала 'public:vocabulary' (${status})`,
             err,
           );
@@ -1156,9 +1237,32 @@ function setupRealtimeUpdates() {
       .on(
         "postgres_changes",
         { event: "INSERT", schema: "public", table: "list_items" },
-        (payload: { new: any }) => {
+        async (payload: { new: any }) => {
           const newItem = payload.new;
           if (newItem && newItem.list_id && newItem.word_id) {
+            // Проверяем, есть ли слово в локальном сторе.
+            // Если его нет (например, оно приватное и было пропущено в handleNewWord), загружаем его.
+            const wordExists = state.dataStore.some(
+              (w) => w.id === newItem.word_id,
+            );
+            if (!wordExists) {
+              const { data: wordData, error } = await client
+                .from(DB_TABLES.VOCABULARY)
+                .select("*")
+                .eq("id", newItem.word_id)
+                .single();
+
+              if (wordData && !error) {
+                state.dataStore.unshift(wordData);
+                if (searchWorker) {
+                  searchWorker.postMessage({
+                    type: "SET_DATA",
+                    data: state.dataStore,
+                  });
+                }
+              }
+            }
+
             if (!collectionsState.listItems[newItem.list_id]) {
               collectionsState.listItems[newItem.list_id] = new Set();
             }
@@ -1182,7 +1286,7 @@ function setupRealtimeUpdates() {
         if (status === "SUBSCRIBED") {
           console.log("✅ Realtime: Подписка на 'public:list_items' активна.");
         } else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
-          console.error(
+          console.warn(
             `❌ Realtime: Ошибка канала 'public:list_items' (${status})`,
             err,
           );
@@ -1210,6 +1314,25 @@ async function init() {
     });
   }
 
+  // 🔥 Прогрев базы данных в фоне (Fire and forget)
+  // Это помогает "разбудить" Supabase на бесплатном тарифе, пока грузится UI
+  updateDbStatus("waking");
+  isDatabaseActive(5000).then((active) => {
+    console.log(
+      active ? "⚡ Database is active" : "💤 Database might be waking up...",
+    );
+    updateDbStatus(active ? "active" : "error");
+    if (!active) {
+      setTimeout(
+        () =>
+          isDatabaseActive(5000).then((a) =>
+            updateDbStatus(a ? "active" : "error"),
+          ),
+        5000,
+      );
+    }
+  });
+
   if (!document.body) {
     throw new Error("Document body not ready");
   }
@@ -1219,6 +1342,25 @@ async function init() {
 
   // 1.1 Инъекция динамических стилей и элементов
   injectDynamicStyles();
+
+  const dbStatusEl = document.getElementById("db-status-indicator");
+  if (dbStatusEl) {
+    dbStatusEl.style.cursor = "pointer";
+    dbStatusEl.onclick = () => {
+      updateDbStatus("waking");
+      showToast("🔄 Проверка соединения...");
+      isDatabaseActive(5000).then((active) => {
+        updateDbStatus(active ? "active" : "error");
+        if (active) {
+          showToast("✅ База данных активна. Обновляем словарь...");
+          fetchVocabulary();
+        } else {
+          showToast("❌ Ошибка соединения");
+        }
+      });
+    };
+  }
+
   const headerActions = document.querySelector(".header-actions");
   if (headerActions && !document.getElementById("ping-indicator")) {
     const pingEl = document.createElement("div");
@@ -1290,9 +1432,13 @@ async function init() {
     throw e;
   }
 
-  // FIX: Фильтруем удаленные слова, чтобы они не появлялись в списке после перезагрузки
+  // FIX: Фильтруем данные при старте:
+  // 1. Удаленные слова (deleted_at)
+  // 2. Приватные слова пользователя (is_public === false) - они не должны быть на главной
   if (state.dataStore) {
-    state.dataStore = state.dataStore.filter((w: any) => !w.deleted_at);
+    state.dataStore = state.dataStore.filter(
+      (w: any) => !w.deleted_at && w.is_public !== false,
+    );
   }
 
   if (!state.dataStore || state.dataStore.length === 0) {
@@ -1338,6 +1484,7 @@ async function init() {
           }
         } else {
           updateAuthUI(null);
+
         }
       } catch (e) {
         console.error("Auth State Change Error:", e);
@@ -1386,6 +1533,7 @@ async function init() {
   checkAutoTheme();
   updateDailyChallengeUI();
   checkSuperChallengeNotification();
+  processWeeklyResetUI(); // Проверка смены недели и лиг
 
   // Запускаем проверку авто-темы каждую минуту (для переключения в реальном времени)
   setInterval(checkAutoTheme, 60000);
@@ -1615,8 +1763,10 @@ Object.assign(window, {
   setBackgroundMusicVolume,
   handleAuth,
   openProfileModal,
-  handleChangePassword,
   handleLogout,
+  handleDeleteAccount,
+  handleChangePassword,
+  handleChangeEmail,
   toggleResetMode,
   togglePasswordVisibility,
   setTtsVolume,

@@ -107,6 +107,54 @@ async function searchPexels(
   return [];
 }
 
+async function generateImageWithGemini(
+  apiKey: string,
+  prompt: string,
+): Promise<{ url: string; source: string } | null> {
+  const models = [
+    "imagen-3.0-generate-001",
+    "gemini-3.1-flash-image-preview",
+    "gemini-3-pro-image-preview",
+    "gemini-2.5-flash-image",
+    "gemini-2.0-flash-exp-image-generation",
+  ];
+
+  for (const model of models) {
+    try {
+      // eslint-disable-next-line no-console
+      console.log(`Generating image with ${model} for: "${prompt}"`);
+      const res = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${model}:predict?key=${apiKey}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            instances: [{ prompt }],
+            parameters: { sampleCount: 1, aspectRatio: "4:3" },
+          }),
+        },
+      );
+      if (!res.ok) {
+        const err = await res.text();
+        console.warn(`${model} API error: ${res.status} ${err}`);
+        continue; // Пробуем следующую модель
+      }
+      const data = await res.json();
+      if (data.predictions && data.predictions.length > 0) {
+        const img = data.predictions[0];
+        const mimeType = img.mimeType || "image/jpeg";
+        return {
+          url: `data:${mimeType};base64,${img.bytesBase64Encoded}`,
+          source: "gemini",
+        };
+      }
+    } catch (e) {
+      console.error(`${model} generation exception:`, e);
+    }
+  }
+  return null;
+}
+
 async function optimizeAndUpload(supabaseAdmin, imageBlob, id, source) {
   const image = await Image.decode(await imageBlob.arrayBuffer());
 
@@ -150,6 +198,7 @@ serve(async (req) => {
     const PIXABAY_API_KEY = Deno.env.get("PIXABAY_API_KEY");
     const UNSPLASH_ACCESS_KEY = Deno.env.get("UNSPLASH_ACCESS_KEY"); // Опционально
     const PEXELS_API_KEY = Deno.env.get("PEXELS_API_KEY"); // Опционально
+    const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY"); // Опционально
     const SUPABASE_URL = Deno.env.get("SUPABASE_URL");
     const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
     const supabaseAdmin = createClient(
@@ -267,6 +316,15 @@ serve(async (req) => {
           results = await searchPexels(PEXELS_API_KEY, queryKr, "ko-KR");
         if (results.length > 0)
           selectedImage = results[Math.floor(Math.random() * results.length)];
+      }
+
+      // 4. Gemini (Fallback)
+      if (!selectedImage && GEMINI_API_KEY) {
+        const prompt = queryRu || queryKr;
+        if (prompt) {
+          const result = await generateImageWithGemini(GEMINI_API_KEY, prompt);
+          if (result) selectedImage = result;
+        }
       }
 
       if (!selectedImage) {

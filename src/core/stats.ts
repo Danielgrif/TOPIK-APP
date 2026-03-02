@@ -1,10 +1,21 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { state } from "./state.ts";
 import { showToast, playTone, showComboEffect } from "../utils/utils.ts";
-import { showLevelUpAnimation } from "../ui/ui_interactions.ts";
+import { showLevelUpAnimation } from "../ui/ui_animations.ts";
 import { Scheduler } from "./scheduler.ts";
 import { scheduleSaveState } from "./db.ts";
 import { openModal } from "../ui/ui_modal.ts";
+
+export const LEAGUES = [
+  "Bronze",
+  "Silver",
+  "Gold",
+  "Platinum",
+  "Diamond",
+  "Master",
+  "Grandmaster",
+  "Challenger",
+];
 
 export function getXPForNextLevel(lvl: number): number {
   // Было: 100 + lvl * 50 (Линейная)
@@ -12,8 +23,116 @@ export function getXPForNextLevel(lvl: number): number {
   return Math.floor(100 * Math.pow(lvl, 1.2));
 }
 
+export function getTotalXP(level: number, currentXP: number): number {
+  let total = currentXP;
+  for (let i = 1; i < level; i++) {
+    total += getXPForNextLevel(i);
+  }
+  return total;
+}
+
+export function getCurrentWeekId() {
+  const d = new Date();
+  d.setHours(0, 0, 0, 0);
+  d.setDate(d.getDate() + 4 - (d.getDay() || 7));
+  const yearStart = new Date(d.getFullYear(), 0, 1);
+  const weekNo = Math.ceil(
+    ((d.getTime() - yearStart.getTime()) / 86400000 + 1) / 7,
+  );
+  return `${d.getFullYear()}-W${weekNo}`;
+}
+
+export function checkWeeklyReset() {
+  const currentWeek = getCurrentWeekId();
+
+  // Инициализация, если запускается впервые
+  if (!state.userStats.lastWeekId) {
+    state.userStats.lastWeekId = currentWeek;
+    return null;
+  }
+
+  if (state.userStats.lastWeekId !== currentWeek) {
+    const prevXp = state.userStats.weeklyXp || 0;
+    const oldLeague = state.userStats.league || "Bronze";
+    let newLeague = oldLeague;
+
+    const idx = LEAGUES.indexOf(oldLeague);
+    if (idx !== -1) {
+      // Пороги повышения (XP за неделю для перехода на уровень выше)
+      const promoThresholds = [
+        300,
+        600,
+        1000,
+        1500,
+        2000,
+        3000,
+        5000,
+        Infinity,
+      ];
+      // Пороги понижения (Если XP меньше этого, падаем вниз)
+      const demoThresholds = [0, 50, 150, 300, 500, 800, 1200, 2000];
+
+      if (idx < LEAGUES.length - 1 && prevXp >= promoThresholds[idx]) {
+        newLeague = LEAGUES[idx + 1];
+      } else if (idx > 0 && prevXp < demoThresholds[idx]) {
+        newLeague = LEAGUES[idx - 1];
+      }
+    }
+
+    state.userStats.weeklyXp = 0;
+    state.userStats.lastWeekId = currentWeek;
+    state.userStats.league = newLeague;
+    scheduleSaveState();
+
+    return { oldLeague, newLeague, prevXp };
+  }
+  return null;
+}
+
+export function processWeeklyResetUI() {
+  const result = checkWeeklyReset();
+  if (result) {
+    const { oldLeague, newLeague, prevXp } = result;
+    setTimeout(() => {
+      if (newLeague !== oldLeague) {
+        const isPromo = LEAGUES.indexOf(newLeague) > LEAGUES.indexOf(oldLeague);
+        const msg = isPromo
+          ? `🎉 Повышение лиги!\n${oldLeague} ➡ ${newLeague}`
+          : `📉 Понижение лиги...\n${oldLeague} ➡ ${newLeague}`;
+        showComboEffect(msg);
+        playTone(isPromo ? "achievement-unlock" : "failure");
+        if (isPromo && typeof window.confetti === "function") {
+          window.confetti({
+            particleCount: 100,
+            spread: 70,
+            origin: { y: 0.6 },
+          });
+        }
+      } else {
+        showToast(`📅 Новая неделя! Итог прошлой: ${prevXp} XP`);
+      }
+    }, 1500); // Задержка, чтобы интерфейс успел загрузиться
+  }
+}
+
 export function addXP(val: number) {
+  const resetResult = checkWeeklyReset();
+
+  // Если сброс произошел во время начисления опыта (например, сессия через полночь)
+  if (resetResult) {
+    const { oldLeague, newLeague } = resetResult;
+    if (newLeague !== oldLeague) {
+      const isPromo = LEAGUES.indexOf(newLeague) > LEAGUES.indexOf(oldLeague);
+      showComboEffect(
+        isPromo ? `🎉 Лига: ${newLeague}!` : `📉 Лига: ${newLeague}`,
+      );
+    }
+  }
+
   state.userStats.xp = (state.userStats.xp || 0) + val;
+  if (val > 0) {
+    state.userStats.weeklyXp = (state.userStats.weeklyXp || 0) + val;
+  }
   if (val > 0) state.userStats.coins = (state.userStats.coins || 0) + val;
 
   let currentLevel = Number(state.userStats.level || 1);

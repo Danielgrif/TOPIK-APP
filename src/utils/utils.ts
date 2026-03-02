@@ -38,7 +38,7 @@ export function isConnectionSlow(): boolean {
 export function promiseWithTimeout<T>(
   promise: Promise<T>,
   ms: number,
-  timeoutError = new Error("Promise timed out"),
+  timeoutError = new Error(`Promise timed out after ${ms}ms`),
 ): Promise<T> {
   const timeout = new Promise<never>((_, reject) => {
     const id = setTimeout(() => {

@@ -64,7 +64,15 @@
       <div style="padding: 20px;">
         <!-- User Info Card -->
         <div class="user-profile-card">
-            <div class="user-avatar-large" id="profile-avatar-large">👤</div>
+            <div style="position: relative;">
+                <div class="user-avatar-large" id="profile-avatar-large" style="position: relative; cursor: pointer; overflow: hidden;">
+                    <span id="profile-avatar-text">👤</span>
+                    <img id="profile-avatar-img" src="" alt="Avatar" style="width: 100%; height: 100%; object-fit: cover; display: none;">
+                    <div class="avatar-overlay">📷</div>
+                </div>
+                <button id="delete-avatar-btn" style="position: absolute; top: 0; right: 0; width: 28px; height: 28px; border-radius: 50%; background: var(--danger); color: white; border: 3px solid var(--surface-1); cursor: pointer; display: none; align-items: center; justify-content: center; font-size: 14px; padding: 0; box-shadow: 0 2px 8px rgba(0,0,0,0.2); z-index: 10;" title="Удалить фото">✕</button>
+            </div>
+            <input type="file" id="avatar-upload" accept="image/*" style="display: none;">
             <div class="profile-name-container" style="display: flex; align-items: center; gap: 8px; justify-content: center; width: 100%;">
                 <div class="user-name" id="profile-name-display" style="margin-bottom: 0;">guest@example.com</div>
                 <button class="btn-icon" id="edit-profile-name-btn" title="Изменить имя" style="font-size: 14px; padding: 4px; width: 24px; height: 24px;">✏️</button>
@@ -212,6 +220,13 @@
             <div class="settings-section-title">Аккаунт</div>
             <div class="settings-list">
                 <div class="setting-item column">
+                    <label for="new-email" class="setting-left" style="width: 100%;"><span class="setting-icon">📧</span><span class="setting-label">Смена Email</span></label>
+                    <form onsubmit="return false;" style="display: flex; gap: 10px; width: 100%;">
+                        <input type="email" id="new-email" name="new-email" class="search-box" placeholder="Новый Email" autocomplete="email" style="flex: 1;">
+                        <button class="btn btn-quiz" data-action="change-email" style="padding: 8px 16px;">OK</button>
+                    </form>
+                </div>
+                <div class="setting-item column">
                     <label for="new-password" class="setting-left" style="width: 100%;"><span class="setting-icon">🔐</span><span class="setting-label">Смена пароля</span></label>
                     <form onsubmit="return false;" style="display: flex; gap: 10px; width: 100%;">
                         <div style="position: relative; flex: 1;">
@@ -227,6 +242,9 @@
                 </div>
                 <div class="setting-item" data-action="logout" style="cursor: pointer;">
                     <div class="setting-left"><span class="setting-icon">🚪</span><span class="setting-label" style="color: var(--danger);">Выйти из аккаунта</span></div>
+                </div>
+                <div class="setting-item" data-action="delete-account" style="cursor: pointer;">
+                    <div class="setting-left"><span class="setting-icon">💀</span><span class="setting-label" style="color: var(--danger);">Удалить аккаунт</span></div>
                 </div>
             </div>
         </div>

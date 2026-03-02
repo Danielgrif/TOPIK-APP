@@ -13,8 +13,8 @@ function populateSuggestions() {
   const categories = new Set<string>();
 
   state.dataStore.forEach((word) => {
-    const topic = word.topic || word.topic_ru || word.topic_kr;
-    const category = word.category || word.category_ru || word.category_kr;
+    const topic = word.topic_ru; // Предлагаем русские названия
+    const category = word.category_ru;
     if (topic) topics.add(topic);
     if (category) categories.add(category);
   });
@@ -46,10 +46,15 @@ export function openEditWordModal(id: string | number, onUpdate?: () => void) {
   const idInput = document.getElementById("edit-word-id") as HTMLInputElement;
   const krInput = document.getElementById("edit-word-kr") as HTMLInputElement;
   const ruInput = document.getElementById("edit-word-ru") as HTMLInputElement;
-  const topicInput = document.getElementById(
+
+  // Обновляем HTML модального окна, чтобы добавить поля для KR
+  // (Предполагается, что в HTML шаблоне есть эти ID, или мы их сейчас создадим динамически если их нет)
+  // Для простоты используем существующие инпуты как RU, и добавим KR
+
+  const topicInputRu = document.getElementById(
     "edit-word-topic",
   ) as HTMLInputElement;
-  const catInput = document.getElementById(
+  const catInputRu = document.getElementById(
     "edit-word-category",
   ) as HTMLInputElement;
 
@@ -57,18 +62,17 @@ export function openEditWordModal(id: string | number, onUpdate?: () => void) {
   if (krInput) krInput.value = word.word_kr || "";
   if (ruInput) ruInput.value = word.translation || "";
 
-  // Берем текущую тему/категорию (учитывая двуязычные поля)
-  const topic = word.topic || word.topic_ru || word.topic_kr || "";
-  const category = word.category || word.category_ru || word.category_kr || "";
+  if (topicInputRu) topicInputRu.value = word.topic_ru || "";
+  if (catInputRu) catInputRu.value = word.category_ru || "";
 
-  if (topicInput) topicInput.value = topic;
-  if (catInput) catInput.value = category;
+  // TODO: В идеале нужно добавить инпуты для topic_kr и category_kr в HTML шаблон
+  // Но пока сохраним совместимость, используя только RU поля для редактирования
 
   // Inject Level Selector if not present
   let levelSelect = document.getElementById(
     "edit-word-level",
   ) as HTMLSelectElement;
-  if (!levelSelect && catInput) {
+  if (!levelSelect && catInputRu) {
     const container = document.createElement("div");
     container.style.marginTop = "15px";
     container.innerHTML = `
@@ -79,7 +83,7 @@ export function openEditWordModal(id: string | number, onUpdate?: () => void) {
         <option value="★★★">Начальный (★★★)</option>
       </select>
     `;
-    catInput.parentNode?.insertBefore(container, catInput.nextSibling);
+    catInputRu.parentNode?.insertBefore(container, catInputRu.nextSibling);
     levelSelect = document.getElementById(
       "edit-word-level",
     ) as HTMLSelectElement;
@@ -95,14 +99,14 @@ export function openEditWordModal(id: string | number, onUpdate?: () => void) {
   let grammarInput = document.getElementById(
     "edit-word-grammar",
   ) as HTMLTextAreaElement;
-  if (!grammarInput && catInput && catInput.parentNode) {
+  if (!grammarInput && catInputRu && catInputRu.parentNode) {
     const container = document.createElement("div");
     container.style.marginTop = "15px";
     container.innerHTML = `
       <label style="display:block; font-size:12px; font-weight:bold; color:var(--text-tertiary); margin-bottom:5px;">ГРАММАТИКА / ИНФО</label>
       <textarea id="edit-word-grammar" class="auth-input" style="width:100%; min-height:80px; resize:vertical; font-family:inherit;"></textarea>
     `;
-    const ref = levelSelect ? levelSelect.parentNode : catInput;
+    const ref = levelSelect ? levelSelect.parentNode : catInputRu;
     if (ref) ref.parentNode?.insertBefore(container, ref.nextSibling);
     grammarInput = document.getElementById(
       "edit-word-grammar",
@@ -114,6 +118,31 @@ export function openEditWordModal(id: string | number, onUpdate?: () => void) {
   }
 
   populateSuggestions();
+
+  // --- Проверка прав доступа ---
+  // Системные слова (created_by === null) или чужие слова доступны только для чтения
+  const isOwner = state.currentUser && word.created_by === state.currentUser.id;
+  const canEdit = !!word.created_by && isOwner;
+
+  const modalEl = document.getElementById("edit-word-modal");
+  if (modalEl) {
+    // Блокируем/разблокируем инпуты
+    const inputs = modalEl.querySelectorAll("input, select, textarea");
+    inputs.forEach((el) => {
+      (el as HTMLInputElement).disabled = !canEdit;
+    });
+
+    // Скрываем/показываем кнопки действий
+    const saveBtn = modalEl.querySelector(
+      '[data-action="save-word-changes"]',
+    ) as HTMLElement;
+    const deleteBtn = modalEl.querySelector(
+      '[data-action="delete-word"]',
+    ) as HTMLElement;
+
+    if (saveBtn) saveBtn.style.display = canEdit ? "" : "none";
+    if (deleteBtn) deleteBtn.style.display = canEdit ? "" : "none";
+  }
 
   const modal = document.getElementById("edit-word-modal");
   if (modal) {
@@ -128,10 +157,10 @@ export async function saveWordChanges() {
   const idInput = document.getElementById("edit-word-id") as HTMLInputElement;
   const krInput = document.getElementById("edit-word-kr") as HTMLInputElement;
   const ruInput = document.getElementById("edit-word-ru") as HTMLInputElement;
-  const topicInput = document.getElementById(
+  const topicInputRu = document.getElementById(
     "edit-word-topic",
   ) as HTMLInputElement;
-  const catInput = document.getElementById(
+  const catInputRu = document.getElementById(
     "edit-word-category",
   ) as HTMLInputElement;
   const levelSelect = document.getElementById(
@@ -142,11 +171,24 @@ export async function saveWordChanges() {
   ) as HTMLTextAreaElement;
 
   const id = idInput.value;
+  const word = state.dataStore.find((w) => String(w.id) === String(id));
+
+  if (
+    word &&
+    (!word.created_by ||
+      (state.currentUser && word.created_by !== state.currentUser.id))
+  ) {
+    showToast("⛔ Системные слова нельзя изменять");
+    return;
+  }
+
   const updates: Partial<Word> = {
     word_kr: krInput.value.trim(),
     translation: ruInput.value.trim(),
-    topic: topicInput.value.trim(),
-    category: catInput.value.trim(),
+    topic_ru: topicInputRu.value.trim(),
+    // topic_kr: ... // Пока не редактируем KR
+    category_ru: catInputRu.value.trim(),
+    // category_kr: ...
     level: levelSelect ? levelSelect.value : "★☆☆",
     grammar_info: grammarInput ? grammarInput.value.trim() : undefined,
   };
@@ -160,23 +202,22 @@ export async function saveWordChanges() {
   const wordIndex = state.dataStore.findIndex(
     (w) => String(w.id) === String(id),
   );
-  let isUserWord = false;
   if (wordIndex > -1) {
-    const word = state.dataStore[wordIndex];
-    isUserWord = !!word.user_id;
     state.dataStore[wordIndex] = { ...state.dataStore[wordIndex], ...updates };
   }
 
-  const tableName = isUserWord
-    ? DB_TABLES.USER_VOCABULARY
-    : DB_TABLES.VOCABULARY;
-
   // Отправка в базу данных
-  const { error } = await client.from(tableName).update(updates).eq("id", id);
+  const { error, data } = await client
+    .from(DB_TABLES.VOCABULARY)
+    .update(updates)
+    .eq("id", id)
+    .select("id");
 
   if (error) {
     console.error("Update error:", error);
     showToast("Ошибка сохранения: " + error.message);
+  } else if (!data || data.length === 0) {
+    showToast("⚠️ Не удалось сохранить (нет прав или слово не найдено)");
   } else {
     showToast("✅ Слово обновлено");
     closeModal("edit-word-modal");
@@ -201,6 +242,16 @@ export async function deleteWord() {
 
   if (!id) return;
 
+  const word = state.dataStore.find((w) => String(w.id) === String(id));
+  if (
+    word &&
+    (!word.created_by ||
+      (state.currentUser && word.created_by !== state.currentUser.id))
+  ) {
+    showToast("⛔ Системные слова нельзя удалять");
+    return;
+  }
+
   openConfirm("Переместить это слово в корзину?", async () => {
     // Оптимистичное удаление
     const wordIndex = state.dataStore.findIndex(
@@ -208,7 +259,6 @@ export async function deleteWord() {
     );
     if (wordIndex === -1) return;
     const wordBackup = { ...state.dataStore[wordIndex] };
-    const isUserWord = !!wordBackup.user_id;
 
     if (wordIndex > -1) {
       state.dataStore.splice(wordIndex, 1);
@@ -226,17 +276,20 @@ export async function deleteWord() {
     closeModal("edit-word-modal");
     if (grid) grid.scrollTop = savedScroll;
 
-    const tableName = isUserWord
-      ? DB_TABLES.USER_VOCABULARY
-      : DB_TABLES.VOCABULARY;
-
     // Soft delete
-    const { error } = await client
-      .from(tableName)
+    const { error, data } = await client
+      .from(DB_TABLES.VOCABULARY)
       .update({ deleted_at: new Date().toISOString() })
-      .eq("id", id);
+      .eq("id", id)
+      .select("id");
+
     if (error) {
       showToast(`❌ Ошибка: ${error.message}`);
+      // Восстанавливаем слово в UI при ошибке
+      state.dataStore.splice(wordIndex, 0, wordBackup);
+      if (onUpdateCallback) onUpdateCallback();
+    } else if (!data || data.length === 0) {
+      showToast("⚠️ Не удалось удалить (нет прав)");
       // Восстанавливаем слово в UI при ошибке
       state.dataStore.splice(wordIndex, 0, wordBackup);
       if (onUpdateCallback) onUpdateCallback();

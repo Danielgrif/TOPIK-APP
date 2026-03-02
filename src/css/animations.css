@@ -107,3 +107,23 @@
 .pulse-btn {
     animation: pulse-btn 2s infinite;
 }
+
+@keyframes pulse-sync {
+    0% { box-shadow: 0 0 0 0 rgba(108, 92, 231, 0.4); }
+    70% { box-shadow: 0 0 0 6px rgba(108, 92, 231, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(108, 92, 231, 0); }
+}
+
+.syncing {
+    animation: pulse-sync 1.5s infinite;
+}
+
+.rotating {
+    animation: spin 1s linear infinite;
+}
+
+@keyframes pulse-status {
+    0% { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.7); }
+    70% { box-shadow: 0 0 0 6px rgba(245, 158, 11, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0); }
+}

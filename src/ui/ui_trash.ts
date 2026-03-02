@@ -48,36 +48,30 @@ async function loadTrashItems() {
   container.innerHTML =
     '<div style="text-align:center; padding:20px;"><div class="spinner-tiny"></div> Загрузка...</div>';
 
-  // 1. Загружаем удаленные из общей таблицы
-  const { data: globalData, error: globalError } = await client
+  const { data: sessionData } = await client.auth.getSession();
+  const userId = sessionData?.session?.user?.id;
+
+  // Загружаем удаленные слова из единой таблицы
+  // Показываем только те, что создал пользователь (created_by = userId)
+  let query = client
     .from(DB_TABLES.VOCABULARY)
     .select("*")
     .not("deleted_at", "is", null)
     .order("deleted_at", { ascending: false });
 
-  if (globalError) {
-    console.error("Error loading global trash:", globalError);
+  if (userId) {
+    query = query.eq("created_by", userId);
   }
 
-  // 2. Загружаем удаленные из пользовательской таблицы
-  let userData: Word[] = [];
-  const { data: sessionData } = await client.auth.getSession();
-  if (sessionData?.session?.user) {
-    const { data, error } = await client
-      .from(DB_TABLES.USER_VOCABULARY)
-      .select("*")
-      .eq("user_id", sessionData.session.user.id)
-      .not("deleted_at", "is", null)
-      .order("deleted_at", { ascending: false });
+  const { data: allData, error } = await query;
 
-    if (!error && data) {
-      userData = data;
-    }
+  if (error) {
+    console.error("Error loading trash:", error);
+    container.innerHTML = `<div style="text-align:center; color:var(--danger); padding:20px;">Ошибка загрузки</div>`;
+    return;
   }
 
-  const allData = [...(globalData || []), ...userData];
-
-  if (allData.length === 0) {
+  if (!allData || allData.length === 0) {
     container.innerHTML = `<div style="text-align:center; color:var(--text-sub); padding:20px;">Корзина пуста</div>`;
     return;
   }
@@ -107,14 +101,8 @@ export async function restoreWord(id: string | number) {
     realId = parseInt(id, 10);
   }
 
-  // Определяем таблицу по типу ID (UUID = строка = пользовательское слово)
-  const isUserWord = typeof realId === "string";
-  const tableName = isUserWord
-    ? DB_TABLES.USER_VOCABULARY
-    : DB_TABLES.VOCABULARY;
-
   const { error } = await client
-    .from(tableName)
+    .from(DB_TABLES.VOCABULARY)
     .update({ deleted_at: null })
     .eq("id", realId);
 
@@ -126,7 +114,7 @@ export async function restoreWord(id: string | number) {
 
     // Fetch the restored word to add it back to local state
     const { data: restored } = await client
-      .from(tableName)
+      .from(DB_TABLES.VOCABULARY)
       .select("*")
       .eq("id", realId)
       .single();
@@ -159,13 +147,11 @@ export async function permanentlyDeleteWord(
       item.remove();
     }
 
-    const isUserWord = typeof realId === "string";
-    const tableName = isUserWord
-      ? DB_TABLES.USER_VOCABULARY
-      : DB_TABLES.VOCABULARY;
-
     // 1. Удаляем само слово
-    const { error } = await client.from(tableName).delete().eq("id", realId);
+    const { error } = await client
+      .from(DB_TABLES.VOCABULARY)
+      .delete()
+      .eq("id", realId);
 
     if (error) {
       showToast("Ошибка удаления: " + error.message);
@@ -196,14 +182,13 @@ export async function emptyTrash() {
   openConfirm(
     "Удалить все слова из корзины навсегда? Это действие нельзя отменить.",
     async () => {
-      // 1. Очистка пользовательской корзины
       const { data: sessionData } = await client.auth.getSession();
       if (sessionData?.session?.user) {
         // Сначала получаем ID удаляемых слов, чтобы почистить прогресс
         const { data: userTrashIds } = await client
-          .from(DB_TABLES.USER_VOCABULARY)
+          .from(DB_TABLES.VOCABULARY)
           .select("id")
-          .eq("user_id", sessionData.session.user.id)
+          .eq("created_by", sessionData.session.user.id)
           .not("deleted_at", "is", null);
 
         if (userTrashIds && userTrashIds.length > 0) {
@@ -214,19 +199,8 @@ export async function emptyTrash() {
             .delete()
             .in("word_id", ids);
           // Удаляем слова
-          await client.from(DB_TABLES.USER_VOCABULARY).delete().in("id", ids);
+          await client.from(DB_TABLES.VOCABULARY).delete().in("id", ids);
         }
-      }
-
-      // 2. Очистка общей корзины (если применимо)
-      const { error } = await client
-        .from(DB_TABLES.VOCABULARY)
-        .delete()
-        .not("deleted_at", "is", null);
-
-      if (error) {
-        // Ошибки общей корзины могут быть из-за прав доступа, это нормально
-        console.warn("Global trash cleanup:", error.message);
       }
 
       showToast("Корзина очищена");
@@ -241,25 +215,15 @@ async function cleanupExpiredTrash() {
   cutoff.setDate(cutoff.getDate() - days);
   const cutoffStr = cutoff.toISOString();
 
-  // Очистка старых записей в общей таблице
-  const { error } = await client
-    .from(DB_TABLES.VOCABULARY)
-    .delete()
-    .not("deleted_at", "is", null)
-    .lt("deleted_at", cutoffStr);
-
-  // Очистка старых записей в пользовательской таблице
   const { data: sessionData } = await client.auth.getSession();
   if (sessionData?.session?.user) {
-    await client
-      .from(DB_TABLES.USER_VOCABULARY)
+    const { error } = await client
+      .from(DB_TABLES.VOCABULARY)
       .delete()
-      .eq("user_id", sessionData.session.user.id)
+      .eq("created_by", sessionData.session.user.id)
       .not("deleted_at", "is", null)
       .lt("deleted_at", cutoffStr);
-  }
 
-  if (error) {
-    console.error("Failed to cleanup expired trash:", error);
+    if (error) console.error("Failed to cleanup expired trash:", error);
   }
 }

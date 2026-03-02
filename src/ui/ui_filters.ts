@@ -1,10 +1,5 @@
 import { state } from "../core/state.ts";
-import {
-  parseBilingualString,
-  showToast,
-  getIconForValue,
-  escapeHtml,
-} from "../utils/utils.ts";
+import { showToast, getIconForValue, escapeHtml } from "../utils/utils.ts";
 import { render } from "./ui_card.ts";
 import { Word } from "../types/index.ts";
 
@@ -45,6 +40,14 @@ function setupSortButtons() {
     btn.innerHTML = `<span class="sort-icon">⭐</span><span>По сложности</span>`;
     container.appendChild(btn);
   }
+
+  if (!container.querySelector('[data-action="sort-date"]')) {
+    const btn = document.createElement("div");
+    btn.className = "sort-btn";
+    btn.setAttribute("data-action", "sort-date");
+    btn.innerHTML = `<span class="sort-icon">📅</span><span>По дате</span>`;
+    container.appendChild(btn);
+  }
 }
 
 export function toggleFilterPanel() {
@@ -65,7 +68,7 @@ function getTopicsForCurrentType(): string[] {
   for (let i = 0; i < data.length; i++) {
     const w = data[i];
     if (w.type !== state.currentType) continue;
-    const t = w.topic || w.topic_ru || w.topic_kr;
+    const t = w.topic_ru || w.topic_kr;
     if (t) topics.add(t);
   }
   return Array.from(topics).sort();
@@ -194,7 +197,7 @@ export function populateFilters() {
       { value: "all", label: "Все темы" },
       ...sortedTopics.map((t) => ({
         value: t,
-        label: parseBilingualString(t).ru,
+        label: t, // t is already topic_ru
       })),
     ];
     let searchFilteredItems = allItems;
@@ -275,10 +278,10 @@ function populateCategoryFilter() {
       for (let i = 0; i < data.length; i++) {
         const w = data[i];
         if (w.type !== currentType) continue;
-        const t = w.topic || w.topic_ru || w.topic_kr;
+        const t = w.topic_ru || w.topic_kr;
         if (!t || (!isAllTopics && !currentTopic.includes(t))) continue;
 
-        const c = w.category || w.category_ru || w.category_kr;
+        const c = w.category_ru || w.category_kr;
         if (c) categories.add(c);
       }
       return Array.from(categories).sort();
@@ -336,7 +339,7 @@ function populateCategoryFilter() {
       { value: "all", label: "Все категории" },
       ...getCategories().map((c) => ({
         value: c,
-        label: parseBilingualString(c).ru,
+        label: c, // c is already category_ru
       })),
     ];
     let searchFilteredItems = allItems;

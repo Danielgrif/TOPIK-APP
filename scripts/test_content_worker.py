@@ -44,10 +44,10 @@ class TestContentWorker(unittest.IsolatedAsyncioTestCase):
         session = MagicMock()
         
         # Mock the individual handlers
-        with patch('content_worker.handle_main_audio', new_callable=AsyncMock) as m_main, \
-             patch('content_worker.handle_male_audio', new_callable=AsyncMock) as m_male, \
-             patch('content_worker.handle_example_audio', new_callable=AsyncMock) as m_ex, \
-             patch('content_worker.handle_image', new_callable=AsyncMock) as m_img:
+        with patch('content_worker.tts_handler.handle_main_audio', new_callable=AsyncMock) as m_main, \
+             patch('content_worker.tts_handler.handle_male_audio', new_callable=AsyncMock) as m_male, \
+             patch('content_worker.tts_handler.handle_example_audio', new_callable=AsyncMock) as m_ex, \
+             patch('content_worker.ai_handler.handle_image', new_callable=AsyncMock) as m_img:
             
             # Setup return values for each handler
             m_main.return_value = {'audio_url': 'http://bucket/audio_female.mp3'}
@@ -79,10 +79,10 @@ class TestContentWorker(unittest.IsolatedAsyncioTestCase):
         row = {'word_kr': 'test', 'translation': None, 'example_kr': None}
         session = MagicMock()
         
-        with patch('content_worker.handle_main_audio', new_callable=AsyncMock) as m_main, \
-             patch('content_worker.handle_male_audio', new_callable=AsyncMock) as m_male, \
-             patch('content_worker.handle_example_audio', new_callable=AsyncMock) as m_ex, \
-             patch('content_worker.handle_image', new_callable=AsyncMock) as m_img:
+        with patch('content_worker.tts_handler.handle_main_audio', new_callable=AsyncMock) as m_main, \
+             patch('content_worker.tts_handler.handle_male_audio', new_callable=AsyncMock) as m_male, \
+             patch('content_worker.tts_handler.handle_example_audio', new_callable=AsyncMock) as m_ex, \
+             patch('content_worker.ai_handler.handle_image', new_callable=AsyncMock) as m_img:
             
             # Only main audio returns an update
             m_main.return_value = {'audio_url': 'http://bucket/audio.mp3'}
@@ -105,10 +105,10 @@ class TestContentWorker(unittest.IsolatedAsyncioTestCase):
         content_worker.args.force_audio = True
         content_worker.args.force_images = True
         
-        with patch('content_worker.handle_main_audio', new_callable=AsyncMock, return_value={}) as m_main, \
-             patch('content_worker.handle_male_audio', new_callable=AsyncMock, return_value={}) as m_male, \
-             patch('content_worker.handle_example_audio', new_callable=AsyncMock, return_value={}) as m_ex, \
-             patch('content_worker.handle_image', new_callable=AsyncMock, return_value={}) as m_img:
+        with patch('content_worker.tts_handler.handle_main_audio', new_callable=AsyncMock, return_value={}) as m_main, \
+             patch('content_worker.tts_handler.handle_male_audio', new_callable=AsyncMock, return_value={}) as m_male, \
+             patch('content_worker.tts_handler.handle_example_audio', new_callable=AsyncMock, return_value={}) as m_ex, \
+             patch('content_worker.ai_handler.handle_image', new_callable=AsyncMock, return_value={}) as m_img:
 
             await content_worker._generate_content_for_word(session, row)
 
@@ -224,21 +224,21 @@ class TestContentWorker(unittest.IsolatedAsyncioTestCase):
 
             # Scenario 1: Existing custom image (not pixabay). Should skip regardless of force.
             row_custom = {'image': 'http://old.jpg', 'image_source': 'user', 'word_kr': 'test'}
-            res1 = await content_worker.handle_image(session, row_custom, 'test', 'hash', force_images=True)
+            res1 = await content_worker.ai_handler.handle_image(session, row_custom, 'test', 'hash', force_images=True)
             self.assertEqual(res1, {})
             
             # Scenario 2: Existing pixabay image, force=False. Should skip.
             row_pixabay = {'image': 'http://old_pix.jpg', 'image_source': 'pixabay', 'word_kr': 'test'}
-            res2 = await content_worker.handle_image(session, row_pixabay, 'test', 'hash', force_images=False)
+            res2 = await content_worker.ai_handler.handle_image(session, row_pixabay, 'test', 'hash', force_images=False)
             self.assertEqual(res2, {})
 
             # Scenario 3: Existing pixabay image, force=True. Should update.
-            res3 = await content_worker.handle_image(session, row_pixabay, 'test', 'hash', force_images=True)
+            res3 = await content_worker.ai_handler.handle_image(session, row_pixabay, 'test', 'hash', force_images=True)
             self.assertEqual(res3, {'image': 'http://supabase/new_image.jpg', 'image_source': 'pixabay'})
             
             # Scenario 4: No image. Should update regardless of force (testing force=False here).
             row_none = {'image': None, 'image_source': None, 'word_kr': 'test'}
-            res4 = await content_worker.handle_image(session, row_none, 'test', 'hash', force_images=False)
+            res4 = await content_worker.ai_handler.handle_image(session, row_none, 'test', 'hash', force_images=False)
             self.assertEqual(res4, {'image': 'http://supabase/new_image.jpg', 'image_source': 'pixabay'})
 
 if __name__ == '__main__':

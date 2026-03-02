@@ -4,6 +4,7 @@ import {
   showToast,
   parseBilingualString,
   isConnectionSlow,
+  promiseWithTimeout,
 } from "../utils/utils.ts";
 import { syncGlobalStats } from "./sync.ts";
 import { Scheduler } from "./scheduler.ts";
@@ -433,6 +434,14 @@ export async function loadFromSupabase(user: { id: string }) {
         globalData.streak_freeze ?? 0,
       );
 
+      // Синхронизация недельного опыта и лиги
+      if (globalData.weekly_xp !== undefined) {
+        state.userStats.weeklyXp = globalData.weekly_xp;
+      }
+      if (globalData.league !== undefined) {
+        state.userStats.league = globalData.league;
+      }
+
       if (globalData.achievements && Array.isArray(globalData.achievements)) {
         const localIds = new Set(state.achievements.map((a) => a.id));
         globalData.achievements.forEach((a: { id: string; date?: number }) => {
@@ -633,5 +642,29 @@ export async function fetchRandomQuote() {
   } catch (e) {
     console.warn("Quote fetch error:", e);
     return null;
+  }
+}
+
+/**
+ * Checks if the Supabase database is active and responsive.
+ * Useful for waking up the DB on free tier projects.
+ */
+export async function isDatabaseActive(
+  timeout: number = 5000,
+): Promise<boolean> {
+  try {
+    // Simple lightweight query to wake up the DB
+    // Using maybeSingle() to avoid error if table is empty
+    const { error } = await promiseWithTimeout(
+      Promise.resolve(
+        client.from(DB_TABLES.VOCABULARY).select("id").limit(1).maybeSingle(),
+      ),
+      timeout,
+      new Error("DB Ping Timeout"),
+    );
+    return !error;
+  } catch (e) {
+    console.warn("DB Health Check failed:", e);
+    return false;
   }
 }

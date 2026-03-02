@@ -17,6 +17,7 @@ import trashHtml from "../html/modals/trash.html?raw";
 import quotesHtml from "../html/modals/quotes.html?raw";
 import achievementsHtml from "../html/modals/achievements.html?raw";
 import selectionModalsHtml from "../html/modals/selection_modals.html?raw";
+import leaderboardHtml from "../html/modals/leaderboard.html?raw";
 
 /**
  * Загружает HTML-компоненты (модальные окна) и вставляет их в DOM.
@@ -62,6 +63,7 @@ export function injectComponents(): void {
     quotesHtml,
     achievementsHtml,
     selectionModalsHtml,
+    leaderboardHtml,
   ].join("\n");
 
   // Вставляем в конец body

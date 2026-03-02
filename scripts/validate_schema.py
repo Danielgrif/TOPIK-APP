@@ -12,16 +12,17 @@ logging.basicConfig(
 
 # Загрузка переменных окружения
 script_dir = os.path.dirname(os.path.abspath(__file__))
-load_dotenv(os.path.join(script_dir, ".env"))
+project_root = os.path.dirname(script_dir)
+load_dotenv(os.path.join(project_root, ".env"))
 
 if not os.getenv("SUPABASE_URL"):
-    load_dotenv(os.path.join(script_dir, "env"))
+    load_dotenv(os.path.join(project_root, "env"))
 
-SUPABASE_URL = os.getenv("SUPABASE_URL")
-SUPABASE_KEY = os.getenv("SUPABASE_SERVICE_KEY")
+SUPABASE_URL = os.getenv("SUPABASE_URL") or os.getenv("VITE_SUPABASE_URL")
+SUPABASE_KEY = os.getenv("SUPABASE_SERVICE_KEY") or os.getenv("SUPABASE_KEY") or os.getenv("VITE_SUPABASE_KEY")
 
 if not SUPABASE_URL or not SUPABASE_KEY:
-    logging.error("❌ ОШИБКА: Не найдены переменные окружения SUPABASE_URL или SUPABASE_SERVICE_KEY.")
+    logging.error("❌ ОШИБКА: Не найдены переменные окружения (SUPABASE_URL/VITE_SUPABASE_URL или ключи).")
     sys.exit(1)
 
 # Очистка ключей
@@ -45,8 +46,9 @@ def validate_vocabulary_schema():
         'audio_url', 'audio_male', 
         'image', 'image_source', 
         'example_kr', 'example_ru', 'example_audio',
-        'synonyms', 'antonyms', 'collocations', 
-        'my_notes', 'grammar_info'
+        'synonyms', 'antonyms', 'collocations',
+        'my_notes', 'grammar_info',
+        'created_by', 'is_public' # Новые поля
     ]
 
     try:
@@ -141,8 +143,46 @@ def validate_user_progress_schema():
              logging.error("💡 Вероятно, вы запрашиваете колонку, которой нет в базе.")
         sys.exit(1)
 
+def validate_user_global_stats_schema():
+    """Проверяет наличие необходимых колонок в таблице user_global_stats"""
+    logging.info("🔍 Проверка схемы таблицы 'user_global_stats'...")
+    
+    expected_columns = [
+        'user_id', 'xp', 'level', 'coins', 'streak_freeze', 
+        'sprint_record', 'survival_record', 'achievements', 'sessions', 'settings',
+        'avatar_url', 'full_name'
+    ]
+
+    try:
+        res = supabase.table('user_global_stats').select("*").limit(1).execute()
+        
+        if not res.data:
+            logging.warning("⚠️ Таблица 'user_global_stats' пуста. Невозможно проверить структуру через выборку.")
+            return
+
+        row = res.data[0]
+        if not isinstance(row, dict):
+            logging.error(f"❌ Неожиданный формат данных из БД. Получен тип: {type(row)}")
+            sys.exit(1)
+            
+        existing_columns = row.keys()
+        
+        missing = [col for col in expected_columns if col not in existing_columns]
+        
+        if missing:
+            logging.error("❌ НЕСООТВЕТСТВИЕ СХЕМЫ! В таблице 'user_global_stats' отсутствуют колонки:")
+            for col in missing:
+                logging.error(f"   - {col}")
+            logging.info("💡 Решение: Добавьте эти колонки через SQL Editor в Supabase Dashboard.")
+        else:
+            logging.info("✅ Схема таблицы 'user_global_stats' корректна.")
+            
+    except Exception as e:
+        logging.error(f"❌ Ошибка при проверке схемы user_global_stats: {e}")
+
 if __name__ == "__main__":
     validate_buckets()
     validate_vocabulary_schema()
     validate_user_progress_schema()
+    validate_user_global_stats_schema()
     logging.info("🏁 Валидация завершена.")

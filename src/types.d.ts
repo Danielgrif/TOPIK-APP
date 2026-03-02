@@ -53,7 +53,7 @@ declare global {
 
     // Navigation & Modals
     toggleFocusMode: () => void;
-    openProfileModal: () => void;
+    openProfileModal: (focusPassword?: boolean) => void;
     openShopModal: () => void;
     toggleDarkMode: () => void;
     startDailyChallenge: () => void;
@@ -79,6 +79,8 @@ declare global {
     // Auth & Settings
     handleAuth: (type: string) => void;
     signInWithGoogle: () => void;
+    handleDeleteAccount: () => void;
+    handleChangeEmail: () => void;
 
     // Shop
     buyItem: (id: string, btn?: HTMLElement) => void;

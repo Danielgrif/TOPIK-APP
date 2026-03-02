@@ -1,6 +1,6 @@
 import { state } from "../core/state.ts";
 import { openModal, closeModal } from "./ui_modal.ts";
-import { parseBilingualString, escapeHtml } from "../utils/utils.ts";
+import { escapeHtml } from "../utils/utils.ts";
 import { setStarFilter } from "./ui_filters.ts";
 
 export function openMistakesModal() {
@@ -60,8 +60,8 @@ function renderMistakesContent() {
   const byPart: Record<string, number> = Object.create(null);
 
   words.forEach((w) => {
-    const topic = w.topic || w.topic_ru || w.topic_kr || "Other";
-    const part = w.category || w.category_ru || w.category_kr || "Other";
+    const topic = w.topic_ru || w.topic_kr || "Other";
+    const part = w.category_ru || w.category_kr || "Other";
 
     byTopic[topic] = (byTopic[topic] || 0) + 1;
     byPart[part] = (byPart[part] || 0) + 1;
@@ -92,7 +92,7 @@ function renderMistakesContent() {
           .map(
             ([topic, count]) => `
           <div style="display: flex; justify-content: space-between; margin-bottom: 6px; font-size: 13px;">
-            <span>${escapeHtml(parseBilingualString(topic).ru)}</span>
+            <span>${escapeHtml(topic)}</span>
             <span style="font-weight: bold; color: var(--danger);">${count}</span>
           </div>
           <div style="height: 4px; background: var(--surface-3); border-radius: 2px; overflow: hidden;">
@@ -112,7 +112,7 @@ function renderMistakesContent() {
           .map(
             ([part, count]) => `
           <div style="display: flex; justify-content: space-between; margin-bottom: 6px; font-size: 13px;">
-            <span>${escapeHtml(parseBilingualString(part).ru)}</span>
+            <span>${escapeHtml(part)}</span>
             <span style="font-weight: bold; color: var(--warning);">${count}</span>
           </div>
           <div style="height: 4px; background: var(--surface-3); border-radius: 2px; overflow: hidden;">

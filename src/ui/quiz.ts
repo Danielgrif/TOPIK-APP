@@ -1,7 +1,6 @@
 import { state } from "../core/state.ts";
 import {
   showToast,
-  parseBilingualString,
   playTone,
   playComboSound,
   escapeHtml,
@@ -364,7 +363,7 @@ function populateQuizFilters() {
   const topics = new Set<string>();
   state.dataStore.forEach((w: Word) => {
     if (w.type === state.currentType) {
-      const t = w.topic || w.topic_ru || w.topic_kr;
+      const t = w.topic_ru || w.topic_kr;
       if (t) topics.add(t);
     }
   });
@@ -375,7 +374,7 @@ function populateQuizFilters() {
       if (t) {
         const opt = document.createElement("option");
         opt.value = t;
-        opt.textContent = parseBilingualString(t).ru;
+        opt.textContent = t;
         tSelect.appendChild(opt);
       }
     });
@@ -401,9 +400,9 @@ function populateQuizCategories() {
   const categories = new Set<string>();
   state.dataStore.forEach((w: Word) => {
     if (w.type !== state.currentType) return;
-    const t = w.topic || w.topic_ru || w.topic_kr;
+    const t = w.topic_ru || w.topic_kr;
     if (quizTopic !== "all" && t !== quizTopic) return;
-    const c = w.category || w.category_ru || w.category_kr;
+    const c = w.category_ru || w.category_kr;
     if (c) categories.add(c);
   });
   cSelect.innerHTML = '<option value="all">Все категории</option>';
@@ -413,7 +412,7 @@ function populateQuizCategories() {
       if (c) {
         const opt = document.createElement("option");
         opt.value = c;
-        opt.textContent = parseBilingualString(c).ru;
+        opt.textContent = c;
         cSelect.appendChild(opt);
       }
     });
@@ -458,9 +457,9 @@ export function startQuizMode(mode: string) {
 
   const filterFn = (w: Word) => {
     if (w.type !== state.currentType) return false;
-    const wTopic = w.topic || w.topic_ru || w.topic_kr;
+    const wTopic = w.topic_ru || w.topic_kr;
     const matchTopic = quizTopic === "all" || wTopic === quizTopic;
-    const wCat = w.category || w.category_ru || w.category_kr;
+    const wCat = w.category_ru || w.category_kr;
     const matchCat = quizCategory === "all" || wCat === quizCategory;
     const matchStar = quizStar === "all" || w.level === quizStar;
     const matchSearch =
@@ -1266,9 +1265,9 @@ export function updateQuizCount() {
   if (!countEl) return;
   const filterFn = (w: Word) => {
     if (w.type !== state.currentType) return false;
-    const wTopic = w.topic || w.topic_ru || w.topic_kr;
+    const wTopic = w.topic_ru || w.topic_kr;
     const matchTopic = quizTopic === "all" || wTopic === quizTopic;
-    const wCat = w.category || w.category_ru || w.category_kr;
+    const wCat = w.category_ru || w.category_kr;
     const matchCat = quizCategory === "all" || wCat === quizCategory;
     const matchStar = quizStar === "all" || w.level === quizStar;
     const matchSearch =
@@ -1290,9 +1289,9 @@ function updateQuizModesAvailability() {
   const buttons = selector.querySelectorAll(".quiz-mode-btn");
   const filterFn = (w: Word) => {
     if (w.type !== state.currentType) return false;
-    const wTopic = w.topic || w.topic_ru || w.topic_kr;
+    const wTopic = w.topic_ru || w.topic_kr;
     const matchTopic = quizTopic === "all" || wTopic === quizTopic;
-    const wCat = w.category || w.category_ru || w.category_kr;
+    const wCat = w.category_ru || w.category_kr;
     const matchCat = quizCategory === "all" || wCat === quizCategory;
     const matchStar = quizStar === "all" || w.level === quizStar;
     const matchSearch =

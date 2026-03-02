@@ -1,7 +1,9 @@
-/* eslint-disable no-console, @typescript-eslint/no-explicit-any */
+/* eslint-disable @typescript-eslint/no-explicit-any */
+import { client } from "./supabaseClient.ts";
 import { state } from "./state.ts";
 import { loadFromSupabase } from "./db.ts";
 import { showToast } from "../utils/utils.ts";
+import { promiseWithTimeout } from "../utils/utils.ts";
 import { saveAndRender } from "../ui/ui.ts";
 import { openModal, closeModal, openConfirm } from "../ui/ui_modal.ts";
 import {
@@ -10,7 +12,7 @@ import {
   updateSettingsUI,
 } from "../ui/ui_settings.ts";
 import { User } from "../types/index.ts";
-import { LS_KEYS } from "./constants.ts";
+import { LS_KEYS, DB_TABLES } from "./constants.ts";
 import { AuthService } from "./auth_service.ts";
 import { getRole, openRolesModal } from "./stats.ts";
 
@@ -29,10 +31,21 @@ export function updateAuthUI(user: User | null) {
     const email = user.email || "";
     const displayName =
       user.user_metadata?.full_name || email.split("@")[0] || "Гость";
-    avatar.textContent = email.charAt(0).toUpperCase();
+    const avatarUrl = user.user_metadata?.avatar_url;
+
+    if (avatarUrl) {
+      avatar.textContent = "";
+      avatar.style.backgroundImage = `url('${avatarUrl}')`;
+      avatar.style.backgroundSize = "cover";
+      avatar.style.backgroundPosition = "center";
+    } else {
+      avatar.style.backgroundImage = "";
+      avatar.textContent = email.charAt(0).toUpperCase();
+    }
     name.textContent = displayName;
     profileBtn.title = `Вошли как ${email}`;
   } else {
+    avatar.style.backgroundImage = "";
     avatar.textContent = "👤";
     name.textContent = "Профиль";
     profileBtn.title = "Войти или зарегистрироваться";
@@ -78,15 +91,10 @@ export function openLoginModal() {
   };
 }
 
-export function openProfileModal() {
+export function openProfileModal(focusPassword = false) {
   // АТОМАРНОЕ ИЗМЕНЕНИЕ: Синхронная проверка состояния.
   // Мы доверяем state.currentUser, который обновляется в app.ts.
   // Это гарантирует мгновенный отклик UI в том же цикле событий.
-
-  console.log(
-    "👤 [DEBUG] openProfileModal called. Current User:",
-    state.currentUser,
-  );
 
   if (state.currentUser) {
     const user = state.currentUser;
@@ -102,8 +110,94 @@ export function openProfileModal() {
     if (nameDisplay) nameDisplay.textContent = displayName;
 
     const avatarEl = document.getElementById("profile-avatar-large");
-    if (avatarEl)
-      avatarEl.textContent = (user.email || "U").charAt(0).toUpperCase();
+    const avatarImg = document.getElementById(
+      "profile-avatar-img",
+    ) as HTMLImageElement;
+    const avatarText = document.getElementById("profile-avatar-text");
+    const avatarInput = document.getElementById(
+      "avatar-upload",
+    ) as HTMLInputElement;
+    const deleteAvatarBtn = document.getElementById("delete-avatar-btn");
+
+    if (avatarEl && avatarImg && avatarText) {
+      const avatarUrl = user.user_metadata?.avatar_url;
+      if (avatarUrl) {
+        avatarImg.src = String(avatarUrl);
+        avatarImg.style.display = "block";
+        avatarText.style.display = "none";
+        if (deleteAvatarBtn) deleteAvatarBtn.style.display = "flex";
+      } else {
+        avatarImg.style.display = "none";
+        avatarText.style.display = "block";
+        avatarText.textContent = (user.email || "U").charAt(0).toUpperCase();
+        if (deleteAvatarBtn) deleteAvatarBtn.style.display = "none";
+      }
+
+      // Обработчик клика для загрузки
+      if (avatarInput) {
+        avatarEl.onclick = () => avatarInput.click();
+        avatarInput.onchange = async (e) => {
+          const file = (e.target as HTMLInputElement).files?.[0];
+          if (!file) return;
+
+          if (file.size > 5 * 1024 * 1024) {
+            showToast("❌ Файл слишком большой (макс 5MB)");
+            return;
+          }
+
+          showToast("⏳ Загрузка аватара...");
+          try {
+            const { data, error } = await AuthService.uploadAvatar(
+              user.id,
+              file,
+            );
+            if (error) throw error;
+
+            if (data.user) {
+              updateAuthUI(data.user as any);
+              // Мгновенное обновление в модальном окне
+              if (data.user.user_metadata.avatar_url) {
+                avatarImg.src = data.user.user_metadata.avatar_url;
+                avatarImg.style.display = "block";
+                avatarText.style.display = "none";
+                if (deleteAvatarBtn) deleteAvatarBtn.style.display = "flex";
+              }
+              showToast("✅ Аватар обновлен");
+            }
+          } catch (err: any) {
+            console.error("Avatar upload error:", err);
+            showToast("❌ Ошибка загрузки: " + err.message);
+          }
+        };
+      }
+
+      // Обработчик удаления
+      if (deleteAvatarBtn) {
+        deleteAvatarBtn.onclick = (e) => {
+          e.stopPropagation();
+          openConfirm("Удалить фото профиля?", async () => {
+            showToast("⏳ Удаление...");
+            try {
+              const { data, error } = await AuthService.deleteAvatar(user.id);
+              if (error) throw error;
+
+              updateAuthUI(data.user as any);
+              // Мгновенное обновление UI
+              avatarImg.style.display = "none";
+              avatarText.style.display = "block";
+              avatarText.textContent = (user.email || "U")
+                .charAt(0)
+                .toUpperCase();
+              deleteAvatarBtn.style.display = "none";
+              showToast("✅ Фото удалено");
+            } catch (err: any) {
+              console.error("Avatar delete error:", err);
+              showToast("❌ Ошибка: " + err.message);
+            }
+          });
+        };
+      }
+    }
 
     // Логика редактирования имени
     if (editBtn && nameInput && nameDisplay) {
@@ -162,6 +256,12 @@ export function openProfileModal() {
     const bar = document.getElementById("new-strength-bar");
     const container = document.getElementById("new-strength-container");
 
+    // Очистка поля смены email
+    const emailInput = document.getElementById(
+      "new-email",
+    ) as HTMLInputElement | null;
+    if (emailInput) emailInput.value = "";
+
     if (input && bar && container) {
       input.value = "";
       container.style.display = "none";
@@ -174,10 +274,19 @@ export function openProfileModal() {
 
     updateSettingsUI();
     openModal("profile-modal");
+
+    if (focusPassword) {
+      setTimeout(() => {
+        const passInput = document.getElementById("new-password");
+        if (passInput) {
+          passInput.focus();
+          passInput.scrollIntoView({ behavior: "smooth", block: "center" });
+        }
+      }, 300); // Ждем завершения анимации открытия модалки
+    }
   } else {
     // Если пользователя нет в стейте - сразу открываем вход.
     // Никаких await, никаких задержек.
-    console.log("👤 [DEBUG] No user, opening login modal directly");
     updateAuthUI(null);
     openLoginModal();
   }
@@ -244,10 +353,16 @@ export async function handleAuth(type: string) {
 async function performReset(email: string) {
   if (!email) return showAuthError("Введите Email для сброса пароля");
   showToast("⏳ Отправка письма...");
+
+  // Используем тот же URL, что и для входа, чтобы избежать проблем с редиректами
+  const redirectTo = import.meta.env.DEV
+    ? "http://localhost:5173/"
+    : window.location.origin + window.location.pathname;
+
   try {
     const { error } = await AuthService.resetPasswordForEmail(
       email,
-      window.location.href,
+      redirectTo,
     );
     if (error) throw error;
     alert(`Ссылка для входа отправлена на ${email}.\nПроверьте почту.`);
@@ -295,6 +410,19 @@ async function performSignup(email: string, password: string) {
 
 async function finalizeAuth(user: User) {
   showToast("✅ Успешно!");
+
+  // Анимация успеха (конфетти + вспышка)
+  if (typeof window.confetti === "function") {
+    window.confetti({
+      particleCount: 150,
+      spread: 70,
+      origin: { y: 0.6 },
+      zIndex: 20005,
+    });
+  }
+  document.body.classList.add("correct-flash");
+  setTimeout(() => document.body.classList.remove("correct-flash"), 1000);
+
   updateAuthUI(user);
   await loadFromSupabase(user);
   applyTheme();
@@ -356,9 +484,15 @@ function handleAuthError(e: unknown) {
 }
 
 export async function signInWithGoogle() {
-  const { error } = await AuthService.signInWithGoogle(
-    window.location.origin + window.location.pathname,
-  );
+  // В режиме разработки принудительно используем localhost,
+  // так как Google Cloud может не разрешать редиректы на локальные IP (192.168.x.x).
+  // Это гарантирует, что после входа Google вернет вас на основной адрес разработки.
+  // Для продакшена будет использоваться реальный домен сайта.
+  const redirectTo = import.meta.env.DEV
+    ? "http://localhost:5173/"
+    : window.location.origin + window.location.pathname;
+
+  const { error } = await AuthService.signInWithGoogle(redirectTo);
   if (error) {
     console.error("Google Sign-In Error:", error);
     alert("Ошибка Google входа: " + error.message);
@@ -391,13 +525,54 @@ export async function handleChangePassword() {
   }
 }
 
+export async function handleChangeEmail() {
+  const newEmailInput = document.getElementById(
+    "new-email",
+  ) as HTMLInputElement | null;
+  if (!newEmailInput) return;
+  const newEmail = newEmailInput.value.trim();
+
+  if (!newEmail) {
+    alert("Введите новый Email");
+    return;
+  }
+
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (!emailRegex.test(newEmail)) {
+    alert("Некорректный формат Email");
+    return;
+  }
+
+  showToast("⏳ Обновление...");
+  const { error } = await AuthService.updateEmail(newEmail);
+
+  if (error) {
+    console.error("Update Email Error:", error);
+    alert("Ошибка: " + error.message);
+  } else {
+    alert(
+      `На адрес ${newEmail} отправлено письмо для подтверждения.\n\nВАЖНО: Проверьте также старую почту, если требуется подтверждение смены.`,
+    );
+    newEmailInput.value = "";
+  }
+}
+
 export async function handleLogout() {
   openConfirm("Вы уверены, что хотите выйти?", async () => {
     showToast("👋 До встречи!");
     try {
-      await AuthService.signOut();
+      // Attempt to sign out from Supabase with a timeout
+      // If it takes too long (e.g., network issue), we proceed anyway
+      await promiseWithTimeout(
+        AuthService.signOut(),
+        5000,
+        new Error("Logout request timed out"),
+      );
     } catch (e) {
       console.error("Logout error:", e);
+      showToast(
+        "⚠️ Ошибка выхода из аккаунта на сервере или таймаут. Очистка локальных данных.",
+      );
     } finally {
       const keysToRemove = [
         LS_KEYS.USER_STATS,
@@ -416,11 +591,89 @@ export async function handleLogout() {
         LS_KEYS.SEARCH_HISTORY,
         LS_KEYS.WORD_REQUESTS,
         LS_KEYS.STUDY_GOAL,
+        LS_KEYS.ONBOARDING, // Reset onboarding status on logout
       ];
       keysToRemove.forEach((k) => localStorage.removeItem(k));
+
+      // Explicitly remove common Supabase auth tokens from local storage
+      localStorage.removeItem("sb-supabase-auth-token");
+      localStorage.removeItem("supabase.auth.token");
+
       location.reload();
     }
   });
+}
+
+export async function handleDeleteAccount() {
+  const {
+    data: { session },
+  } = await AuthService.getSession();
+
+  if (!session?.user) {
+    showToast("Вы не авторизованы");
+    return;
+  }
+
+  const providers = session.user.app_metadata?.providers || [];
+  const isEmailAuth = providers.includes("email");
+
+  openConfirm(
+    "Удалить аккаунт навсегда? Все данные будут потеряны. Это действие нельзя отменить.",
+    async () => {
+      showToast("⏳ Удаление данных...");
+      const uid = session.user.id;
+
+      try {
+        // Удаляем данные из всех таблиц
+        await client.from(DB_TABLES.USER_PROGRESS).delete().eq("user_id", uid);
+        await client
+          .from(DB_TABLES.USER_GLOBAL_STATS)
+          .delete()
+          .eq("user_id", uid);
+        await client
+          .from(DB_TABLES.USER_VOCABULARY)
+          .delete()
+          .eq("user_id", uid);
+        await client.from(DB_TABLES.WORD_REQUESTS).delete().eq("user_id", uid);
+        await client.from(DB_TABLES.USER_LISTS).delete().eq("user_id", uid);
+
+        // Выходим из системы
+        await AuthService.signOut();
+
+        // Очищаем локальное хранилище
+        localStorage.clear();
+
+        alert("Аккаунт и все данные удалены.");
+        location.reload();
+      } catch (e) {
+        console.error("Delete account error:", e);
+        showToast("❌ Ошибка при удалении данных");
+      }
+    },
+    {
+      confirmText: "Удалить навсегда",
+      cancelText: "Отмена",
+      showInput: isEmailAuth,
+      inputPlaceholder: "Введите пароль для подтверждения",
+      onValidate: isEmailAuth
+        ? async (val) => {
+            if (!val) {
+              showToast("Введите пароль");
+              return false;
+            }
+            const { error } = await AuthService.signInWithPassword(
+              session.user.email!,
+              val,
+            );
+            if (error) {
+              showToast("❌ Неверный пароль");
+              return false;
+            }
+            return true;
+          }
+        : undefined,
+    },
+  );
 }
 
 export function toggleResetMode(show: boolean) {

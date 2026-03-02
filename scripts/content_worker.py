@@ -52,7 +52,7 @@ try:
     from dotenv import load_dotenv
     import edge_tts # type: ignore
     from PIL import Image
-    from google import generativeai as genai
+    from google import genai
 except ImportError as e:
     logging.error(f"❌ Ошибка импорта библиотек: {e}")
     logging.error("Вероятно, файлы библиотек повреждены. Попробуйте выполнить эту команду для исправления:")
@@ -74,7 +74,6 @@ if not os.getenv("SUPABASE_URL"):
 SUPABASE_URL = os.getenv("SUPABASE_URL") or os.getenv("VITE_SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_SERVICE_KEY") or os.getenv("SUPABASE_KEY") or os.getenv("VITE_SUPABASE_KEY") # Нужен ключ с правами записи!
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-MIN_FILE_SIZE = 500 # Минимальный размер файла в байтах (исключает пустые заголовки)
 
 # Очистка ключей от кавычек, если они есть (частая проблема .env)
 if SUPABASE_URL: SUPABASE_URL = SUPABASE_URL.replace('"', '').replace("'", "")
@@ -92,7 +91,7 @@ DB_TABLES = {
     "WORD_REQUESTS": "word_requests",
     "USER_PROGRESS": "user_progress",
     "LIST_ITEMS": "list_items",
-    "USER_VOCABULARY": "user_vocabulary",
+    # "USER_VOCABULARY": "user_vocabulary", # Объединена с vocabulary
 }
 DB_BUCKETS = {
     "AUDIO": "audio-files",
@@ -166,6 +165,20 @@ except Exception as e:
     logging.error("Проверьте URL и KEY в файле .env")
     sys.exit(1)
 
+# Импорт локальных модулей (после настройки путей и библиотек)
+try:
+    # Добавляем текущую папку в path для импорта локальных модулей
+    if script_dir not in sys.path:
+        sys.path.insert(0, script_dir)
+    
+    from tts_generator import TTSGenerator, MIN_FILE_SIZE # type: ignore
+    from ai_generator import AIContentGenerator # type: ignore
+except ImportError as e:
+    logging.error(f"❌ Ошибка импорта локальных модулей: {e}")
+    logging.error(f"Папка скрипта: {script_dir}")
+    logging.error("Убедитесь, что файлы 'tts_generator.py' и 'ai_generator.py' находятся в папке scripts/")
+    sys.exit(1)
+
 def _execute_with_retry(executable):
     """Выполняет синхронный запрос к Supabase с логикой повторных попыток."""
     max_retries = 4
@@ -218,31 +231,6 @@ try:
 except Exception as e:
     logging.warning(f"⚠️ Проверка бакета изображений: {e}")
 
-# Списки для стандартизации вывода AI
-valid_topics = [
-    "Daily Life (Повседневная жизнь)", "Economics (Экономика)", "Politics (Политика)", 
-    "Society (Общество)", "Culture (Культура)", "Health (Здоровье)", 
-    "Environment (Природа/Экология)", "Science (Наука)", "Education (Образование)", 
-    "History (История)", "Art (Искусство)", "Sports (Спорт)", "Weather (Погода)", 
-    "Shopping (Покупки)", "Travel (Путешествия)", "Food (Еда)", "Work (Работа)", 
-    "Feelings (Чувства)", "Personality (Характер)", "Appearance (Внешность)", 
-    "Hobbies (Хобби)", "Other (Другое)"
-]
-
-valid_categories = [
-    "Noun (Существительное)", "Verb (Глагол)", "Adjective (Прилагательное)", 
-    "Adverb (Наречие)", "Particle (Частица)", "Suffix (Суффикс)", 
-    "Pronoun (Местоимение)", "Number (Числительное)", "Interjection (Междометие)", 
-    "Grammar (Грамматика)"
-]
-
-
-# Настройка Gemini
-if GEMINI_API_KEY:
-    genai.configure(api_key=GEMINI_API_KEY)
-else:
-    logging.warning("⚠️ GEMINI_API_KEY не найден. Генерация контента через AI будет недоступна.")
-
 if args.retry_errors:
     try:
         logging.info(f"🔄 Сброс заявок со статусом '{WORD_REQUEST_STATUS['ERROR']}' на '{WORD_REQUEST_STATUS['PENDING']}'...")
@@ -265,98 +253,9 @@ def clean_query_for_pixabay(text):
     text = re.split(r'[;,]', text)[0]
     return text.strip()
 
-def clean_text_for_tts(text):
-    """Удаляет текст в скобках (Hanja, пояснения) для чистого озвучивания."""
-    if not text: return ""
-    # Удаляем (текст) и [текст], включая пробел перед ними
-    text = re.sub(r'\s*[\(\[].*?[\)\]]', '', text)
-    return text.strip()
-
-# --- Hangul Composition Logic (QWERTY -> 2-Set Korean) ---
-KO_KEY_MAP = {
-    'q': 'ㅂ', 'w': 'ㅈ', 'e': 'ㄷ', 'r': 'ㄱ', 't': 'ㅅ', 'y': 'ㅛ', 'u': 'ㅕ', 'i': 'ㅑ', 'o': 'ㅐ', 'p': 'ㅔ',
-    'a': 'ㅁ', 's': 'ㄴ', 'd': 'ㅇ', 'f': 'ㄹ', 'g': 'ㅎ', 'h': 'ㅗ', 'j': 'ㅓ', 'k': 'ㅏ', 'l': 'ㅣ',
-    'z': 'ㅋ', 'x': 'ㅌ', 'c': 'ㅊ', 'v': 'ㅍ', 'b': 'ㅠ', 'n': 'ㅜ', 'm': 'ㅡ',
-    'Q': 'ㅃ', 'W': 'ㅉ', 'E': 'ㄸ', 'R': 'ㄲ', 'T': 'ㅆ', 'O': 'ㅒ', 'P': 'ㅖ'
-}
-CHO_LIST = "ㄱㄲㄴㄷㄸㄹㅁㅂㅃㅅㅆㅇㅈㅉㅊㅋㅌㅍㅎ"
-JUNG_LIST = "ㅏㅐㅑㅒㅓㅔㅕㅖㅗㅘㅙㅚㅛㅜㅝㅞㅟㅠㅡㅢㅣ"
-JONG_LIST = " ㄱㄲㄳㄴㄵㄶㄷㄹㄺㄻㄼㄽㄾㄿㅀㅁㅂㅄㅅㅆㅇㅈㅊㅋㅌㅍㅎ" # Пробел в начале для отсутствия патчима
-
-DOUBLE_JUNG = {
-    'ㅗㅏ': 'ㅘ', 'ㅗㅐ': 'ㅙ', 'ㅗㅣ': 'ㅚ', 'ㅜㅓ': 'ㅝ', 'ㅜㅔ': 'ㅞ', 'ㅜㅣ': 'ㅟ', 'ㅡㅣ': 'ㅢ',
-    'ㅘㅣ': 'ㅙ', 'ㅝㅣ': 'ㅞ', 'ㅑㅣ': 'ㅒ', 'ㅕㅣ': 'ㅖ'
-}
-DOUBLE_JONG = {
-    'ㄱㅅ': 'ㄳ', 'ㄴㅈ': 'ㄵ', 'ㄴㅎ': 'ㄶ', 'ㄹㄱ': 'ㄺ', 'ㄹㅁ': 'ㄻ', 'ㄹㅂ': 'ㄼ', 'ㄹㅅ': 'ㄽ',
-    'ㄹㅌ': 'ㄾ', 'ㄹㅍ': 'ㄿ', 'ㄹㅎ': 'ㅀ', 'ㅂㅅ': 'ㅄ'
-}
-
-def try_fix_keyboard_layout(text):
-    """Попытка конвертировать английский текст в корейский (QWERTY -> 2-Set)."""
-    if not text: return None
-    
-    result = []
-    state = 0 # 0:Start, 1:Cho, 2:Jung, 3:Jong, 4:Jong+Jong
-    cho = -1; jung = -1; jong = 0
-    
-    def combine():
-        return chr(0xAC00 + cho * 21 * 28 + jung * 28 + jong)
-    
-    for char in text:
-        jamo = KO_KEY_MAP.get(char)
-        if not jamo:
-            if state in [2, 3, 4]: result.append(combine())
-            elif state == 1: result.append(CHO_LIST[cho])
-            result.append(char)
-            state = 0; cho = -1; jung = -1; jong = 0
-            continue
-            
-        is_cho = jamo in CHO_LIST
-        is_jung = jamo in JUNG_LIST
-        jong_idx = JONG_LIST.find(jamo)
-        
-        if state == 0:
-            if is_cho: cho = CHO_LIST.index(jamo); state = 1
-            elif is_jung: result.append(jamo) # Гласная без согласной
-        elif state == 1:
-            if is_jung: jung = JUNG_LIST.index(jamo); state = 2
-            elif is_cho: result.append(CHO_LIST[cho]); cho = CHO_LIST.index(jamo)
-        elif state == 2:
-            if is_jung:
-                if JUNG_LIST[jung] + jamo in DOUBLE_JUNG: jung = JUNG_LIST.index(DOUBLE_JUNG[JUNG_LIST[jung] + jamo])
-                else: result.append(combine()); cho = -1; jung = JUNG_LIST.index(jamo); state = 0; result.append(jamo)
-            elif jong_idx > 0: jong = jong_idx; state = 3
-            elif is_cho: result.append(combine()); cho = CHO_LIST.index(jamo); jung = -1; jong = 0; state = 1
-        elif state == 3:
-            if is_jung:
-                prev_jong = JONG_LIST[jong]
-                result.append(chr(0xAC00 + cho * 21 * 28 + jung * 28 + 0))
-                cho = CHO_LIST.index(prev_jong); jung = JUNG_LIST.index(jamo); jong = 0; state = 2
-            elif jong_idx > 0 and JONG_LIST[jong] + jamo in DOUBLE_JONG:
-                jong = JONG_LIST.index(DOUBLE_JONG[JONG_LIST[jong] + jamo]); state = 4
-            elif is_cho:
-                result.append(combine()); cho = CHO_LIST.index(jamo); jung = -1; jong = 0; state = 1
-        elif state == 4:
-            if is_jung:
-                # Разбиваем двойной патчим
-                curr_jong = JONG_LIST[jong]
-                # Находим компоненты (обратный поиск)
-                parts = next((k for k, v in DOUBLE_JONG.items() if v == curr_jong), None)
-                if parts:
-                    result.append(chr(0xAC00 + cho * 21 * 28 + jung * 28 + JONG_LIST.index(parts[0])))
-                    cho = CHO_LIST.index(parts[1]); jung = JUNG_LIST.index(jamo); jong = 0; state = 2
-                else:
-                    result.append(combine()); cho = -1; jung = JUNG_LIST.index(jamo); state = 0; result.append(jamo)
-            else:
-                result.append(combine())
-                if is_cho: cho = CHO_LIST.index(jamo); jung = -1; jong = 0; state = 1
-                else: cho = -1; jung = -1; jong = 0; state = 0; result.append(jamo)
-
-    if state in [2, 3, 4]: result.append(combine())
-    elif state == 1: result.append(CHO_LIST[cho])
-    
-    return "".join(result)
+# Инициализация генераторов
+tts_gen = TTSGenerator()
+ai_gen = AIContentGenerator(GEMINI_API_KEY)
 
 async def delete_old_file(bucket, url):
     """Удаляет старый файл из хранилища перед загрузкой нового"""
@@ -391,99 +290,6 @@ def cleanup_temp_files():
     except Exception as e:
         logging.warning(f"⚠️ Ошибка очистки временных файлов: {e}")
 
-async def generate_audio_bytes(text, voice="ko-KR-SunHiNeural") -> bytes:
-    """Генерация аудио в память через Microsoft Edge TTS"""
-    clean_text = clean_text_for_tts(text)
-    if not clean_text: return None
-
-    # Пропускаем, если текст содержит латиницу, но не содержит хангыль (например, аббревиатуры "TOPIK", "TV")
-    if re.search(r'[A-Za-z]', clean_text) and not re.search(r'[가-힣]', clean_text):
-        # Попытка исправить раскладку (например, gks -> 한)
-        fixed_text = try_fix_keyboard_layout(clean_text)
-        if fixed_text and re.search(r'[가-힣]', fixed_text):
-            logging.info(f"🔧 Исправлена раскладка: '{clean_text}' -> '{fixed_text}'")
-            clean_text = fixed_text
-        else:
-            logging.info(f"⏩ Пропуск аудио для '{clean_text}': латиница без хангыля.")
-            return None
-
-    for i in range(3): # 3 попытки при ошибке сети
-        try:
-            communicate = edge_tts.Communicate(clean_text, voice)
-            audio_data = b""
-            async for chunk in communicate.stream():
-                if chunk["type"] == "audio":
-                    audio_data += chunk["data"]
-            
-            if len(audio_data) < MIN_FILE_SIZE:
-                logging.warning(f"⚠️ Аудио слишком короткое: {text}")
-                return None
-            return audio_data
-        except Exception as e:
-            if i == 2: logging.warning(f"⚠️ Ошибка Edge TTS: {e}")
-            await asyncio.sleep(1)
-    return None
-
-async def generate_dialogue_bytes(text) -> bytes:
-    """Генерация диалога в память"""
-    lines = text.replace('\r\n', '\n').split('\n')
-    
-    voice_female = "ko-KR-SunHiNeural"
-    voice_male = "ko-KR-InJoonNeural"
-    
-    # Формируем SSML структуру
-    ssml_parts = [
-        '<speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" xml:lang="ko-KR">'
-    ]
-    
-    current_voice = voice_female
-    has_content = False
-    
-    try:
-        for line in lines:
-            line = line.strip()
-            if not line: continue
-            
-            # Определение голоса
-            if re.match(r'^[Aa가]\s*:', line):
-                current_voice = voice_female
-                line = re.sub(r'^[Aa가]\s*:', '', line).strip()
-            elif re.match(r'^[Bb나]\s*:', line):
-                current_voice = voice_male
-                line = re.sub(r'^[Bb나]\s*:', '', line).strip()
-            
-            if not line: continue
-            
-            # Добавляем паузу 500мс перед репликой
-            if has_content:
-                 ssml_parts.append('<break time="500ms"/>')
-                 
-            # Экранируем спецсимволы XML и оборачиваем в тег голоса
-            # Очищаем текст от Hanja перед вставкой в SSML
-            safe_line = clean_text_for_tts(line).replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
-            ssml_parts.append(f'<voice name="{current_voice}">{safe_line}</voice>')
-            has_content = True
-            
-        ssml_parts.append('</speak>')
-        
-        if not has_content: return None
-        
-        ssml_string = "".join(ssml_parts)
-        
-        communicate = edge_tts.Communicate(ssml_string, voice_female)
-        audio_data = b""
-        async for chunk in communicate.stream():
-            if chunk["type"] == "audio":
-                audio_data += chunk["data"]
-        
-        if len(audio_data) < MIN_FILE_SIZE:
-             logging.warning(f"⚠️ Диалог слишком мал: {text[:20]}...")
-             return None
-        return audio_data
-    except Exception as e:
-        logging.warning(f"⚠️ Ошибка диалога (SSML): {e}")
-        return None
-
 def check_integrity(bucket_name):
     """Проверка целостности файлов и ссылок в БД."""
     logging.info(f"🧹 Запуск проверки целостности для бакета '{bucket_name}'...")
@@ -515,13 +321,11 @@ def check_integrity(bucket_name):
     if bucket_name == DB_BUCKETS['AUDIO']:
         tables_to_check = [
             (DB_TABLES['VOCABULARY'], ['audio_url', 'audio_male', 'example_audio']),
-            (DB_TABLES['USER_VOCABULARY'], ['audio_url', 'audio_male', 'example_audio']),
             (DB_TABLES['QUOTES'], ['audio_url'])
         ]
     elif bucket_name == DB_BUCKETS['IMAGES']:
         tables_to_check = [
             (DB_TABLES['VOCABULARY'], ['image']),
-            (DB_TABLES['USER_VOCABULARY'], ['image'])
         ]
 
     for table_name, target_cols in tables_to_check:
@@ -609,9 +413,16 @@ async def upload_to_supabase(bucket, path, data, content_type):
     def _do_upload():
         for i in range(3):
             try:
-                if hasattr(data, 'seek'): data.seek(0)
+                # Convert BytesIO to bytes to avoid "expected str, bytes or os.PathLike object, not BytesIO"
+                file_data = data
+                if hasattr(data, 'getvalue'):
+                    file_data = data.getvalue()
+                elif hasattr(data, 'seek') and hasattr(data, 'read'):
+                    data.seek(0)
+                    file_data = data.read()
+
                 return supabase.storage.from_(bucket).upload(
-                    path=path, file=data, file_options={"content-type": content_type, "upsert": "true"}
+                    path=path, file=file_data, file_options={"content-type": content_type, "upsert": "true"}
                 )
             except Exception as e:
                 if "10035" in str(e) or "10054" in str(e): time.sleep(1); continue
@@ -619,120 +430,502 @@ async def upload_to_supabase(bucket, path, data, content_type):
 
     await loop.run_in_executor(None, _do_upload)
 
-async def handle_main_audio(row, word, word_hash, force_audio=False):
-    """Обработка основного аудио (Женский голос - SunHi)"""
-    if row.get('audio_url') and not force_audio: return {}
-    
-    audio_filename = f"{word_hash}.mp3"
-    
-    audio_data = await generate_audio_bytes(word, "ko-KR-SunHiNeural")
-    
-    if audio_data:
-        if row.get('audio_url'):
-            await delete_old_file(DB_BUCKETS['AUDIO'], row.get('audio_url'))
+class TTSHandler:
+    """Класс для управления генерацией аудио (TTS)"""
+    def __init__(self, supabase_client, tts_generator):
+        self.supabase = supabase_client
+        self.tts_gen = tts_generator
+
+    async def handle_main_audio(self, row, word, word_hash, force_audio=False):
+        """Обработка основного аудио (Женский голос - SunHi)"""
+        if row.get('audio_url') and not force_audio: return {}
         
-        await upload_to_supabase(DB_BUCKETS['AUDIO'], audio_filename, BytesIO(audio_data), "audio/mpeg")
-        url = supabase.storage.from_(DB_BUCKETS['AUDIO']).get_public_url(audio_filename)
-        logging.info(f"✅ Audio Female: {word}")
-        return {'audio_url': url}
-
-    return {}
-
-async def handle_male_audio(row, word, word_hash, force_audio=False):
-    """Обработка мужского аудио (EdgeTTS)"""
-    if row.get('audio_male') and not force_audio: return {}
-    
-    male_filename = f"{word_hash}_M.mp3"
-    
-    audio_data = await generate_audio_bytes(word, "ko-KR-InJoonNeural")
-    
-    if audio_data:
-        if row.get('audio_male'):
-            await delete_old_file(DB_BUCKETS['AUDIO'], row.get('audio_male'))
+        audio_filename = f"{word_hash}.mp3"
         
-        await upload_to_supabase(DB_BUCKETS['AUDIO'], male_filename, BytesIO(audio_data), "audio/mpeg")
-        url = supabase.storage.from_(DB_BUCKETS['AUDIO']).get_public_url(male_filename)
-        logging.info(f"✅ Audio Male: {word}")
-        return {'audio_male': url}
-
-    return {}
-
-async def handle_example_audio(row, example, force_audio=False):
-    """Обработка аудио примера (Dialogue/EdgeTTS)"""
-    if not example or not isinstance(example, str): return {}
-    if row.get('example_audio') and not force_audio: return {}
-    
-    ex_hash = hashlib.md5(example.encode('utf-8')).hexdigest()
-    ex_filename = f"ex_{ex_hash}.mp3"
-    audio_data = None
-    
-    is_dialogue = re.search(r'(^|\n)[AaBb가나]\s*:', example)
-    if is_dialogue:
-        audio_data = await generate_dialogue_bytes(example)
-    else:
-        audio_data = await generate_audio_bytes(example, "ko-KR-SunHiNeural")
-    
-    if audio_data:
-        if row.get('example_audio'):
-            await delete_old_file(DB_BUCKETS['AUDIO'], row.get('example_audio'))
-        await upload_to_supabase(DB_BUCKETS['AUDIO'], ex_filename, BytesIO(audio_data), "audio/mpeg")
-        url = supabase.storage.from_(DB_BUCKETS['AUDIO']).get_public_url(ex_filename)
-        logging.info(f"✅ Example: {example[:10]}...")
-        return {'example_audio': url}
-
-    return {}
-
-async def handle_image(session, row, translation, word_hash, force_images):
-    """Обработка изображения через Edge Function (Auto Mode)"""
-    current_image = row.get('image')
-    image_source = row.get('image_source')
-
-    if current_image:
-        # Если источник НЕ 'pixabay' (значит пользовательская) — пропускаем всегда
-        if image_source not in ['pixabay', 'unsplash', 'pexels'] and not force_images:
-            return {}
-        # Если источник 'pixabay', но не включен force — тоже пропускаем
-        if not force_images:
-            return {}
-
-    # 2. Если дошли сюда: либо картинки нет, либо это авто-картинка + force
-    if not translation: return {}
-    
-    try:
-        function_url = f"{SUPABASE_URL}functions/v1/regenerate-image"
-        headers = {
-            "Authorization": f"Bearer {SUPABASE_KEY}",
-            "Content-Type": "application/json"
-        }
-        payload = {
-            "mode": "auto",
-            "id": row.get('id'),
-            "word": row.get('word_kr'),
-            "translation": row.get('translation')
-        }
+        audio_data = await self.tts_gen.generate_audio(word, "ko-KR-SunHiNeural")
         
-        async with session.post(function_url, json=payload, headers=headers, timeout=aiohttp.ClientTimeout(total=30)) as resp:
-            if resp.status == 200:
-                data = await resp.json()
-                logging.info(f"✅ Image (Edge Auto): {translation} -> {data.get('source')}")
-                
-                # Удаляем старое изображение, если оно было
-                if current_image and current_image != data.get('finalUrl'):
-                    await delete_old_file(DB_BUCKETS['IMAGES'], current_image)
+        if audio_data:
+            if row.get('audio_url'):
+                await delete_old_file(DB_BUCKETS['AUDIO'], row.get('audio_url'))
+            
+            await upload_to_supabase(DB_BUCKETS['AUDIO'], audio_filename, BytesIO(audio_data), "audio/mpeg")
+            url = self.supabase.storage.from_(DB_BUCKETS['AUDIO']).get_public_url(audio_filename)
+            logging.info(f"✅ Audio Female: {word}")
+            return {'audio_url': url}
+
+        return {}
+
+    async def handle_male_audio(self, row, word, word_hash, force_audio=False):
+        """Обработка мужского аудио (EdgeTTS)"""
+        if row.get('audio_male') and not force_audio: return {}
+        
+        male_filename = f"{word_hash}_M.mp3"
+        
+        audio_data = await self.tts_gen.generate_audio(word, "ko-KR-InJoonNeural")
+        
+        if audio_data:
+            if row.get('audio_male'):
+                await delete_old_file(DB_BUCKETS['AUDIO'], row.get('audio_male'))
+            
+            await upload_to_supabase(DB_BUCKETS['AUDIO'], male_filename, BytesIO(audio_data), "audio/mpeg")
+            url = self.supabase.storage.from_(DB_BUCKETS['AUDIO']).get_public_url(male_filename)
+            logging.info(f"✅ Audio Male: {word}")
+            return {'audio_male': url}
+
+        return {}
+
+    async def handle_example_audio(self, row, example, force_audio=False):
+        """Обработка аудио примера (Dialogue/EdgeTTS)"""
+        if not example or not isinstance(example, str): return {}
+        if row.get('example_audio') and not force_audio: return {}
+        
+        ex_hash = hashlib.md5(example.encode('utf-8')).hexdigest()
+        ex_filename = f"ex_{ex_hash}.mp3"
+        audio_data = None
+        
+        is_dialogue = re.search(r'(^|\n)[AaBb가나]\s*:', example)
+        if is_dialogue:
+            audio_data = await self.tts_gen.generate_dialogue(example)
+        else:
+            audio_data = await self.tts_gen.generate_audio(example, "ko-KR-SunHiNeural")
+        
+        if audio_data:
+            if row.get('example_audio'):
+                await delete_old_file(DB_BUCKETS['AUDIO'], row.get('example_audio'))
+            await upload_to_supabase(DB_BUCKETS['AUDIO'], ex_filename, BytesIO(audio_data), "audio/mpeg")
+            url = self.supabase.storage.from_(DB_BUCKETS['AUDIO']).get_public_url(ex_filename)
+            logging.info(f"✅ Example: {example[:10]}...")
+            return {'example_audio': url}
+
+        return {}
+
+    async def handle_quote_audio(self, row, force_audio=False):
+        """Обработка аудио для цитаты (EdgeTTS)"""
+        if row.get('audio_url') and not force_audio: return {}
+        
+        text = row.get('quote_kr')
+        if not text: return {}
+        
+        # Генерируем хеш от текста цитаты для имени файла
+        quote_hash = hashlib.md5(text.encode('utf-8')).hexdigest()
+        filename = f"quote_{quote_hash}.mp3"
+        
+        # Используем тот же голос, что и для слов (SunHi)
+        audio_data = await self.tts_gen.generate_audio(text, "ko-KR-SunHiNeural")
+        
+        if audio_data:
+            if row.get('audio_url'):
+                await delete_old_file(DB_BUCKETS['AUDIO'], row.get('audio_url'))
+            await upload_to_supabase(DB_BUCKETS['AUDIO'], filename, BytesIO(audio_data), "audio/mpeg")
+            url = self.supabase.storage.from_(DB_BUCKETS['AUDIO']).get_public_url(filename)
+            logging.info(f"✅ Quote Audio: {text[:15]}...")
+            return {'audio_url': url}
+
+        return {}
+
+class AIHandler:
+    """Класс для управления AI генерацией (текст и изображения)"""
+    def __init__(self, supabase_client, ai_generator: AIContentGenerator, sb_url, sb_key):
+        self.supabase = supabase_client
+        self.ai_gen = ai_generator
+        self.sb_url = sb_url
+        self.sb_key = sb_key
+        self.models_to_try = [
+            'gemini-2.5-flash', 
+            'gemini-2.5-pro', 
+            'gemini-3-flash-preview', 
+            'gemini-3-pro-preview',
+            'gemini-3.1-pro-preview',
+            'gemini-2.0-flash',
+            'gemini-2.0-flash-lite',
+            'gemini-flash-latest',
+            'gemini-pro-latest'
+        ]
+
+    async def handle_image(self, session, row, translation, word_hash, force_images):
+        """Обработка изображения через Edge Function (Auto Mode)"""
+        current_image = row.get('image')
+        image_source = row.get('image_source')
+
+        if current_image:
+            # Если источник НЕ 'pixabay' (значит пользовательская) — пропускаем всегда
+            if image_source not in ['pixabay', 'unsplash', 'pexels'] and not force_images:
+                return {}
+            # Если источник 'pixabay', но не включен force — тоже пропускаем
+            if not force_images:
+                return {}
+
+        # 2. Если дошли сюда: либо картинки нет, либо это авто-картинка + force
+        if not translation: return {}
+        
+        try:
+            function_url = f"{self.sb_url}functions/v1/regenerate-image"
+            headers = {
+                "Authorization": f"Bearer {self.sb_key}",
+                "Content-Type": "application/json"
+            }
+            payload = {
+                "mode": "auto",
+                "id": row.get('id'),
+                "word": row.get('word_kr'),
+                "translation": row.get('translation')
+            }
+            
+            async with session.post(function_url, json=payload, headers=headers, timeout=aiohttp.ClientTimeout(total=30)) as resp:
+                if resp.status == 200:
+                    data = await resp.json()
+                    logging.info(f"✅ Image (Edge Auto): {translation} -> {data.get('source')}")
                     
-                return {}
-            else:
-                if resp.status != 404:
-                    text = await resp.text()
-                    logging.warning(f"⚠️ Edge Function Error: {resp.status} - {text}")
-                return {}
+                    # Удаляем старое изображение, если оно было
+                    if current_image and current_image != data.get('finalUrl'):
+                        await delete_old_file(DB_BUCKETS['IMAGES'], current_image)
+                        
+                    return {}
+                else:
+                    if resp.status != 404:
+                        text = await resp.text()
+                        logging.warning(f"⚠️ Edge Function Error: {resp.status} - {text}")
+                    return {}
 
-    except asyncio.TimeoutError:
-        logging.warning(f"⚠️ Timeout при вызове Edge Function для {translation}")
-        return {}
-    except Exception as e:
-        logging.warning(f"⚠️ Ошибка вызова Edge Function для {translation}: {e}")
-        return {}
+        except asyncio.TimeoutError:
+            logging.warning(f"⚠️ Timeout при вызове Edge Function для {translation}")
+            return {}
+        except Exception as e:
+            logging.warning(f"⚠️ Ошибка вызова Edge Function для {translation}: {e}")
+            return {}
+
+    async def generate_examples(self, word_kr):
+        """Генерирует примеры предложений для слова через Gemini."""
+        if not self.ai_gen.client:
+            return []
+
+        prompt = f"""You are a Korean language teacher.
+Generate 3 simple, natural Korean example sentences using the word '{word_kr}'.
+Provide a Russian translation for each sentence.
+Output ONLY a JSON array.
+
+Format:
+[
+  {{"kr": "Korean sentence", "ru": "Russian translation"}},
+  {{"kr": "Korean sentence", "ru": "Russian translation"}},
+  {{"kr": "Korean sentence", "ru": "Russian translation"}}
+]
+"""
+        for model_name in self.models_to_try:
+            try:
+                response = await self.ai_gen.client.aio.models.generate_content(
+                    model=model_name,
+                    contents=prompt
+                )
+                text = response.text
+                
+                # Очистка от markdown форматирования
+                if "```json" in text:
+                    text = text.split("```json")[1].split("```")[0]
+                elif "```" in text:
+                    text = text.split("```")[1].split("```")[0]
+                    
+                return json.loads(text.strip())
+            except Exception as e:
+                if "429" in str(e):
+                    logging.warning(f"⚠️ Quota exceeded for {model_name}. Trying next...")
+                    await asyncio.sleep(1)
+                    continue
+                logging.warning(f"⚠️ Ошибка генерации примеров ({model_name}): {e}")
+                continue
+        
+        logging.error(f"❌ Не удалось сгенерировать примеры для {word_kr} (все модели недоступны)")
+        return []
+
+    async def generate_grammar_explanation(self, grammar_point):
+        """Генерирует объяснение грамматики через Gemini."""
+        if not self.ai_gen.client:
+            return None
+
+        prompt = f"""You are an expert Korean language teacher for Russian speakers.
+Explain the Korean grammar point '{grammar_point}' in Russian.
+Provide:
+1. Meaning/Usage.
+2. Construction rules (conjugation).
+3. 2-3 simple example sentences with Russian translations.
+Keep it concise and clear for a learner.
+Output in Markdown format.
+"""
+        for model_name in self.models_to_try:
+            try:
+                response = await self.ai_gen.client.aio.models.generate_content(
+                    model=model_name,
+                    contents=prompt
+                )
+                return response.text.strip()
+            except Exception as e:
+                if "429" in str(e):
+                    logging.warning(f"⚠️ Quota exceeded for {model_name}. Trying next...")
+                    await asyncio.sleep(1)
+                    continue
+                logging.warning(f"⚠️ Ошибка генерации грамматики ({model_name}): {e}")
+                continue
+        
+        logging.error(f"❌ Не удалось сгенерировать грамматику для {grammar_point}")
+        return None
+
+    async def generate_synonyms(self, word_kr, current_synonyms=None):
+        """Генерирует список синонимов, если их меньше 3."""
+        if not self.ai_gen.client:
+            return None
+
+        existing = [s.strip() for s in (current_synonyms or "").split(',')] if current_synonyms else []
+        if len(existing) >= 3:
+            return None
+
+        prompt = f"""You are a Korean language expert.
+Provide 3-5 common synonyms for the Korean word '{word_kr}'.
+Output ONLY a comma-separated list of Korean words.
+"""
+        for model_name in self.models_to_try:
+            try:
+                response = await self.ai_gen.client.aio.models.generate_content(
+                    model=model_name,
+                    contents=prompt
+                )
+                text = response.text.strip()
+                
+                new_synonyms = [s.strip() for s in text.split(',') if s.strip()]
+                all_synonyms = list(set(existing + new_synonyms))
+                if word_kr in all_synonyms:
+                    all_synonyms.remove(word_kr)
+                    
+                return ", ".join(all_synonyms[:5])
+            except Exception as e:
+                if "429" in str(e):
+                    logging.warning(f"⚠️ Quota exceeded for {model_name}. Trying next...")
+                    await asyncio.sleep(1.5)
+                    continue
+                logging.warning(f"⚠️ Ошибка генерации синонимов ({model_name}): {e}")
+                continue
+        
+        logging.error(f"❌ Не удалось сгенерировать синонимы для {word_kr}")
+        return None
+
+    async def process_word_request(self, request, session=None, content_gen_callback=None):
+        """Обработка заявки на добавление слова через AI"""
+        req_id = request.get('id')
+        word_kr = request.get('word_kr')
+        user_id = request.get('user_id')
+        
+        # Проверяем наличие ручных данных (минимум перевод)
+        has_manual_data = bool(request.get('translation'))
+
+        if not word_kr:
+            return
+
+        if not has_manual_data and not GEMINI_API_KEY:
+            logging.warning(f"⚠️ Пропуск {word_kr}: нет ключа Gemini и нет ручных данных.")
+            builder = self.supabase.table(DB_TABLES['WORD_REQUESTS']).update({
+                'status': WORD_REQUEST_STATUS['ERROR'], 
+                'my_notes': 'Server Error: Missing Gemini API Key'
+            }).eq('id', req_id)
+            await execute_supabase_query(builder)
+            return
+
+        logging.info(f"🤖 Обработка запроса: {word_kr} (Ручные данные: {has_manual_data})")
+
+        try:
+            items_to_process = []
+            if has_manual_data:
+                manual_item = request.copy()
+                manual_item['word_kr'] = word_kr
+                items_to_process.append(manual_item)
+            else:
+                # 1. Запрос к Gemini через класс AIContentGenerator
+                items_to_process, error_msg = await self.ai_gen.generate_word_data(word_kr)
+                
+                if error_msg:
+                    logging.error(f"❌ Ошибка AI обработки для {word_kr}: {error_msg}")
+                    builder = self.supabase.table(DB_TABLES['WORD_REQUESTS']).update({'status': WORD_REQUEST_STATUS['ERROR'], 'my_notes': error_msg}).eq('id', req_id)
+                    await execute_supabase_query(builder)
+                    return
+
+            if not items_to_process:
+                logging.error(f"❌ Нет данных для обработки {word_kr}")
+                builder = self.supabase.table(DB_TABLES['WORD_REQUESTS']).update({'status': WORD_REQUEST_STATUS['ERROR']}).eq('id', req_id)
+                await execute_supabase_query(builder)
+                return
+
+            # Обработка каждого элемента (значения слова)
+            success_count = 0
+            for data in items_to_process:
+                if not data.get('word_kr'):
+                    continue
+                
+            # Применяем ручные настройки темы/категории, если они были указаны пользователем
+                if request.get('topic_ru'): data['topic_ru'] = request.get('topic_ru')
+                if request.get('category'): data['category'] = request.get('category')
+
+                # Парсинг темы и категории из AI (формат "En/Kr (Ru)")
+                # Если AI вернул "Daily Life (Повседневная жизнь)", разбиваем
+                if 'topic' in data:
+                    raw_topic = data.pop('topic')
+                    if '(' in raw_topic:
+                        data['topic_kr'] = raw_topic.split('(')[0].strip()
+                        data['topic_ru'] = raw_topic.split('(')[1].replace(')', '').strip()
+                
+                if 'category' in data:
+                    raw_cat = data.pop('category')
+                    if '(' in raw_cat:
+                        data['category_kr'] = raw_cat.split('(')[0].strip()
+                        data['category_ru'] = raw_cat.split('(')[1].replace(')', '').strip()
+
+                # Map frequency to level (stars)
+                if data.get('frequency'):
+                    freq = str(data.get('frequency')).lower()
+                    if 'high' in freq:
+                        data['level'] = '★★★'
+                    elif 'medium' in freq:
+                        data['level'] = '★★☆'
+                    elif 'low' in freq:
+                        data['level'] = '★☆☆'
+
+                # Append TOPIK level to grammar_info if available
+                if data.get('topik_level'):
+                    t_level = data.get('topik_level')
+                    g_info = data.get('grammar_info', '')
+                    data['grammar_info'] = f"{g_info}\n[{t_level}]" if g_info else f"[{t_level}]"
+
+                # Если тип определен как грамматика, пробуем сгенерировать справку
+                if data.get('type') == 'grammar' and not data.get('grammar_info'):
+                    logging.info(f"📘 Генерация грамматической справки для: {data.get('word_kr')}")
+                    g_info = await self.generate_grammar_explanation(data.get('word_kr'))
+                    if g_info:
+                        data['grammar_info'] = g_info
+
+                # Генерация синонимов, если их нет или мало (меньше 3)
+                current_syns = data.get('synonyms')
+                if not current_syns or len(current_syns.split(',')) < 3:
+                    logging.info(f"📚 Дополнение синонимов для: {data.get('word_kr')}")
+                    new_syns = await self.generate_synonyms(data.get('word_kr'), current_syns)
+                    if new_syns:
+                        data['synonyms'] = new_syns
+
+                # 2. Проверка на дубликаты (теперь все в vocabulary)
+                target_table = DB_TABLES['VOCABULARY']
+                word_id = None
+                
+                async def _find_duplicate(table, uid=None):
+                    # Ищем слово по написанию
+                    b = self.supabase.table(table).select('id, translation, created_by, is_public').eq('word_kr', data.get('word_kr'))
+                    rows = (await execute_supabase_query(b)).data or []
+                    req_t = (data.get('translation') or "").strip().lower()
+                    
+                    for r in rows:
+                        # Проверяем видимость: публичное ИЛИ создано этим пользователем
+                        is_visible = r.get('is_public') or (uid and str(r.get('created_by')) == str(uid))
+                        if not is_visible:
+                            continue
+                            
+                        db_t = (r.get('translation') or "").strip().lower()
+                        if db_t == req_t: return r['id']
+                    return None
+
+                word_id = await _find_duplicate(target_table, user_id)
+
+                if word_id:
+                    success_count += 1
+                    logging.info(f"ℹ️ Слово {data.get('word_kr')} ({data.get('translation')}) уже есть в базе.")
+                
+                if not word_id:
+                    # 3. Вставка в vocabulary
+                    allowed_keys = {
+                        'word_kr', 'translation', 'word_hanja', 'topic', 'category', 
+                        'level', 'type', 'example_kr', 'example_ru', 'synonyms', 'antonyms',
+                        'collocations', 'grammar_info', 'created_by', 'is_public'
+                    }
+                    
+                    # Настройка владельца и видимости
+                    if user_id: 
+                        data['created_by'] = user_id
+                        data['is_public'] = False
+                    else:
+                        data['created_by'] = None
+                        data['is_public'] = True
+                    
+                    clean_data = {k: v for k, v in data.items() if k in allowed_keys}
+                    
+                    # Если колонки grammar_info нет в базе, удаляем её из данных перед вставкой
+                    if not HAS_GRAMMAR_INFO and 'grammar_info' in clean_data:
+                        del clean_data['grammar_info']
+                    
+                    try:
+                        builder = self.supabase.table(target_table).insert(clean_data)
+                        insert_data = (await execute_supabase_query(builder)).data
+                    except Exception as e:
+                        logging.error(f"❌ Ошибка вставки в БД: {e}")
+                        insert_data = None
+                    
+                    if insert_data and isinstance(insert_data, list) and len(insert_data) > 0:
+                        word_id = insert_data[0]['id']
+                        success_count += 1
+                        logging.info(f"✅ Слово {data.get('word_kr')} ({data.get('translation')}) добавлено в {target_table}.")
+                        
+                        # Генерируем медиа для нового слова сразу
+                        if content_gen_callback:
+                            if session:
+                                updates = await content_gen_callback(session, insert_data[0])
+                            else:
+                                async with aiohttp.ClientSession() as local_session:
+                                    updates = await content_gen_callback(local_session, insert_data[0])
+                            
+                            if updates:
+                                update_builder = self.supabase.table(target_table).update(updates).eq("id", word_id)
+                                await execute_supabase_query(update_builder)
+                    else:
+                        logging.error(f"❌ Не удалось вставить слово '{data.get('word_kr')}'. Ответ БД пуст (возможно, ошибка прав доступа RLS).")
+
+                # Опционально: Добавить слово в "Изучаемые" пользователя, который его запросил
+                if word_id and user_id:
+                    try:
+                        builder = self.supabase.table(DB_TABLES['USER_PROGRESS']).upsert({'user_id': user_id, 'word_id': word_id, 'is_learned': False})
+                        await execute_supabase_query(builder)
+                    except Exception as e:
+                        logging.warning(f"Не удалось добавить в прогресс пользователя: {e}")
+
+                # 5. Добавление в список пользователя (если указан target_list_id)
+                target_list_id = request.get('target_list_id')
+                if word_id and target_list_id:
+                    try:
+                        builder = self.supabase.table(DB_TABLES['LIST_ITEMS']).upsert({'list_id': target_list_id, 'word_id': word_id})
+                        await execute_supabase_query(builder)
+                        logging.info(f"✅ Слово добавлено в список {target_list_id}")
+                    except Exception as e:
+                        logging.warning(f"⚠️ Ошибка добавления в список: {e}")
+
+            # 4. Обновление статуса заявки (после обработки всех вариантов)
+            final_status = WORD_REQUEST_STATUS['PROCESSED']
+            notes = None
+            
+            if success_count == 0:
+                final_status = WORD_REQUEST_STATUS['ERROR']
+                notes = "System: Failed to insert/find word in DB (RLS or Unknown Error)"
+            
+            update_payload = {'status': final_status}
+            if notes: update_payload['my_notes'] = notes
+            
+            builder = self.supabase.table(DB_TABLES['WORD_REQUESTS']).update(update_payload).eq('id', req_id)
+            await execute_supabase_query(builder)
+
+        except asyncio.TimeoutError:
+            logging.error(f"❌ Timeout AI для {word_kr}")
+            builder = self.supabase.table(DB_TABLES['WORD_REQUESTS']).update({'status': WORD_REQUEST_STATUS['ERROR'], 'my_notes': 'AI Timeout'}).eq('id', req_id)
+            await execute_supabase_query(builder)
+
+        except Exception as e:
+            logging.error(f"❌ Ошибка AI обработки для {word_kr}: {e}")
+            builder = self.supabase.table(DB_TABLES['WORD_REQUESTS']).update({'status': WORD_REQUEST_STATUS['ERROR']}).eq('id', req_id)
+            await execute_supabase_query(builder)
+
+# Инициализация обработчиков
+tts_handler = TTSHandler(supabase, tts_gen)
+ai_handler = AIHandler(supabase, ai_gen, SUPABASE_URL, SUPABASE_KEY)
 
 async def reset_failed_requests():
     """Сбрасывает статус ошибочных заявок на 'pending' для повторной обработки."""
@@ -755,10 +948,10 @@ async def _generate_content_for_word(session, row):
     word_hash = hashlib.md5(word.encode('utf-8')).hexdigest()
 
     tasks = [
-        handle_main_audio(row, word, word_hash, args.force_audio),
-        handle_male_audio(row, word, word_hash, args.force_audio),
-        handle_example_audio(row, example, args.force_audio),
-        handle_image(session, row, translation, word_hash, args.force_images)
+        tts_handler.handle_main_audio(row, word, word_hash, args.force_audio),
+        tts_handler.handle_male_audio(row, word, word_hash, args.force_audio),
+        tts_handler.handle_example_audio(row, example, args.force_audio),
+        ai_handler.handle_image(session, row, translation, word_hash, args.force_images)
     ]
     
     results = await asyncio.gather(*tasks)
@@ -800,288 +993,12 @@ async def process_word(sem, session, row, error_counter):
             _handle_processing_error(e, word, error_counter)
             return row_id
 
-async def process_word_request(request, session=None):
-    """Обработка заявки на добавление слова через AI"""
-    req_id = request.get('id')
-    word_kr = request.get('word_kr')
-    user_id = request.get('user_id')
-    
-    # Проверяем наличие ручных данных (минимум перевод)
-    has_manual_data = bool(request.get('translation'))
-
-    if not word_kr:
-        return
-
-    if not has_manual_data and not GEMINI_API_KEY:
-        logging.warning(f"⚠️ Пропуск {word_kr}: нет ключа Gemini и нет ручных данных.")
-        builder = supabase.table(DB_TABLES['WORD_REQUESTS']).update({
-            'status': WORD_REQUEST_STATUS['ERROR'], 
-            'my_notes': 'Server Error: Missing Gemini API Key'
-        }).eq('id', req_id)
-        await execute_supabase_query(builder)
-        return
-
-    logging.info(f"🤖 Обработка запроса: {word_kr} (Ручные данные: {has_manual_data})")
-
-    try:
-        items_to_process = []
-        if has_manual_data:
-            manual_item = request.copy()
-            manual_item['word_kr'] = word_kr
-            items_to_process.append(manual_item)
-        else:
-            # 1. Запрос к Gemini для получения данных
-            prompt = f"""You are an expert Korean language teacher for Russian speakers.
-Analyze the input: '{word_kr}'.
-
-### 1. Identification & Correction
-- Detect if the input is Korean, a typo (e.g. 'gks' -> '한'), or Romanization (e.g. 'annyeong' -> '안녕').
-- Use the **corrected Korean word** for analysis.
-- If the input is gibberish or not a valid Korean word, return: {{"error": "Invalid input"}}
-
-### 2. Analysis Rules
-- If the word has multiple distinct meanings (homonyms), return a JSON ARRAY of objects (max 3 most common).
-- If it has a single meaning, return a single JSON object.
-- **Strictly** follow the JSON structure below. Do NOT use Markdown formatting (no ```json).
-
-### 3. JSON Structure
-Each object must have:
-- "word_kr": string (The corrected Korean word)
-- "translation": string (Concise Russian translation, 1-3 words)
-- "word_hanja": string (Hanja characters ONLY if applicable. Empty string if native Korean)
-- "topic": string (One from: {', '.join(valid_topics)})
-- "category": string (One from: {', '.join(valid_categories)})
-- "level": string (One of: "★★★" (Beginner), "★★☆" (Intermediate), "★☆☆" (Advanced))
-- "example_kr": string (A simple, natural Korean sentence using the word in **polite informal style (해요체)**)
-- "example_ru": string (Russian translation of the example)
-- "synonyms": string (Comma-separated Korean synonyms **matching this specific meaning**, max 3. Empty if none)
-- "antonyms": string (Comma-separated Korean antonyms **matching this specific meaning**, max 3. Empty if none)
-- "collocations": string (Common word pairings, e.g. "make friends", max 3)
-- "grammar_info": string (Brief usage note, conjugation tip, or Hanja meaning breakdown. E.g. "Irregular verb" or "學(learn) 校(school)")
-- "type": string ("word" or "grammar")
-
-### 4. Constraints
-- Topic/Category MUST be exactly from the provided lists. If unsure, use "Other (Другое)".
-- Examples should be suitable for the word's difficulty level.
-- Output ONLY the JSON string.
-
-Input: '{word_kr}'
-"""
-            
-            # Список моделей для перебора (Fallback стратегия)
-            models_to_try = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-flash-latest']
-            text_response = None
-            last_error = None
-
-            for model_name in models_to_try:
-                try:
-                    # FIX: Добавляем таймаут, чтобы воркер не завис на ожидании ответа от Google
-                    response = await asyncio.wait_for(asyncio.to_thread(
-                        genai.GenerativeModel(model_name).generate_content,
-                        contents=prompt
-                    ), timeout=30.0)
-                    text_response = response.text
-                    
-                    if text_response:
-                        logging.info(f"✅ Ответ получен от модели: {model_name}")
-                        break
-                except Exception as e:
-                    logging.warning(f"⚠️ Ошибка модели {model_name}: {e}")
-                    last_error = e
-            
-            if not text_response:
-                logging.error(f"❌ Все модели AI недоступны для {word_kr}. Ошибка: {last_error}")
-                builder = supabase.table(DB_TABLES['WORD_REQUESTS']).update({'status': WORD_REQUEST_STATUS['ERROR'], 'my_notes': f'All AI models failed: {last_error}'}).eq('id', req_id)
-                await execute_supabase_query(builder)
-                return
-            
-            # Очистка от markdown ```json ... ```
-            if "```json" in text_response:
-                text_response = text_response.split("```json")[1].split("```")[0]
-            elif "```" in text_response:
-                text_response = text_response.split("```")[1].split("```")[0]
-                
-            try:
-                parsed_data = json.loads(text_response.strip())
-            except json.JSONDecodeError:
-                logging.error(f"❌ Ошибка парсинга JSON для {word_kr}")
-                builder = supabase.table(DB_TABLES['WORD_REQUESTS']).update({'status': WORD_REQUEST_STATUS['ERROR'], 'my_notes': 'Invalid JSON'}).eq('id', req_id)
-                await execute_supabase_query(builder)
-                return
-
-            if isinstance(parsed_data, dict) and parsed_data.get("error") == "Invalid input":
-                logging.warning(f"⚠️ AI rejected input '{word_kr}': Invalid input")
-                builder = supabase.table(DB_TABLES['WORD_REQUESTS']).update({
-                    'status': WORD_REQUEST_STATUS['ERROR'],
-                    'my_notes': 'AI: Invalid input'
-                }).eq('id', req_id)
-                await execute_supabase_query(builder)
-                return
-
-            if isinstance(parsed_data, list):
-                items_to_process = parsed_data
-            elif isinstance(parsed_data, dict):
-                items_to_process = [parsed_data]
-            else:
-                logging.error(f"❌ Неверный формат ответа AI для {word_kr}")
-                builder = supabase.table(DB_TABLES['WORD_REQUESTS']).update({'status': WORD_REQUEST_STATUS['ERROR']}).eq('id', req_id)
-                await execute_supabase_query(builder)
-                return
-        
-        if not items_to_process:
-             logging.error(f"❌ Нет данных для обработки {word_kr}")
-             builder = supabase.table(DB_TABLES['WORD_REQUESTS']).update({'status': WORD_REQUEST_STATUS['ERROR']}).eq('id', req_id)
-             await execute_supabase_query(builder)
-             return
-
-        # Обработка каждого элемента (значения слова)
-        success_count = 0
-        for data in items_to_process:
-            if not data.get('word_kr'):
-                continue
-            
-            # Применяем ручные настройки темы/категории, если они были указаны пользователем
-            # Это позволяет переопределить то, что придумал AI
-            if request.get('topic'): data['topic'] = request.get('topic')
-            if request.get('category'): data['category'] = request.get('category')
-
-            # 2. Проверка на дубликаты (в целевой и общей таблицах)
-            target_table = DB_TABLES['USER_VOCABULARY'] if user_id else DB_TABLES['VOCABULARY']
-            word_id = None
-            
-            async def _find_duplicate(table, uid=None):
-                b = supabase.table(table).select('id, translation').eq('word_kr', data.get('word_kr'))
-                if uid: b = b.eq('user_id', uid)
-                rows = (await execute_supabase_query(b)).data or []
-                req_t = (data.get('translation') or "").strip().lower()
-                for r in rows:
-                    db_t = (r.get('translation') or "").strip().lower()
-                    if db_t == req_t: return r['id']
-                return None
-
-            word_id = await _find_duplicate(target_table, user_id if target_table == DB_TABLES['USER_VOCABULARY'] else None)
-            
-            if not word_id and user_id:
-                word_id = await _find_duplicate(DB_TABLES['VOCABULARY'])
-            
-            if word_id:
-                success_count += 1
-                logging.info(f"ℹ️ Слово {data.get('word_kr')} ({data.get('translation')}) уже есть в базе.")
-            
-            if not word_id:
-                # 3. Вставка в vocabulary
-                allowed_keys = {
-                    'word_kr', 'translation', 'word_hanja', 'topic', 'category', 
-                    'level', 'type', 'example_kr', 'example_ru', 'synonyms', 'antonyms',
-                    'collocations', 'grammar_info',
-                    'user_id' # Добавляем поле владельца
-                }
-                # Если есть user_id в запросе, добавляем его в данные для вставки
-                if user_id: data['user_id'] = user_id
-                
-                clean_data = {k: v for k, v in data.items() if k in allowed_keys}
-                
-                # Если колонки grammar_info нет в базе, удаляем её из данных перед вставкой
-                if not HAS_GRAMMAR_INFO and 'grammar_info' in clean_data:
-                    del clean_data['grammar_info']
-                
-                try:
-                    builder = supabase.table(target_table).insert(clean_data)
-                    insert_data = (await execute_supabase_query(builder)).data
-                except Exception as e:
-                    logging.error(f"❌ Ошибка вставки в БД: {e}")
-                    insert_data = None
-                
-                if insert_data and isinstance(insert_data, list) and len(insert_data) > 0:
-                    word_id = insert_data[0]['id']
-                    success_count += 1
-                    logging.info(f"✅ Слово {data.get('word_kr')} ({data.get('translation')}) добавлено в {target_table}.")
-                    
-                    # Генерируем медиа для нового слова сразу
-                    if session:
-                        updates = await _generate_content_for_word(session, insert_data[0])
-                    else:
-                        async with aiohttp.ClientSession() as local_session:
-                            updates = await _generate_content_for_word(local_session, insert_data[0])
-                    
-                    if updates:
-                        update_builder = supabase.table(target_table).update(updates).eq("id", word_id)
-                        await execute_supabase_query(update_builder)
-                else:
-                    logging.error(f"❌ Не удалось вставить слово '{data.get('word_kr')}'. Ответ БД пуст (возможно, ошибка прав доступа RLS).")
-
-            # Опционально: Добавить слово в "Изучаемые" пользователя, который его запросил
-            if word_id and user_id:
-                 try:
-                     builder = supabase.table(DB_TABLES['USER_PROGRESS']).upsert({'user_id': user_id, 'word_id': word_id, 'is_learned': False})
-                     await execute_supabase_query(builder)
-                 except Exception as e:
-                     logging.warning(f"Не удалось добавить в прогресс пользователя: {e}")
-
-            # 5. Добавление в список пользователя (если указан target_list_id)
-            target_list_id = request.get('target_list_id')
-            if word_id and target_list_id:
-                try:
-                    builder = supabase.table(DB_TABLES['LIST_ITEMS']).upsert({'list_id': target_list_id, 'word_id': word_id})
-                    await execute_supabase_query(builder)
-                    logging.info(f"✅ Слово добавлено в список {target_list_id}")
-                except Exception as e:
-                    logging.warning(f"⚠️ Ошибка добавления в список: {e}")
-
-        # 4. Обновление статуса заявки (после обработки всех вариантов)
-        final_status = WORD_REQUEST_STATUS['PROCESSED']
-        notes = None
-        
-        if success_count == 0:
-             final_status = WORD_REQUEST_STATUS['ERROR']
-             notes = "System: Failed to insert/find word in DB (RLS or Unknown Error)"
-        
-        update_payload = {'status': final_status}
-        if notes: update_payload['my_notes'] = notes
-        
-        builder = supabase.table(DB_TABLES['WORD_REQUESTS']).update(update_payload).eq('id', req_id)
-        await execute_supabase_query(builder)
-
-    except asyncio.TimeoutError:
-        logging.error(f"❌ Timeout AI для {word_kr}")
-        builder = supabase.table(DB_TABLES['WORD_REQUESTS']).update({'status': WORD_REQUEST_STATUS['ERROR'], 'my_notes': 'AI Timeout'}).eq('id', req_id)
-        await execute_supabase_query(builder)
-
-    except Exception as e:
-        logging.error(f"❌ Ошибка AI обработки для {word_kr}: {e}")
-        builder = supabase.table(DB_TABLES['WORD_REQUESTS']).update({'status': WORD_REQUEST_STATUS['ERROR']}).eq('id', req_id)
-        await execute_supabase_query(builder)
-
-async def handle_quote_audio(row, force_audio=False):
-    """Обработка аудио для цитаты (EdgeTTS)"""
-    if row.get('audio_url') and not force_audio: return {}
-    
-    text = row.get('quote_kr')
-    if not text: return {}
-    
-    # Генерируем хеш от текста цитаты для имени файла
-    quote_hash = hashlib.md5(text.encode('utf-8')).hexdigest()
-    filename = f"quote_{quote_hash}.mp3"
-    
-    # Используем тот же голос, что и для слов (SunHi)
-    audio_data = await generate_audio_bytes(text, "ko-KR-SunHiNeural")
-    
-    if audio_data:
-        if row.get('audio_url'):
-            await delete_old_file(DB_BUCKETS['AUDIO'], row.get('audio_url'))
-        await upload_to_supabase(DB_BUCKETS['AUDIO'], filename, BytesIO(audio_data), "audio/mpeg")
-        url = supabase.storage.from_(DB_BUCKETS['AUDIO']).get_public_url(filename)
-        logging.info(f"✅ Quote Audio: {text[:15]}...")
-        return {'audio_url': url}
-
-    return {}
-
 async def process_quote(sem, session, row):
     """Асинхронная обработка одной цитаты"""
     async with sem:
         row_id = row.get('id')
         try:
-            updates = await handle_quote_audio(row, args.force_audio or args.force_quotes)
+            updates = await tts_handler.handle_quote_audio(row, args.force_audio or args.force_quotes)
             if updates:
                 builder = supabase.table(DB_TABLES['QUOTES']).update(updates).eq('id', row_id)
                 await execute_supabase_query(builder)
@@ -1198,7 +1115,7 @@ async def user_requests_loop(trigger_event):
                 logging.info(f"⚡ Найдено {len(reqs.data)} новых заявок от пользователей.")
                 async with aiohttp.ClientSession() as session:
                     for req in reqs.data:
-                        await process_word_request(req, session=session)
+                        await ai_handler.process_word_request(req, session=session, content_gen_callback=_generate_content_for_word)
                 # Если были задачи, сбрасываем таймер и проверяем снова быстро
                 current_sleep = min_sleep
                 await asyncio.sleep(0.1)
@@ -1352,11 +1269,7 @@ def check_schema_health():
         DB_TABLES['VOCABULARY']: [
             'id', 'word_kr', 'translation', 'image', 'image_source', 
             'audio_url', 'audio_male', 'example_audio', 'type',
-            'grammar_info' # Добавлено для проверки
-        ],
-        DB_TABLES['USER_VOCABULARY']: [
-            'id', 'word_kr', 'translation', 'image', 'image_source', 
-            'audio_url', 'audio_male', 'example_audio', 'type'
+            'grammar_info', 'created_by', 'is_public'
         ],
         DB_TABLES['WORD_REQUESTS']: [
             'id', 'word_kr', 'status', 'my_notes', 'target_list_id', 'user_id', 'translation'
@@ -1399,8 +1312,8 @@ def validate_gemini_key():
     
     logging.info("🤖 Проверка ключа Gemini API...")
     try:
-        model = genai.GenerativeModel('gemini-2.5-flash')
-        model.generate_content("Test")
+        client = genai.Client(api_key=GEMINI_API_KEY)
+        client.models.generate_content(model='gemini-2.5-flash', contents="Test")
         logging.info("✅ Ключ Gemini API валиден.")
     except Exception as e:
         logging.error(f"❌ Ошибка проверки ключа Gemini API: {e}")

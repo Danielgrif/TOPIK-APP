@@ -156,17 +156,20 @@ function updateFilteredData() {
       w.level !== state.currentStar
     )
       return false;
-    if (state.currentStar === "favorites" && !state.favorites.has(w.id))
+    if (
+      state.currentStar === "favorites" &&
+      !state.favorites.has(w.id as number)
+    )
       return false;
-    if (state.currentStar === "mistakes" && !state.mistakes.has(w.id))
+    if (state.currentStar === "mistakes" && !state.mistakes.has(w.id as number))
       return false;
     if (w.type !== state.currentType) return false;
-    const wTopic = w.topic || w.topic_ru || w.topic_kr || "";
+    const wTopic = w.topic_ru || w.topic_kr || "Общее";
     const topics = Array.isArray(state.currentTopic)
       ? state.currentTopic
       : [state.currentTopic];
     if (!topics.includes("all") && !topics.includes(wTopic)) return false;
-    const wCat = w.category || w.category_ru || w.category_kr || "";
+    const wCat = w.category_ru || w.category_kr || "Общее";
     const categories = Array.isArray(state.currentCategory)
       ? state.currentCategory
       : [state.currentCategory];
@@ -179,7 +182,7 @@ function updateFilteredData() {
         const isInAnyList = allCategorizedIds?.has(w.id as number);
         if (isInAnyList) return false;
       } else if (collectionsState.currentCollectionFilter === "my-custom") {
-        if (!state.currentUser || w.user_id !== state.currentUser.id)
+        if (!state.currentUser || w.created_by !== state.currentUser.id)
           return false;
       } else if (
         collectionsState.listItems[collectionsState.currentCollectionFilter]
@@ -521,6 +524,14 @@ function setupLongPress(el: HTMLElement, itemId: string | number) {
 function createCardElement(item: Word, index: number): HTMLElement {
   const el = document.createElement("div");
   el.className = "card";
+  el.tabIndex = 0; // Make accessible via keyboard
+  el.onkeydown = (e) => {
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+
+      el.click();
+    }
+  };
   el.dataset.wordId = String(item.id);
 
   if (state.selectMode) {
@@ -707,6 +718,13 @@ function createCardFront(item: Word, index: number): HTMLElement {
   const wordDiv = document.createElement("div");
   wordDiv.className = "word";
   wordDiv.textContent = item.word_kr || "";
+  wordDiv.title = "Нажмите, чтобы скопировать";
+  wordDiv.style.cursor = "copy";
+  wordDiv.onclick = (e) => {
+    e.stopPropagation();
+    navigator.clipboard.writeText(item.word_kr);
+    showToast("📋 Скопировано!");
+  };
   wordWrapper.appendChild(wordDiv);
 
   if (statusIcon) {
@@ -777,24 +795,23 @@ function createCardFront(item: Word, index: number): HTMLElement {
     mainContent.appendChild(statEl);
   }
 
-  const topicObj = item._parsedTopic || { kr: "기타", ru: "Общее" };
-  const catObj = item._parsedCategory || { kr: "기타", ru: "Общее" };
-  const formatBi = (obj: { kr: string; ru: string }) =>
-    obj.kr && obj.ru && obj.kr !== obj.ru
-      ? `${obj.kr} (${obj.ru})`
-      : obj.kr || obj.ru;
+  const topicRu = item.topic_ru || "Общее";
+  const topicKr = item.topic_kr || "기타";
+  const catRu = item.category_ru || "Общее";
+  const catKr = item.category_kr || "기타";
 
-  const topicIcon = getIconForValue(item.topic || item.topic_ru || "", "🏷");
-  const catIcon = getIconForValue(
-    item.category || item.category_ru || "",
-    "🔹",
-  );
+  const topicDisplay =
+    topicRu === topicKr ? topicRu : `${topicRu} (${topicKr})`;
+  const catDisplay = catRu === catKr ? catRu : `${catRu} (${catKr})`;
+
+  const topicIcon = getIconForValue(topicRu, "🏷");
+  const catIcon = getIconForValue(catRu, "🔹");
 
   const tagsDiv = document.createElement("div");
   tagsDiv.className = "card-tags";
   tagsDiv.innerHTML = `
-      <span class="tag-pill topic">${topicIcon} ${escapeHtml(formatBi(topicObj))}</span>
-      <span class="tag-pill category">${catIcon} ${escapeHtml(formatBi(catObj))}</span>
+      <span class="tag-pill topic">${topicIcon} ${escapeHtml(topicDisplay)}</span>
+      <span class="tag-pill category">${catIcon} ${escapeHtml(catDisplay)}</span>
   `;
   if (item.isLocal) {
     tagsDiv.innerHTML += `<span class="tag-pill ai">⏳ AI</span>`;
@@ -820,18 +837,26 @@ function createCardBack(item: Word): HTMLElement {
   const content = document.createElement("div");
   content.className = "card-back-scroll";
 
-  // --- Image (Blur Reveal) ---
-  if (item.image) {
+  // --- Image Section (View or Add) ---
+  // Always create wrapper to allow adding images if missing
+  {
     const imgWrapper = document.createElement("div");
     imgWrapper.style.marginBottom = "16px";
 
     const showImgBtn = document.createElement("button");
     showImgBtn.className = "btn-text";
     showImgBtn.style.width = "100%";
-    showImgBtn.style.background = "var(--surface-3)";
+    showImgBtn.style.background = item.image
+      ? "var(--surface-3)"
+      : "var(--surface-1)";
+    showImgBtn.style.border = item.image
+      ? "none"
+      : "1px dashed var(--border-color)";
     showImgBtn.style.borderRadius = "12px";
     showImgBtn.style.padding = "12px";
-    showImgBtn.innerHTML = "📷 Показать изображение";
+    showImgBtn.innerHTML = item.image
+      ? "📷 Показать изображение"
+      : "🖼️ Добавить изображение";
 
     const imgContainer = document.createElement("div");
     imgContainer.className = "back-image-container";
@@ -839,7 +864,7 @@ function createCardBack(item: Word): HTMLElement {
 
     const img = document.createElement("img");
     img.dataset.src = item.image;
-    img.className = "card-image"; // Keep class for lazy loader
+    img.className = "card-image";
     img.style.objectFit = "cover";
     img.alt = item.word_kr;
     img.draggable = false;
@@ -850,8 +875,13 @@ function createCardBack(item: Word): HTMLElement {
 
     showImgBtn.onclick = (e) => {
       e.stopPropagation();
-      showImgBtn.style.display = "none";
-      imgContainer.style.display = "block";
+      if (item.image) {
+        showImgBtn.style.display = "none";
+        imgContainer.style.display = "block";
+      } else {
+        // If no image, open picker directly or show container with controls
+        openImagePicker(item, showImgBtn as HTMLButtonElement);
+      }
     };
 
     imgContainer.onclick = (e) => {
@@ -863,8 +893,10 @@ function createCardBack(item: Word): HTMLElement {
       )
         return;
 
-      imgContainer.style.display = "none";
-      showImgBtn.style.display = "block";
+      if (item.image) {
+        imgContainer.style.display = "none";
+        showImgBtn.style.display = "block";
+      }
     };
 
     // --- Кнопка лупы (Full Screen) ---
@@ -960,6 +992,7 @@ function createCardBack(item: Word): HTMLElement {
           // Обновляем UI: скрываем картинку, показываем заглушку
           item.image = undefined;
           item.image_source = undefined;
+          // Re-render the card back to show "Add Image" button
           imgWrapper.remove();
           showToast("🗑️ Картинка удалена");
         } catch (err: any) {
@@ -1038,8 +1071,11 @@ function createCardBack(item: Word): HTMLElement {
     imgContainer.appendChild(uploadBtn);
     imgContainer.appendChild(fileInput);
 
-    imgWrapper.appendChild(showImgBtn);
-    imgWrapper.appendChild(imgContainer);
+    // Only append container if image exists, otherwise logic is handled by showImgBtn click
+    if (item.image) {
+      imgWrapper.appendChild(imgContainer);
+    }
+    imgWrapper.insertBefore(showImgBtn, imgWrapper.firstChild);
     content.appendChild(imgWrapper);
   }
 
@@ -1195,40 +1231,16 @@ function createCardBack(item: Word): HTMLElement {
   const actions = document.createElement("div");
   actions.className = "card-back-actions";
 
-  // Кнопка редактирования
-  const editBtn = document.createElement("button");
-  editBtn.className = "action-btn";
-  editBtn.textContent = "✏️ Изменить";
-  editBtn.onclick = (e) => {
-    e.stopPropagation();
-    window.openEditWordModal(String(item.id), render);
-  };
-  actions.appendChild(editBtn);
-
-  if (item.isLocal) {
-    const delBtn = document.createElement("button");
-    delBtn.className = "action-btn action-mistake";
-    delBtn.textContent = "Отменить заявку";
-    delBtn.style.width = "100%";
-    delBtn.onclick = (e) => {
+  // Кнопка редактирования - только для слов, созданных пользователем
+  if (item.created_by) {
+    const editBtn = document.createElement("button");
+    editBtn.className = "action-btn";
+    editBtn.textContent = "✏️ Изменить";
+    editBtn.onclick = (e) => {
       e.stopPropagation();
-      const cardEl =
-        (e.target as HTMLElement).closest(".card") ||
-        (e.target as HTMLElement).closest(".list-item-wrapper");
-
-      openConfirm("Удалить заявку на это слово?", async () => {
-        if (cardEl) {
-          (cardEl as HTMLElement).style.transition = "all 0.3s ease";
-          (cardEl as HTMLElement).style.opacity = "0";
-          (cardEl as HTMLElement).style.transform = "scale(0.9)";
-          await new Promise((r) => setTimeout(r, 300));
-        }
-        import("./ui_custom_words.ts").then((m) => m.deleteCustomWord(item.id));
-      });
+      window.openEditWordModal(String(item.id), render);
     };
-    actions.appendChild(delBtn);
-    back.appendChild(actions);
-    return back;
+    actions.appendChild(editBtn);
   }
 
   const isL = state.learned.has(item.id);
@@ -1261,13 +1273,38 @@ function createCardBack(item: Word): HTMLElement {
     actions.appendChild(learnedBtn);
   }
 
+  // Для локальных слов добавляем кнопку удаления как дополнительную опцию
+  if (item.isLocal) {
+    const delBtn = document.createElement("button");
+    delBtn.className = "action-btn";
+    delBtn.style.background = "var(--surface-3)";
+    delBtn.style.color = "var(--text-sub)";
+    delBtn.style.flex = "0 0 auto"; // Не растягиваться
+    delBtn.innerHTML = "🗑️";
+    delBtn.title = "Отменить заявку";
+    delBtn.onclick = (e) => {
+      e.stopPropagation();
+      const cardEl = (e.target as HTMLElement).closest(".card");
+      openConfirm("Удалить заявку на это слово?", async () => {
+        if (cardEl) {
+          (cardEl as HTMLElement).style.opacity = "0";
+          await new Promise((r) => setTimeout(r, 300));
+        }
+        import("./ui_custom_words.ts").then((m) => m.deleteCustomWord(item.id));
+      });
+    };
+    actions.appendChild(delBtn);
+  }
+
   back.appendChild(actions);
 
   return back;
 }
 
-async function openImagePicker(item: Word, btn: HTMLButtonElement) {
-  btn.disabled = true;
+async function openImagePicker(item: Word, btn: HTMLElement) {
+  if (btn instanceof HTMLButtonElement) {
+    btn.disabled = true;
+  }
   btn.classList.add("rotating");
 
   try {
@@ -1324,14 +1361,16 @@ async function openImagePicker(item: Word, btn: HTMLButtonElement) {
     (newRegenBtn as HTMLElement).onclick = () => {
       grid.innerHTML =
         '<div class="spinner-wrapper" style="height: 200px;"><div class="loader-circle"></div></div>';
-      openImagePicker(item, btn); // Recursively call to search again
+      openImagePicker(item, btn as HTMLButtonElement); // Recursively call to search again
     };
 
     openModal("image-picker-modal");
   } catch (err: any) {
-    showToast(`❌ Ошибка поиска: ${err.message}`);
+    showToast(`❌ Ошибка: ${err.message}`);
   } finally {
-    btn.disabled = false;
+    if (btn instanceof HTMLButtonElement) {
+      btn.disabled = false;
+    }
     btn.classList.remove("rotating");
   }
 }
@@ -1367,6 +1406,14 @@ async function finalizeImageSelection(
       if (imgEl) {
         imgEl.src = data.finalUrl;
         imgEl.dataset.src = data.finalUrl;
+        // Force reveal if it was hidden
+        const container = cardEl.querySelector(
+          ".back-image-container",
+        ) as HTMLElement;
+        if (container) container.style.display = "block";
+        const btn = cardEl.querySelector(".btn-text") as HTMLElement; // The "Show Image" button
+        if (btn && btn.innerHTML.includes("Показать"))
+          btn.style.display = "none";
       }
     }
 

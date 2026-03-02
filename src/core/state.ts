@@ -26,6 +26,10 @@ export interface WordRequestState {
   status: "pending" | "ai" | "audio" | "done" | "error";
   error?: string;
   timestamp: number;
+  targetListId?: string;
+  topic?: string;
+  category?: string;
+  level?: string;
 }
 
 export interface AppState {
@@ -88,7 +92,7 @@ export interface AppState {
   settingsUpdatedAt: number;
 }
 
-export const CURRENT_DB_VERSION = 9;
+export const CURRENT_DB_VERSION = 10;
 
 const safeGetItem = (key: string): string | null => {
   try {
@@ -117,6 +121,9 @@ export const state: AppState = {
     timeFreeze: 0,
     skipQuestion: 0,
     fiftyFifty: 0,
+    weeklyXp: 0,
+    league: "Bronze",
+    lastWeekId: "",
   },
   learned: new Set(),
   mistakes: new Set(),
@@ -349,6 +356,18 @@ try {
         }
       }
 
+      if (storedVersion < 10) {
+        const key = "user_stats_v5";
+        const raw = safeGetItem(key);
+        if (raw) {
+          const stats = JSON.parse(raw);
+          if (stats.weeklyXp === undefined) stats.weeklyXp = 0;
+          if (stats.league === undefined) stats.league = "Bronze";
+          if (stats.lastWeekId === undefined) stats.lastWeekId = "";
+          localStorage.setItem(key, JSON.stringify(stats));
+        }
+      }
+
       localStorage.setItem(LS_KEYS.DB_VERSION, String(CURRENT_DB_VERSION));
     } catch (e) {
       console.error("Migration failed:", e);
@@ -456,6 +475,9 @@ try {
   if (state.userStats.skipQuestion === undefined)
     state.userStats.skipQuestion = 0;
   if (state.userStats.fiftyFifty === undefined) state.userStats.fiftyFifty = 0;
+  if (state.userStats.weeklyXp === undefined) state.userStats.weeklyXp = 0;
+  if (state.userStats.league === undefined) state.userStats.league = "Bronze";
+  if (state.userStats.lastWeekId === undefined) state.userStats.lastWeekId = "";
 } catch (e) {
   console.error("State init error:", e);
 }

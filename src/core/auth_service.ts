@@ -1,5 +1,5 @@
 import { client } from "./supabaseClient.ts";
-import { DB_TABLES } from "./constants.ts";
+import { DB_TABLES, DB_BUCKETS } from "./constants.ts";
 import type {
   Session,
   User,
@@ -28,8 +28,49 @@ export const AuthService = {
     });
   },
 
+  async uploadAvatar(userId: string, file: File) {
+    const fileExt = file.name.split(".").pop();
+    const fileName = `avatars/${userId}_${Date.now()}.${fileExt}`;
+
+    const { error: uploadError } = await client.storage
+      .from(DB_BUCKETS.IMAGES)
+      .upload(fileName, file, { upsert: true });
+
+    if (uploadError) throw uploadError;
+
+    const { data } = client.storage
+      .from(DB_BUCKETS.IMAGES)
+      .getPublicUrl(fileName);
+    return await client.auth.updateUser({
+      data: { avatar_url: data.publicUrl },
+    });
+  },
+
+  async deleteAvatar(userId: string) {
+    // Пытаемся найти и удалить старые файлы аватара, чтобы не засорять хранилище
+    try {
+      const { data: list } = await client.storage
+        .from(DB_BUCKETS.IMAGES)
+        .list("avatars", {
+          search: userId,
+        });
+      if (list && list.length > 0) {
+        const filesToRemove = list.map((f) => `avatars/${f.name}`);
+        await client.storage.from(DB_BUCKETS.IMAGES).remove(filesToRemove);
+      }
+    } catch (e) {
+      console.warn("Avatar cleanup warning:", e);
+    }
+
+    return await client.auth.updateUser({ data: { avatar_url: null } });
+  },
+
   async updatePassword(password: string) {
     return await client.auth.updateUser({ password });
+  },
+
+  async updateEmail(email: string) {
+    return await client.auth.updateUser({ email });
   },
 
   async resetPasswordForEmail(email: string, redirectTo: string) {

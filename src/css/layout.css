@@ -68,6 +68,34 @@ body.dark-mode #main-header {
     letter-spacing: 1px;
 }
 
+.db-status {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background-color: var(--text-tertiary);
+    margin-left: 12px;
+    transition: all 0.3s ease;
+    cursor: help;
+    opacity: 0.7;
+}
+
+.db-status.active {
+    background-color: var(--success);
+    box-shadow: 0 0 5px var(--success);
+    opacity: 1;
+}
+
+.db-status.waking {
+    background-color: var(--warning);
+    animation: pulse-status 1.5s infinite;
+    opacity: 1;
+}
+
+.db-status.error {
+    background-color: var(--danger);
+    opacity: 1;
+}
+
 .header-right {
     display: flex;
     align-items: center;
