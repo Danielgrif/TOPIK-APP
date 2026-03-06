@@ -1,209 +1,47 @@
-# Context: TOPIK APP (Full Architecture)
+# Интеграция с Google Gemini API
 
-## 1. Project Overview
-**TOPIK II Master Pro** — PWA-приложение для подготовки к экзамену TOPIK II (уровни 3-6).
-Архитектура: Vanilla JS SPA (Single Page Application) без фреймворков с улучшенной модульной структурой (`src/core/`, `src/ui/`).
-Данные: Supabase (PostgreSQL, Auth, Storage, Edge Functions).
-Автоматизация: Python (`content_worker.py`) с `asyncio` для массовой генерации контента.
-**Особенности:** PWA (Progressive Web App), Dark Mode, 3D-карточки, SRS (SuperMemo-2), Skeleton Loading, Virtual Scrolling, Offline Support.
+Этот документ описывает, как Google Gemini используется в проекте TOPIK APP для автоматической генерации контента.
 
-## 2. Critical Development Rules (User Constraints)
-* **NO CODE TRUNCATION**: Строгий запрет на сокращение кода ("// ..."). Всегда возвращай полный текст файла.
-* **PRESERVE STYLISTICS**: Не удаляй существующие CSS-классы и не меняй структуру DOM без необходимости. Сохраняй иконки и эмодзи.
-* **ERROR HANDLING**: Используй `try/catch` для всех асинхронных операций. Логируй ошибки через `console.error` и показывай `showToast`.
-* **STATE MANAGEMENT**: Все изменения данных должны проходить через `state.ts`. Не храни состояние в глобальных переменных `window` (кроме экспорта функций для HTML).
-* **DOM MANIPULATION**: Весь код, работающий с UI, должен находиться в `ui/` или специализированных модулях.
-* **MODULARITY**: Соблюдай разделение ответственности. `app.ts` — точка входа, `db.ts` — данные, `ui.ts` — рендеринг.
-* **THEMING**: Используй CSS-переменные (`var(--surface-1)`, `var(--text-main)`) для поддержки светлой и темной тем.
+## Ключевой файл
 
-## 3. Module Responsibilities & API
+Основная логика взаимодействия с Gemini API находится в `scripts/ai_generator.py`.
 
-### Core Data & Logic
-- **`src/core/state.ts`**:
-  - Центральное хранилище данных (Singleton `state`).
-  - Хранит: `dataStore` (словарь), `userStats`, `learned`, `mistakes`, `favorites`, `wordHistory`.
-  - Настройки: `currentTopic` (array), `audioSpeed`, `darkMode`, `hanjaMode`.
-  - Инициализирует состояние из `localStorage`.
+## 1. Промпт-инжиниринг
 
-- **`src/core/supabaseClient.ts`**:
-  - Инициализация клиента `createClient`.
-  - Использует ключи: `SUPABASE_URL`, `SUPABASE_KEY` (Anon).
+Сердцем интеграции является функция `_build_prompt`, которая конструирует детализированный промпт для модели.
 
-- **`src/core/db.ts`**:
-  - Взаимодействие с БД и LocalStorage.
-  - Функции: `fetchVocabulary()`, `loadFromSupabase()`, `syncWithSupabase()`, `immediateSaveState()`, `recordAttempt()`.
-  - Управляет синхронизацией прогресса, избранного и "грязными" записями (`dirtyWordIds`).
-  - **Schema Validation**: Проверяет целостность данных при загрузке.
+### Структура Промпта:
 
-- **`src/core/backup.ts`**:
-  - Создание и восстановление локальных резервных копий (`localStorage`) перед миграциями данных.
+1.  **Ролевая модель:** Промпт начинается с инструкции `You are an expert Korean language teacher for Russian speakers`, что настраивает модель на нужный контекст и стиль ответа.
+2.  **Строгий формат JSON:** Модели дается четкое указание вернуть ответ **только** в формате JSON без Markdown-оберток (````json`). Это критически важно для автоматического парсинга.
+3.  **Детализированная структура JSON:** Промпт содержит исчерпывающее описание каждого поля в требуемой JSON-структуре, включая типы данных и возможные значения (например, `frequency`, `tone`).
+4.  **Обработка омонимов:** Промпт инструктирует модель вернуть JSON-массив, если у слова есть несколько значений, и один объект, если значение одно.
+5.  **Валидация данных:** В промпт встроены списки допустимых тем (`valid_topics`) и категорий (`valid_categories`), что заставляет модель придерживаться заранее определенной таксономии.
+6.  **Коррекция ввода:** Модель обучена исправлять опечатки и транслитерацию (например, 'gks' -> '한', 'annyeong' -> '안녕').
+7.  **Анализ Hanja:** Промпт требует всегда объяснять происхождение слова от иероглифов Hanja, если это применимо.
 
-- **`src/workers/searchWorker.ts`**:
-  - Web Worker для фонового поиска по словарю.
-  - Разгружает UI-поток при вводе текста.
+## 2. Взаимодействие с API
 
-- **`src/core/scheduler.ts`**:
-  - Алгоритм интервальных повторений (SuperMemo-2 / Anki-like).
-  - Методы: `calculate(grade, item)`, `getQueue()`, `submitReview()`.
+Функция `generate_word_data` отвечает за отправку запроса и обработку ответа.
 
-- **`src/core/stats.ts`**:
-  - Логика статистики и достижений.
-  - Функции: `addXP()`, `checkAchievements()`, `renderActivityChart()`, `renderLearnedChart()`, `renderDetailedStats()`.
+### Ключевые особенности:
 
-- **`src/core/collections_data.ts`**:
-  - Изолированное состояние списков слов (`userLists`, `listItems`) для предотвращения циклических зависимостей.
+*   **Асинхронность:** Используется асинхронный клиент (`self.client.aio.models.generate_content`) для неблокирующей работы в `content_worker.py`.
+*   **Стратегия отказоустойчивости (Fallback):**
+    - В коде определен список `models_to_try`, содержащий несколько моделей Gemini (от `gemini-1.5-flash` до `gemini-pro-latest`).
+    - В случае сбоя запроса к одной модели (например, из-за перегрузки или ошибки), скрипт автоматически пытается выполнить запрос к следующей модели в списке.
+    - Это значительно повышает надежность системы.
+*   **Обработка ошибок квот:** Код специально отлавливает ошибки с кодом `429 (Quota Exceeded)` и переходит к следующей модели, логируя предупреждение.
+*   **Очистка ответа:** Перед парсингом JSON ответ модели очищается от возможных Markdown-блоков, что делает парсинг более надежным.
 
-### UI & Presentation
-- **`src/app.ts`**:
-  - Точка входа (`init`).
-  - **Global Event Delegation**: Обработка `data-action` и `data-modal-target` для всего приложения.
-  - Настройка глобальных слушателей (Auth, Search).
-  - Регистрация Service Worker (PWA).
+## 3. Другие сценарии использования
 
-- **`src/ui/component_loader.ts`**:
-  - Динамическая инъекция HTML-компонентов (модальные окна, хедеры) в DOM при старте приложения.
+Помимо основного анализа слов, Gemini используется в `ai_handler.py` для вспомогательных задач:
 
-- **`src/ui/ui.ts`**:
-  - Управление глобальными элементами UI: фильтры, таймер сессии, жесты, навигация.
-  - Функции-координаторы: `saveAndRender()`, `populateFilters()`.
+*   `generate_examples`: Генерирует 3 дополнительных примера использования слова.
+*   `generate_grammar_explanation`: Создает подробное объяснение грамматической конструкции в формате Markdown.
+*   `generate_synonyms`: Находит и дополняет синонимы для слова.
 
-- **`src/ui/ui_card.ts`**:
-  - Рендеринг списка слов (Grid/List view).
-  - **Virtual Scrolling**: Оптимизированный рендеринг длинных списков.
-  - **Image Management**: Загрузка пользовательских фото, удаление, регенерация через AI (Edge Function).
-  - Логика Skeleton-заглушек и 3D-карточек.
+## Заключение
 
-- **`src/ui/ui_collections.ts`**:
-  - Управление пользовательскими списками (CRUD), фильтрация по спискам.
-
-- **`src/ui/ui_custom_words.ts`**:
-  - Логика предложения новых слов пользователями (валидация, отправка в `word_requests`, отслеживание статуса).
-
-- **`src/ui/ui_bulk.ts`**:
-  - Массовые операции: выделение, удаление, перемещение, добавление в списки.
-
-- **`src/ui/ui_modal.ts`**: Управление всеми модальными окнами.
-- **`src/ui/ui_settings.ts`**: Логика для окна настроек (тема, голос, скорость).
-
-- **`src/ui/quiz.ts`**:
-  - Логика режимов тренировки (Sprint, Survival, Flashcard, etc.).
-  - Управление состоянием квиза (`currentQuizMode`, `quizWords`).
-  - Рендеринг вопросов квиза и обработка ответов (включая Levenshtein check).
-
-- **`src/core/auth.ts`**:
-  - Логика аутентификации (Login, Signup, Reset Password).
-  - Управление модальными окнами входа и профиля.
-
-- **`src/utils/utils.ts`**:
-  - Утилиты: `debounce`, `showToast`, `speak` (TTS), `playTone` (Web Audio API), `levenshtein`, `generateDiffHtml`.
-
-### PWA
-- **`manifest.json`**: Метаданные приложения для установки.
-- **`src/sw.ts`**: Service Worker для кэширования ресурсов.
-  - Стратегия Stale-While-Revalidate для статики (мгновенная загрузка).
-  - Стратегия Cache First для аудиофайлов и изображений.
-  - **Background Sync**: Очередь `supabase-queue` для синхронизации данных при появлении сети.
-  - **Download Queue**: Отложенная загрузка тяжелых файлов при плохом соединении.
-
-### Backend & Automation
-- **`supabase/functions/regenerate-image`**:
-  - Deno Edge Function.
-  - Проксирует запросы к Pixabay API для поиска картинок.
-  - Загружает изображения в Supabase Storage и обновляет БД.
-- **`content_worker.py`**:
-  - Python-скрипт для наполнения контента (Asyncio).
-  - Генерирует аудио (Edge TTS) и загружает картинки (Pixabay) в Supabase Storage.
-  - Обновляет таблицу `vocabulary`.
-- **`db_manager.py`**:
-  - Единый инструмент для бэкапов (`backup`), восстановления (`restore`) и проверки здоровья БД (`validate`).
-  - Заменяет разрозненные скрипты обслуживания (`backup_tables.py`, `validate_schema.py` и др.).
-
-## 4. Data Flow (Типичный сценарий)
-1. **Start**: `app.ts` -> `db.ts` (fetchVocabulary) -> `state.ts` (загрузка LocalStorage) -> `ui.ts` (render).
-2. **Auth**: `auth.ts` -> `supabaseClient` -> `db.ts` (loadFromSupabase) -> `state.ts` (merge data) -> `ui.ts` (saveAndRender).
-3. **Quiz**: `ui.ts` (openModal) -> `quiz.ts` (buildQuizModes) -> `state.ts` (фильтрация слов) -> `quiz.ts` (startQuizMode).
-4. **Answer**: `quiz.ts` (checkAnswer) -> `db.ts` (recordAttempt) -> `scheduler.ts` (если режим повторения) -> `state.ts` (обновление статистики) -> `db.ts` (scheduleSaveState).
-5. **Image Regen**: `ui_card.ts` -> `supabaseClient.functions.invoke` -> `regenerate-image` (Edge) -> `Pixabay` -> `Storage` -> `DB`.
-
-## 5. Database Schema (Supabase)
-- **`vocabulary`**:
-  - `id`, `word_kr`, `translation`, `word_hanja`, `topic`, `category`, `level`, `type`.
-  - `audio_url`, `audio_male`, `image`, `image_source`, `example_kr`, `example_ru`, `example_audio`.
-  - `synonyms`, `antonyms`, `collocations`, `my_notes`, `grammar_info`.
-- **`user_global_stats`**:
-  - `user_id`, `xp`, `level`, `sprint_record`, `survival_record`, `streak_count`, `achievements`.
-- **`user_progress`**:
-  - `user_id`, `word_id`, `is_learned`, `is_mistake`, `is_favorite`.
-  - `attempts`, `correct`, `last_review`.
-  - `sm2_interval`, `sm2_repetitions`, `sm2_ef`, `sm2_next_review`.
-- **`user_lists`**:
-  - `id`, `title`, `is_public`, `user_id`, `icon`.
-- **`list_items`**:
-  - `list_id`, `word_id`.
-- **`word_requests`**:
-  - `id`, `user_id`, `word_kr`, `status` (pending/processed/error), `target_list_id`, `topic`, `category`.
-- **`quotes`**:
-  - `id`, `quote_kr`, `quote_ru`, `literal_translation`, `explanation`, `audio_url`.
-
-## 6. TOPIK II Suitability
-- **Hanja Mode**: Критически важен для уровней 5-6 (понимание корней).
-- **Writing Modes**: `typing` и `sentence` помогают с орфографией для заданий 51-52.
-- **SRS**: Необходим для удержания 5000+ слов продвинутого уровня.
-
-## 7. Strict Evaluation & Roadmap
-
-### 📊 Evaluation (Score: 9.8/10)
-**Strengths:**
-  - **Architecture**: Clean Vanilla JS with Event Delegation (`app.ts`). **Circular dependencies resolved.**
-  - **Performance**: Workers, PWA, Skeleton loading, Virtual Scrolling, Optimized DOM updates.
-  - **Automation**: Robust Python pipeline (`content_worker.py`) and Edge Functions.
-  - **Reliability:** Schema validation script (`validate_schema.py`) and **Automatic Local Backups** ensure data integrity.
-**Weaknesses:**
-  - **Testing**: Unit tests cover Scheduler and Worker. UI logic needs more coverage (Vitest setup exists).
-
-### 🛣️ Improvement Program
-
-#### Phase 1: Stability & Quality (Completed/In Progress)
-1.  **Schema Validation:** ✅ Implemented `validate_schema.py` to check DB columns and buckets.
-2.  **Event Delegation:** ✅ Refactored `app.ts`.
-3.  **Type Safety:** ✅ **(Done)** Project fully migrated to TypeScript (`.ts`).
-4.  **CSS Modularization:** ✅ Split `style.css` into modules. Fixed nesting syntax errors.
-5.  **Virtual Scrolling:** ✅ **(Done)** Implemented for Grid and List views in `ui_card.ts`.
-
-#### Phase 2: UX & Content (Completed)
-1. **Leaderboard:** Global XP leaderboard with Realtime updates. (Done)
-2. **Dialogue Mode:** UI for dialogues. (Done)
-3. **Word of the Day:** Widget implemented. (Done)
-4. **Grammar Section:** Dedicated view and filters. (Done)
-5. **Search History:** Recent queries saved. (Done)
-6. **Cloud Sync:** Settings and sessions sync. (Done)
-7. **PWA Install Banner:** Custom UI. (Done)
-
-#### Phase 2.5: Advanced Features (Completed)
-1. **Hanja Explorer:** Interactive Hanja characters to find related words. (Done)
-2. **Zen Mode:** Distraction-free interface. (Done)
-3. **List View:** Alternative vocabulary display. (Done)
-4. **Grammar Detail View:** Modal for comprehensive grammar rules. (Done)
-5. **Backup & Restore:** JSON export/import. (Done)
-6. **Study Goals:** Daily targets. (Done)
-
-#### Phase 3: Gamification & Engagement (Completed)
-1. **Economy:** Coins system, Shop, Streak Freeze, Daily Rewards. (Done)
-2. **Visuals:** Level Up Animation, Theme Customizer (Accent Colors). (Done)
-3. **Social:** Share Statistics as image. (Done)
-4. **New Quiz Modes:** Word Association, Pronunciation Check, Confusing Words. (Done)
-
-#### Phase 4: Content & Community (Completed)
-1. **User Custom Words:** ✅ **(Done)** Logic for adding/deleting custom words implemented.
-2. **Image Management:** ✅ **(Done)** Upload custom images, regenerate via AI (Edge Function), delete images.
-3. **Mistake Analysis:** ✅ **(Done)** Implemented breakdown by Topic/Part of Speech.
-4. **Advanced Filters:** ✅ **(Done)** Redesigned filter panel with virtual scrolling, search, and multi-select for topics/categories.
-5. **UI Polish:** ✅ **(Done)** Unified Card/List views, interactive Hanja grid, accordion details in list view.
-
-#### Phase 5: Technical Debt & Performance (Long-term)
-1.  **Full TypeScript Migration:** ✅ **(Done)**.
-2.  **Edge Functions**: ✅ **(Done)** Implemented for image regeneration.
-3.  **Offline Sync**: ✅ **(Done)** Background Sync implemented in Service Worker.
-4.  **Virtualization**: ✅ **(Done)** Implemented for Grid, List, and Filter dropdowns.
-5.  **Circular Dependencies**: ✅ **(Done)** Resolved via `collections_data.ts` and event-based communication.
-6.  **Data Safety**: ✅ **(Done)** Implemented auto-backups before migrations in `state.ts`.
+Интеграция с Gemini API в этом проекте является примером качественного инжиниринга. Она не просто выполняет запрос, а делает это надежно, эффективно и с расчетом на автоматическую обработку данных благодаря продуманной структуре промптов.

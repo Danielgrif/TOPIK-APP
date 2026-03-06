@@ -3,7 +3,7 @@ import logging
 import asyncio
 import aiohttp
 from app_utils import delete_old_file, execute_supabase_query # type: ignore
-from constants import DB_TABLES, DB_BUCKETS, WORD_REQUEST_STATUS
+from constants import DB_TABLES, DB_BUCKETS, WORD_REQUEST_STATUS, GEMINI_MODELS
 from ai_generator import AIContentGenerator
 
 class AIHandler:
@@ -14,17 +14,7 @@ class AIHandler:
         self.sb_url = sb_url
         self.sb_key = sb_key
         self.has_grammar_info = True
-        self.models_to_try = [
-            'gemini-2.5-flash', 
-            'gemini-2.5-pro', 
-            'gemini-3-flash-preview', 
-            'gemini-3-pro-preview',
-            'gemini-3.1-pro-preview',
-            'gemini-2.0-flash',
-            'gemini-2.0-flash-lite',
-            'gemini-flash-latest',
-            'gemini-pro-latest'
-        ]
+        self.models_to_try = GEMINI_MODELS
 
     def set_grammar_info_status(self, status: bool):
         self.has_grammar_info = status

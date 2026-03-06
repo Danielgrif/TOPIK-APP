@@ -11,7 +11,6 @@ import {
   checkAchievements,
   invalidateTopicMasteryCache,
 } from "../core/stats.ts";
-import { render } from "./ui_card.ts";
 import { openConfirm } from "./ui_modal.ts";
 import { saveAndRender } from "./ui.ts";
 
@@ -71,7 +70,7 @@ export async function resetAllProgress() {
     invalidateTopicMasteryCache();
     updateStats();
     updateXPUI();
-    render();
+    document.dispatchEvent(new CustomEvent("state-changed"));
     updateSRSBadge();
     showToast("✅ Прогресс полностью сброшен");
   } catch (e: unknown) {

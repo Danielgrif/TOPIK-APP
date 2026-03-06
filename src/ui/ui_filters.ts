@@ -1,6 +1,5 @@
 import { state } from "../core/state.ts";
 import { showToast, getIconForValue, escapeHtml } from "../utils/utils.ts";
-import { render } from "./ui_card.ts";
 import { Word } from "../types/index.ts";
 
 const VIRTUAL_ITEM_HEIGHT = 36;
@@ -97,7 +96,7 @@ function handleTopicSelection(value: string) {
   }
 
   populateFilters();
-  render();
+  document.dispatchEvent(new CustomEvent("state-changed"));
 }
 
 function createMultiselectItem(value: string, label: string): HTMLElement {
@@ -163,7 +162,7 @@ export function populateFilters() {
       state.currentTopic = getTopicsForCurrentType();
       if (state.currentTopic.length === 0) state.currentTopic = ["all"];
       populateFilters();
-      render();
+      document.dispatchEvent(new CustomEvent("state-changed"));
     };
 
     const deselectAllBtn = document.createElement("button");
@@ -173,7 +172,7 @@ export function populateFilters() {
       e.stopPropagation();
       state.currentTopic = ["all"];
       populateFilters();
-      render();
+      document.dispatchEvent(new CustomEvent("state-changed"));
     };
 
     actionsDiv.appendChild(selectAllBtn);
@@ -305,7 +304,7 @@ function populateCategoryFilter() {
       state.currentCategory = getCategories();
       if (state.currentCategory.length === 0) state.currentCategory = ["all"];
       populateCategoryFilter();
-      render();
+      document.dispatchEvent(new CustomEvent("state-changed"));
     };
 
     const deselectAllBtn = document.createElement("button");
@@ -315,7 +314,7 @@ function populateCategoryFilter() {
       e.stopPropagation();
       state.currentCategory = ["all"];
       populateCategoryFilter();
-      render();
+      document.dispatchEvent(new CustomEvent("state-changed"));
     };
 
     actionsDiv.appendChild(selectAllBtn);
@@ -402,7 +401,7 @@ export function handleCategoryChange(val: string) {
     state.currentCategory.push(val);
   }
   populateCategoryFilter();
-  render();
+  document.dispatchEvent(new CustomEvent("state-changed"));
 }
 
 function createCategoryItem(value: string, label: string): HTMLElement {
@@ -428,7 +427,7 @@ export function setTypeFilter(type: string, btn: HTMLElement) {
   if (btn) btn.classList.add("active");
   populateFilters();
   updateFilterCounts();
-  render();
+  document.dispatchEvent(new CustomEvent("state-changed"));
 }
 
 export function setStarFilter(star: string, btn: HTMLElement) {
@@ -438,7 +437,7 @@ export function setStarFilter(star: string, btn: HTMLElement) {
     .querySelectorAll(".filter-chip")
     .forEach((b) => b.classList.remove("active"));
   btn.classList.add("active");
-  render();
+  document.dispatchEvent(new CustomEvent("state-changed"));
 }
 
 export function resetFilters() {
@@ -459,7 +458,7 @@ export function resetFilters() {
 
   populateFilters(); // Пересоздает списки тем и категорий
   updateFilterCounts(); // Обновляет счетчики
-  render(); // Перерисовывает сетку
+  document.dispatchEvent(new CustomEvent("state-changed"));
   showToast("Фильтры сброшены");
 }
 

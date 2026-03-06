@@ -1,28 +1,13 @@
 /* eslint-disable no-console */
 import { state } from "../core/state.ts";
+import { scheduleSaveState } from "../core/db.ts";
 import {
-  speak,
-  showToast,
-  showUndoToast,
-  playTone,
-  getIconForValue,
-  escapeHtml,
-  escapeRegExp,
-  promiseWithTimeout,
-} from "../utils/utils.ts";
-import { scheduleSaveState, recordAttempt } from "../core/db.ts";
-import {
-  addXP,
-  checkAchievements,
   updateSRSBadge,
   updateStats,
 } from "../core/stats.ts";
-import { ensureSessionStarted } from "../core/session.ts";
-import { client } from "../core/supabaseClient.ts";
 import { Word } from "../types/index.ts";
 import { collectionsState } from "../core/collections_data.ts";
-import { DB_BUCKETS } from "../core/constants.ts";
-import { openModal, openConfirm, closeModal } from "./ui_modal.ts";
+import { createCardElement, createListItem } from "../core/renderer.ts";
 
 // --- Virtual Scroll Constants (for List View) ---
 const ITEM_HEIGHT_LIST = 82;
@@ -198,6 +183,9 @@ function updateFilteredData() {
 
     return true;
   });
+
+  // Обновляем глобальный стейт для доступа из renderer.ts (prefetching)
+  state.filteredData = currentFilteredData;
 }
 
 export function getFilteredData(): Word[] {

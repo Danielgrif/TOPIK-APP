@@ -636,12 +636,13 @@ export function renderTopicMastery() {
   cachedCurrentType = currentType;
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 const chartInstances: Record<string, any> = {};
 
 interface ChartTooltipContext {
-  raw: any;
-  label: any;
-  dataset: { label: any; data?: any[] };
+  raw: number;
+  label: string;
+  dataset: { label: string; data: number[] };
 }
 
 // Helper for chart styling
@@ -882,7 +883,12 @@ export function renderActivityChart() {
       animation: {
         duration: 2000,
         easing: "easeOutQuart",
-        delay: (context: any) => {
+        delay: (context: {
+          type: string;
+          mode: string;
+          dataIndex: number;
+          datasetIndex: number;
+        }) => {
           let delay = 0;
           if (context.type === "data" && context.mode === "default") {
             delay = context.dataIndex * 100 + context.datasetIndex * 100;
@@ -953,7 +959,7 @@ export function renderLearnedChart() {
       animation: {
         duration: 1500,
         easing: "easeOutBounce",
-        delay: (context: any) => {
+        delay: (context: { type: string; mode: string; dataIndex: number }) => {
           let delay = 0;
           if (context.type === "data" && context.mode === "default") {
             delay = context.dataIndex * 150;
@@ -1055,7 +1061,7 @@ export function renderAccuracyChart() {
         duration: 2000,
         easing: "easeOutCubic",
         y: {
-          from: (ctx: any) => (ctx.type === "data" ? 0 : null),
+          from: (ctx: { type: string }) => (ctx.type === "data" ? 0 : null),
         },
       },
       plugins: {
@@ -1290,7 +1296,11 @@ export function renderSRSDistributionChart() {
     plugins: [
       {
         id: "centerText",
-        afterDraw: (chart: { ctx?: any; width?: any; height?: any }) => {
+        afterDraw: (chart: {
+          ctx: CanvasRenderingContext2D;
+          width: number;
+          height: number;
+        }) => {
           const ctx = chart.ctx;
           const { width, height } = chart;
 

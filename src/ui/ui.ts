@@ -22,6 +22,9 @@ export function saveAndRender() {
   // setupScrollObserver is called inside render in ui_card.js
 }
 
+// Слушатель для разрыва циклических зависимостей (вызывается из renderer.ts)
+document.addEventListener("state-changed", () => saveAndRender());
+
 /**
  * Plays audio for a word and handles TTS fallback.
  */

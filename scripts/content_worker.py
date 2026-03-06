@@ -12,7 +12,6 @@ import threading
 import asyncio
 import argparse
 from http.server import BaseHTTPRequestHandler, HTTPServer
-from urllib.parse import urlparse, parse_qs, quote, unquote
 from io import BytesIO
 import json
 import warnings
@@ -28,7 +27,7 @@ except AttributeError: pass
 try:
     import requests
     import aiohttp
-    from supabase import create_client, create_async_client
+    from supabase import create_client
     import edge_tts # type: ignore
     from PIL import Image
     from google import genai
@@ -56,6 +55,8 @@ try:
     from constants import DB_TABLES, DB_BUCKETS, WORD_REQUEST_STATUS
     from tts_handler import TTSHandler
     from ai_handler import AIHandler
+    from realtime_handler import realtime_loop
+    from maintenance import cleanup_temp_files, reset_failed_requests
 except ImportError as e:
     print(f"❌ Ошибка импорта локальных модулей: {e}")
     sys.exit(1)
@@ -81,7 +82,6 @@ parser.add_argument("--word", type=str, help="Обработать только 
 parser.add_argument("--force-images", action="store_true", help="Принудительно обновить изображения (перезаписать старые)")
 parser.add_argument("--force-audio", action="store_true", help="Принудительно обновить аудио (перезаписать старые)")
 parser.add_argument("--force-quotes", action="store_true", help="Принудительно обновить аудио только для цитат")
-parser.add_argument("--check", action="store_true", help="Запустить проверку целостности файлов и ссылок (удаление битых)")
 parser.add_argument("--retry-errors", action="store_true", help="Сбросить статус ошибочных заявок на 'pending' для повторной обработки")
 parser.add_argument("--exit-after-maintenance", action="store_true", help="Завершить работу после выполнения задач обслуживания")
 parser.add_argument("--concurrency", type=int, default=0, help="Количество одновременных потоков (0 = авто-подбор, по умолчанию 0)")
@@ -155,103 +155,6 @@ def cleanup_temp_files():
                     logging.warning(f"⚠️ Не удалось удалить {f}: {e}")
     except Exception as e:
         logging.warning(f"⚠️ Ошибка очистки временных файлов: {e}")
-
-def check_integrity(bucket_name):
-    """Проверка целостности файлов и ссылок в БД."""
-    logging.info(f"🧹 Запуск проверки целостности для бакета '{bucket_name}'...")
-    
-    # 1. Получаем список файлов в бакете
-    storage_files = {}
-    try:
-        offset = 0
-        while True:
-            res = supabase.storage.from_(bucket_name).list(path=None, options={"limit": 100, "offset": offset})
-            if not res: break
-            for f in res:
-                name = f.get('name') if isinstance(f, dict) else getattr(f, 'name', None)
-                size = f.get('metadata', {}).get('size', 0) if isinstance(f, dict) else getattr(f, 'metadata', {}).get('size', 0)
-                if name: storage_files[name] = size
-            offset += 100
-            if len(res) < 100: break
-        logging.info(f"📂 Файлов в хранилище: {len(storage_files)}")
-    except Exception as e:
-        logging.error(f"❌ Ошибка получения списка файлов: {e}")
-        return
-
-    # 2. Проверяем ссылки во всех таблицах
-    referenced_files = set()
-    fixed_count = 0
-
-    # Определяем таблицы и колонки для проверки
-    tables_to_check = []
-    if bucket_name == DB_BUCKETS['AUDIO']:
-        tables_to_check = [
-            (DB_TABLES['VOCABULARY'], ['audio_url', 'audio_male', 'example_audio']),
-            (DB_TABLES['QUOTES'], ['audio_url'])
-        ]
-    elif bucket_name == DB_BUCKETS['IMAGES']:
-        tables_to_check = [
-            (DB_TABLES['VOCABULARY'], ['image']),
-        ]
-
-    for table_name, target_cols in tables_to_check:
-        try:
-            rows = []
-            offset = 0
-            while True:
-                # Выбираем только нужные колонки + id
-                cols_query = "id," + ",".join(target_cols)
-                res = supabase.table(table_name).select(cols_query).range(offset, offset + 999).execute()
-                if not res.data: break
-                rows.extend(res.data)
-                offset += 1000
-            
-            for row in rows:
-                row_id = row.get('id')
-                updates = {}
-                for col in target_cols:
-                    url = row.get(col)
-                    if not url or not isinstance(url, str): continue
-                    
-                    filename = unquote(url.split('/')[-1].split('?')[0])
-                    min_size = 100 if bucket_name == DB_BUCKETS['AUDIO'] else 0
-                    
-                    if filename not in storage_files or storage_files[filename] <= min_size:
-                        logging.warning(f"⚠️ Битая ссылка или пустой файл в '{table_name}': id={row_id} col={col} file={filename}")
-                        updates[col] = None
-                        if col == 'image':
-                            updates['image_source'] = None
-                    else:
-                        referenced_files.add(filename)
-                
-                if updates:
-                    supabase.table(table_name).update(updates).eq('id', row_id).execute()
-                    fixed_count += 1
-
-        except Exception as e:
-            logging.error(f"❌ Ошибка проверки таблицы '{table_name}': {e}")
-
-    logging.info(f"✅ Исправлено записей в БД: {fixed_count}")
-
-    # 3. Удаляем сирот (файлы без ссылок)
-    orphans = [f for f in storage_files if f not in referenced_files]
-    if orphans:
-        logging.info(f"🗑 Найдено {len(orphans)} потерянных файлов. Удаление...")
-        # Удаляем пачками по 10
-        for i in range(0, len(orphans), 10):
-            batch = orphans[i:i+10]
-            try:
-                supabase.storage.from_(bucket_name).remove(batch)
-                logging.info(f"   Удалено: {batch}")
-            except Exception as e:
-                logging.error(f"   Ошибка удаления: {e}")
-    else:
-        logging.info("✨ Лишних файлов не найдено.")
-
-if args.check:
-    check_integrity(DB_BUCKETS['AUDIO'])
-    check_integrity(DB_BUCKETS['IMAGES'])
-    logging.info("🏁 Проверка завершена. Переход к восстановлению контента...")
 
 # Инициализация обработчиков
 tts_handler = TTSHandler(supabase, tts_gen)
@@ -362,71 +265,6 @@ async def measure_network_quality():
         logging.warning(f"⚠️ Не удалось измерить скорость ({e}). Использую значение по умолчанию (5).")
         return 5
 
-async def check_internet_connection():
-    """Проверяет доступность интернета перед подключением к Realtime"""
-    try:
-        async with aiohttp.ClientSession() as session:
-            async with session.get("https://www.google.com", timeout=2) as resp:
-                return resp.status == 200
-    except:
-        return False
-
-async def realtime_loop(trigger_event: asyncio.Event):
-    """Асинхронный цикл для Realtime подписки (требует async client)"""
-
-    def on_insert_callback(payload):
-        logging.info("🔔 Realtime: Получена новая заявка!")
-        trigger_event.set()
-        
-    retry_delay = 5
-
-    while True:
-        try:
-            # Проверка сети перед попыткой подключения, чтобы не ловить getaddrinfo failed
-            if not await check_internet_connection():
-                logging.warning(f"🌐 Нет интернета. Ожидание {retry_delay} сек перед подключением к Realtime...")
-                await asyncio.sleep(retry_delay)
-                retry_delay = min(retry_delay * 1.5, 60)
-                continue
-
-            logging.info("🟢 Инициализация Async Realtime клиента...")
-            # Создаем отдельный асинхронный клиент только для Realtime
-            async_client = await create_async_client(SUPABASE_URL, SUPABASE_KEY)
-
-            channel = async_client.channel('worker-db-changes')
-            
-            channel.on_postgres_changes(
-                event="INSERT",
-                schema="public",
-                table="word_requests",
-                callback=on_insert_callback
-            )
-            
-            logging.info("🟢 Realtime Listener: Подписка...")
-            await channel.subscribe()
-            logging.info("🟢 Realtime Listener: Подписка активна.")
-            
-            # Сброс задержки при успешном подключении
-            retry_delay = 5
-            
-            # FIX: Вместо вечного ожидания используем цикл с таймаутом (Watchdog)
-            # Перезапускаем соединение каждый час, чтобы избежать "молчаливых" зависаний сокета
-            for _ in range(60): # 60 минут
-                await asyncio.sleep(60)
-            
-            logging.info("♻️ Плановый перезапуск Realtime соединения (TTL)...")
-            await channel.unsubscribe()
-                
-        except AttributeError as e:
-            if "has no attribute" in str(e):
-                logging.error(f"❌ Ошибка версии библиотеки Realtime ({e}). Попробуйте: pip install --upgrade supabase")
-                logging.warning("⚠️ Переход в режим Polling (опрос раз в 30 сек).")
-                return 
-        except Exception as e:
-            logging.warning(f"⚠️ Ошибка Realtime: {e}. Реконнект через {retry_delay} сек...")
-            await asyncio.sleep(retry_delay)
-            retry_delay = min(retry_delay * 1.5, 60)
-
 async def user_requests_loop(trigger_event):
     """Приоритетный цикл для обработки заявок пользователей"""
     logging.info("👀 Запущен мониторинг пользовательских заявок (Приоритетный поток)...")
@@ -483,7 +321,7 @@ async def background_tasks_loop(initial_concurrency):
         try:
             # Автоматический сброс ошибок каждые 10 минут (600 сек)
             if time.time() - last_reset_time > 600:
-                await reset_failed_requests()
+                await reset_failed_requests(supabase)
                 last_reset_time = time.time()
 
             cleanup_temp_files()
@@ -665,7 +503,7 @@ async def main_loop():
     validate_gemini_key()
     
     # Сброс ошибок при старте
-    await reset_failed_requests()
+    await reset_failed_requests(supabase)
     
     # Событие для пробуждения воркера
     request_trigger = asyncio.Event()
@@ -674,7 +512,7 @@ async def main_loop():
     await asyncio.gather(
         user_requests_loop(request_trigger),
         background_tasks_loop(concurrency),
-        realtime_loop(request_trigger)
+        realtime_loop(request_trigger, SUPABASE_URL, SUPABASE_KEY)
     )
 
 if __name__ == "__main__":

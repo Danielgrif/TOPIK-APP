@@ -4,8 +4,10 @@ import json
 import logging
 import argparse
 from datetime import datetime
+from urllib.parse import unquote
 from dotenv import load_dotenv
 from supabase import create_client
+from constants import DB_TABLES, DB_BUCKETS
 
 # Настройка логирования
 logging.basicConfig(
@@ -287,6 +289,104 @@ def validate_all():
     validate_user_global_stats_schema()
     logging.info("🏁 Валидация завершена.")
 
+# --- Integrity Check Functions ---
+
+def check_integrity(bucket_name):
+    """Проверка целостности файлов и ссылок в БД."""
+    logging.info(f"🧹 Запуск проверки целостности для бакета '{bucket_name}'...")
+    
+    # 1. Получаем список файлов в бакете
+    storage_files = {}
+    try:
+        offset = 0
+        while True:
+            res = supabase.storage.from_(bucket_name).list(path=None, options={"limit": 100, "offset": offset})
+            if not res: break
+            for f in res:
+                name = f.get('name') if isinstance(f, dict) else getattr(f, 'name', None)
+                size = f.get('metadata', {}).get('size', 0) if isinstance(f, dict) else getattr(f, 'metadata', {}).get('size', 0)
+                if name: storage_files[name] = size
+            offset += 100
+            if len(res) < 100: break
+        logging.info(f"📂 Файлов в хранилище: {len(storage_files)}")
+    except Exception as e:
+        logging.error(f"❌ Ошибка получения списка файлов: {e}")
+        return
+
+    # 2. Проверяем ссылки во всех таблицах
+    referenced_files = set()
+    fixed_count = 0
+
+    # Определяем таблицы и колонки для проверки
+    tables_to_check = []
+    if bucket_name == DB_BUCKETS['AUDIO']:
+        tables_to_check = [
+            (DB_TABLES['VOCABULARY'], ['audio_url', 'audio_male', 'example_audio']),
+            (DB_TABLES['QUOTES'], ['audio_url'])
+        ]
+    elif bucket_name == DB_BUCKETS['IMAGES']:
+        tables_to_check = [
+            (DB_TABLES['VOCABULARY'], ['image']),
+        ]
+
+    for table_name, target_cols in tables_to_check:
+        try:
+            rows = []
+            offset = 0
+            while True:
+                # Выбираем только нужные колонки + id
+                cols_query = "id," + ",".join(target_cols)
+                res = supabase.table(table_name).select(cols_query).range(offset, offset + 999).execute()
+                if not res.data: break
+                rows.extend(res.data)
+                offset += 1000
+            
+            for row in rows:
+                row_id = row.get('id')
+                updates = {}
+                for col in target_cols:
+                    url = row.get(col)
+                    if not url or not isinstance(url, str): continue
+                    
+                    filename = unquote(url.split('/')[-1].split('?')[0])
+                    min_size = 100 if bucket_name == DB_BUCKETS['AUDIO'] else 0
+                    
+                    if filename not in storage_files or storage_files[filename] <= min_size:
+                        logging.warning(f"⚠️ Битая ссылка или пустой файл в '{table_name}': id={row_id} col={col} file={filename}")
+                        updates[col] = None
+                        if col == 'image':
+                            updates['image_source'] = None
+                    else:
+                        referenced_files.add(filename)
+                
+                if updates:
+                    supabase.table(table_name).update(updates).eq('id', row_id).execute()
+                    fixed_count += 1
+
+        except Exception as e:
+            logging.error(f"❌ Ошибка проверки таблицы '{table_name}': {e}")
+
+    logging.info(f"✅ Исправлено записей в БД: {fixed_count}")
+
+    # 3. Удаляем сирот (файлы без ссылок)
+    orphans = [f for f in storage_files if f not in referenced_files]
+    if orphans:
+        logging.info(f"🗑 Найдено {len(orphans)} потерянных файлов. Удаление...")
+        # Удаляем пачками по 10
+        for i in range(0, len(orphans), 10):
+            batch = orphans[i:i+10]
+            try:
+                supabase.storage.from_(bucket_name).remove(batch)
+                logging.info(f"   Удалено: {batch}")
+            except Exception as e:
+                logging.error(f"   Ошибка удаления: {e}")
+    else:
+        logging.info("✨ Лишних файлов не найдено.")
+
+def run_integrity_check():
+    check_integrity(DB_BUCKETS['AUDIO'])
+    check_integrity(DB_BUCKETS['IMAGES'])
+
 # --- Main ---
 
 def main():
@@ -304,6 +404,9 @@ def main():
     # Validate
     subparsers.add_parser('validate', help='Validate database schema and buckets')
     
+    # Check Integrity
+    subparsers.add_parser('check', help='Check integrity of files and DB links')
+
     args = parser.parse_args()
     
     if args.command == 'backup':
@@ -312,6 +415,8 @@ def main():
         restore_backup(args.backup, args.force)
     elif args.command == 'validate':
         validate_all()
+    elif args.command == 'check':
+        run_integrity_check()
     else:
         parser.print_help()
 

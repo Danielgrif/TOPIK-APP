@@ -682,3 +682,51 @@ function handleDragEnd(e: Event) {
   });
   draggedItem = null;
 }
+
+export async function openAddToListModal(wordId: number) {
+  const modal = document.getElementById("add-to-list-modal");
+  const content = document.getElementById("add-to-list-content");
+  if (!modal || !content) return;
+
+  const {
+    data: { user },
+  } = await client.auth.getUser();
+  if (!user) {
+    showToast("Войдите в аккаунт");
+    return;
+  }
+
+  const myLists = collectionsState.userLists.filter(
+    (l) => l.user_id === user.id,
+  );
+
+  content.scrollTop = 0;
+  content.innerHTML = myLists
+    .map((list, index) => {
+      const hasWord = collectionsState.listItems[list.id]?.has(wordId);
+      return `
+        <div class="multiselect-item" data-action="toggle-word-in-list" data-list-id="${list.id}" data-word-id="${wordId}" style="animation: fadeInUpList 0.3s ease-out ${index * 0.05}s backwards">
+            <input type="checkbox" ${hasWord ? "checked" : ""} style="pointer-events: none;">
+            <span style="margin-left: 10px;">${escapeHtml(list.icon || "📁")} ${escapeHtml(list.title)}</span>
+        </div>
+        `;
+    })
+    .join("");
+
+  openModal("add-to-list-modal");
+}
+
+export async function toggleWordInList(listId: string, wId: number, el: HTMLElement) {
+  const checkbox = el.querySelector("input") as HTMLInputElement;
+  const isAdding = !checkbox.checked;
+  checkbox.checked = isAdding;
+
+  if (isAdding) {
+    await client.from(DB_TABLES.LIST_ITEMS).insert({ list_id: listId, word_id: wId });
+    if (!collectionsState.listItems[listId]) collectionsState.listItems[listId] = new Set();
+    collectionsState.listItems[listId].add(wId);
+  } else {
+    await client.from(DB_TABLES.LIST_ITEMS).delete().match({ list_id: listId, word_id: wId });
+    collectionsState.listItems[listId]?.delete(wId);
+  }
+}

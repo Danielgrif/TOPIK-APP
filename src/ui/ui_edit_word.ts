@@ -2,7 +2,6 @@ import { state } from "../core/state.ts";
 import { client } from "../core/supabaseClient.ts";
 import { openModal, closeModal, openConfirm } from "./ui_modal.ts";
 import { showToast } from "../utils/utils.ts";
-// import { render } from "./ui_card.ts"; // Убираем, чтобы разорвать цикл
 import { DB_TABLES } from "../core/constants.ts";
 import { Word } from "../types/index.ts";
 
@@ -225,7 +224,7 @@ export async function saveWordChanges() {
     const grid = document.getElementById("vocabulary-grid");
     const savedScroll = grid ? grid.scrollTop : 0;
 
-    if (onUpdateCallback) onUpdateCallback(); // Вызываем callback для перерисовки
+    document.dispatchEvent(new CustomEvent("state-changed"));
 
     if (grid) grid.scrollTop = savedScroll;
 
@@ -287,12 +286,12 @@ export async function deleteWord() {
       showToast(`❌ Ошибка: ${error.message}`);
       // Восстанавливаем слово в UI при ошибке
       state.dataStore.splice(wordIndex, 0, wordBackup);
-      if (onUpdateCallback) onUpdateCallback();
+      document.dispatchEvent(new CustomEvent("state-changed"));
     } else if (!data || data.length === 0) {
       showToast("⚠️ Не удалось удалить (нет прав)");
       // Восстанавливаем слово в UI при ошибке
       state.dataStore.splice(wordIndex, 0, wordBackup);
-      if (onUpdateCallback) onUpdateCallback();
+      document.dispatchEvent(new CustomEvent("state-changed"));
     } else {
       showToast("🗑️ Слово перемещено в корзину");
       // Обновляем поиск после удаления

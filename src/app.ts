@@ -45,7 +45,6 @@ import {
 } from "./ui/ui_filters.ts";
 import { checkAndShowOnboarding, startOnboarding } from "./ui/ui_onboarding.ts";
 import {
-  render,
   renderSkeletons,
   resetSearchHandler,
   setupGridEffects,
@@ -141,7 +140,7 @@ import {
 } from "./ui/ui_trash.ts";
 import { checkPronunciation } from "./core/speech.ts";
 import { SW_MESSAGES, DB_TABLES } from "./core/constants.ts";
-import { Quote, User } from "./types/index.ts";
+import { Quote, User, Word } from "./types/index.ts";
 import type { Session } from "@supabase/supabase-js";
 import { collectionsState } from "./core/collections_data.ts";
 import {
@@ -742,29 +741,23 @@ function setupGlobalListeners() {
           break;
         case "manage-my-words":
           // FIX: Подгружаем слова и для менеджера слов
-          client.auth
-            .getUser()
-            .then(
-              async ({ data: { user } }: { data: { user: User | null } }) => {
-                if (user) {
-                  const { data } = await client
-                    .from(DB_TABLES.VOCABULARY)
-                    .select("*")
-                    .eq("created_by", user.id)
-                    .eq("is_public", false);
+          client.auth.getUser().then(async ({ data: { user } }) => {
+            if (user) {
+              const { data } = await client
+                .from(DB_TABLES.VOCABULARY)
+                .select("*")
+                .eq("created_by", user.id)
+                .eq("is_public", false);
 
-                  if (data) {
-                    const currentIds = new Set(
-                      state.dataStore.map((w) => w.id),
-                    );
-                    const toAdd = data.filter((w) => !currentIds.has(w.id));
-                    if (toAdd.length > 0) {
-                      state.dataStore.push(...toAdd);
-                    }
-                  }
+              if (data) {
+                const currentIds = new Set(state.dataStore.map((w) => w.id));
+                const toAdd = data.filter((w) => !currentIds.has(w.id));
+                if (toAdd.length > 0) {
+                  state.dataStore.push(...toAdd);
                 }
-              },
-            );
+              }
+            }
+          });
           manageMyWords(e);
           break;
         case "clear-collection-filter":
@@ -1160,14 +1153,14 @@ function setupNetworkListeners() {
 }
 
 function setupRealtimeUpdates() {
-  const newWordsBuffer: any[] = [];
+  const newWordsBuffer: Word[] = [];
 
   const processBuffer = debounce(() => {
     if (newWordsBuffer.length === 0) return;
 
     // Фильтруем дубликаты внутри батча и относительно текущего стора
     const currentIds = new Set(state.dataStore.map((w) => w.id));
-    const uniqueWords: any[] = [];
+    const uniqueWords: Word[] = [];
     const seenInBatch = new Set();
 
     for (const w of newWordsBuffer) {
@@ -1198,7 +1191,7 @@ function setupRealtimeUpdates() {
     if (grid) grid.scrollTop = savedScroll;
   }, 1000);
 
-  const handleNewWord = (payload: { new: any }) => {
+  const handleNewWord = (payload: { new: Word }) => {
     const newWord = payload.new;
     if (newWord) {
       // FIX: Не добавляем приватные слова (слова пользователя) в общий поток на главном экране.
@@ -1243,7 +1236,7 @@ function setupRealtimeUpdates() {
       .on(
         "postgres_changes",
         { event: "INSERT", schema: "public", table: "list_items" },
-        async (payload: { new: any }) => {
+        async (payload: { new: { list_id: string; word_id: number } }) => {
           const newItem = payload.new;
           if (newItem && newItem.list_id && newItem.word_id) {
             // Проверяем, есть ли слово в локальном сторе.
@@ -1641,15 +1634,15 @@ async function init() {
     });
 
     // Слушаем сообщения от SW (например, о завершении докачки)
-    navigator.serviceWorker.addEventListener("message", (event) => {
-      if (
-        event.data &&
-        event.data.type === SW_MESSAGES.DOWNLOAD_QUEUE_COMPLETED
-      ) {
-        if (event.data.count > 0)
-          showToast(`✅ Докачано файлов: ${event.data.count}`);
-      }
-    });
+    navigator.serviceWorker.addEventListener(
+      "message",
+      (event: MessageEvent) => {
+        const data = event.data as { type: string; count: number };
+        if (data && data.type === SW_MESSAGES.DOWNLOAD_QUEUE_COMPLETED) {
+          if (data.count > 0) showToast(`✅ Докачано файлов: ${data.count}`);
+        }
+      },
+    );
   }
 
   window.addEventListener("beforeinstallprompt", (e: Event) => {

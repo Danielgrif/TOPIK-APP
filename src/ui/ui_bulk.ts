@@ -1,5 +1,5 @@
 import { state } from "../core/state.ts";
-import { render, getFilteredData } from "./ui_card.ts";
+import { getFilteredData } from "./ui_card.ts";
 import { showToast, showUndoToast, escapeHtml } from "../utils/utils.ts";
 import { client } from "../core/supabaseClient.ts";
 import { openConfirm, openModal, closeModal } from "./ui_modal.ts";
@@ -14,7 +14,7 @@ export function toggleSelectMode() {
   const grid = document.getElementById("vocabulary-grid");
   const savedScroll = grid ? grid.scrollTop : 0;
 
-  render();
+  document.dispatchEvent(new CustomEvent("state-changed"));
 
   if (grid) grid.scrollTop = savedScroll;
 
@@ -128,7 +128,7 @@ export function bulkDelete() {
     const grid = document.getElementById("vocabulary-grid");
     const savedScroll = grid ? grid.scrollTop : 0;
 
-    render();
+    document.dispatchEvent(new CustomEvent("state-changed"));
     toggleSelectMode(); // Выходим из режима выбора
 
     if (grid) grid.scrollTop = savedScroll;
@@ -138,7 +138,7 @@ export function bulkDelete() {
       () => {
         // Undo
         state.dataStore.push(...backup);
-        render();
+        document.dispatchEvent(new CustomEvent("state-changed"));
       },
       async () => {
         // Commit: Soft Delete (перемещение в корзину)
@@ -193,7 +193,7 @@ export function bulkRemoveFromList() {
       const grid = document.getElementById("vocabulary-grid");
       const savedScroll = grid ? grid.scrollTop : 0;
 
-      render();
+      document.dispatchEvent(new CustomEvent("state-changed"));
       toggleSelectMode();
 
       if (grid) grid.scrollTop = savedScroll;
@@ -211,7 +211,7 @@ export function bulkRemoveFromList() {
         ids.forEach((id) =>
           collectionsState.listItems[listId]?.add(Number(id)),
         );
-        render();
+        document.dispatchEvent(new CustomEvent("state-changed"));
       } else {
         showToast("Слова исключены из списка");
       }
@@ -280,7 +280,8 @@ export function bulkAddToList() {
   const content = document.getElementById("add-to-list-content");
   if (!modal || !content) return;
 
-  client.auth.getUser().then(({ data: { user } }) => {
+  client.auth.getSession().then(({ data: { session } }) => {
+    const user = session?.user;
     if (!user) {
       showToast("Войдите в аккаунт");
       return;

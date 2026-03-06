@@ -134,5 +134,19 @@ export interface User {
     full_name?: string;
     [key: string]: unknown;
   };
-  [key: string]: unknown;
+  app_metadata?: {
+    provider?: string;
+    providers?: string[];
+    [key: string]: unknown;
+  };
+}
+
+export interface LeaderboardEntry {
+  user_id: string;
+  xp: number;
+  weekly_xp: number;
+  level: number;
+  full_name: string | null;
+  avatar_url: string | null;
+  league: string;
 }

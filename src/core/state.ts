@@ -34,6 +34,7 @@ export interface WordRequestState {
 
 export interface AppState {
   dataStore: Word[];
+  filteredData: Word[]; // Кэш отфильтрованных слов для рендерера
   searchResults: Word[] | null;
   userStats: UserStats;
   learned: Set<string | number>;
@@ -105,6 +106,7 @@ const safeGetItem = (key: string): string | null => {
 
 export const state: AppState = {
   dataStore: [],
+  filteredData: [],
   searchResults: null,
   userStats: {
     xp: 0,

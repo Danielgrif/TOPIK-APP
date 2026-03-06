@@ -1,132 +1,70 @@
-# TOPIK II Master Pro 🇰🇷
+# TOPIK Master Pro
 
-A comprehensive Progressive Web App (PWA) designed to help students prepare for the TOPIK II exam (Levels 3-6). This application combines advanced vocabulary learning techniques, including a Spaced Repetition System (SRS), with gamified elements to make studying Korean effective and engaging.
+**TOPIK Master Pro** — это комплексное веб-приложение для подготовки к экзамену на знание корейского языка (TOPIK), оснащенное современными инструментами для эффективного обучения.
 
-## 🚀 Features
+## 🚀 Ключевые возможности
 
-*   **Smart Flashcards:** 3D flip cards with translations, examples, Hanja, and audio.
-*   **Spaced Repetition System (SRS):** Built-in SM-2 algorithm to schedule reviews at optimal intervals.
-*   **Multiple Quiz Modes:**
-    *   🎯 **Multiple Choice & Reverse:** Standard vocabulary testing.
-    *   ⌨️ **Typing:** Hardcore mode for spelling practice.
-    *   ⚡ **Sprint:** Time-attack mode to test quick recall.
-    *   ☠️ **Survival:** Quiz with limited lives.
-    *   🎧 **Audio & Dictation:** Listening comprehension.
-    *   🧩 **Sentence Scramble:** Construct sentences from parts.
-    *   🗣️ **Pronunciation:** Speech recognition to check pronunciation.
-    *   🔗 **Association:** Match words with their meanings.
-*   **Gamification:**
-    *   XP System & Leveling.
-    *   Coins & Shop (Buy streak freezes, themes, extra lives).
-    *   Daily Challenges & Streaks.
-    *   Achievements.
-*   **Content:**
-    *   Vocabulary (Words & Grammar).
-    *   Hanja Explorer (Chinese characters root lookup).
-    *   Word of the Day / Quotes.
-*   **Technical:**
-    *   **Offline Support:** Fully functional PWA.
-    *   **Dark Mode & Themes:** Customizable UI.
-    *   **Cloud Sync:** Sync progress across devices via Supabase.
-    *   **Text-to-Speech:** Integrated TTS with fallback.
+*   **🧠 AI-генерация контента:** Автоматическое создание карточек слов с переводом, примерами, синонимами и аудио с помощью **Google Gemini**.
+*   **🗣️ Качественная озвучка:** Генерация аудио для слов и примеров с использованием **Microsoft Edge TTS**.
+*   **☁️ Облачная синхронизация:** Полная синхронизация прогресса, статистики и настроек между устройствами через **Supabase**.
+*   **🎮 Интерактивные тренировки:** Более 15 режимов квизов (Спринт, Выживание, Аудирование, Диктант и др.) для увлекательного запоминания.
+*   **📈 Система SRS:** Интеллектуальное интервальное повторение (Spaced Repetition System) для долгосрочного закрепления материала.
+*   **🌐 Офлайн-режим:** Приложение кэширует данные и позволяет продолжать обучение даже без доступа к сети.
+*   **⚙️ Гибкая кастомизация:** Настройка тем оформления, голоса озвучки, скорости и других параметров.
 
-## 🛠️ Tech Stack
+## 🛠️ Технологический стек
 
-*   **Frontend:** TypeScript, Vanilla JS (No framework), HTML5.
-*   **Styling:** CSS Variables, Modular CSS.
-*   **Build Tool:** Vite.
-*   **State Management:** Custom Singleton State Store (`src/core/state.ts`).
-*   **Database & Auth:** Supabase.
-*   **PWA:** Vite PWA Plugin, Service Workers (Workbox).
-*   **Automation:** Python (Asyncio, Edge TTS, Pixabay API) for content generation.
+*   **Фронтенд:**
+    *   **Язык:** TypeScript (без фреймворков)
+    *   **Сборка:** Vite
+    *   **Стили:** Чистый CSS с переменными
+*   **Бэкенд (Воркер):**
+    *   **Язык:** Python 3.9+
+    *   **Асинхронность:** `asyncio`, `aiohttp`
+*   **BaaS (Backend-as-a-Service):**
+    *   **Supabase:** PostgreSQL база данных, аутентификация, хранилище файлов, Realtime-подписки, Edge Functions.
+*   **Внешние API:**
+    *   **AI:** Google Gemini API
+    *   **TTS:** Microsoft Edge TTS
 
-## 📂 Project Structure
+## 📂 Структура проекта
 
-```text
-/
-├── public/             # Static assets (icons, manifest)
-├── scripts/            # Python automation scripts
-│   ├── content_worker.py   # Generates audio/images and updates DB
-│   ├── validate_schema.py  # Checks DB integrity
-│   └── validate_ts.py      # TypeScript validation utility
-├── src/
-│   ├── core/           # Core business logic
-│   │   ├── backup.ts   # Local backup utilities
-│   │   ├── collections_data.ts # Collections state
-│   │   ├── db.ts       # Database interactions & Sync
-│   │   ├── scheduler.ts # SM-2 Spaced Repetition Algorithm
-│   │   ├── state.ts    # Global App State
-│   │   └── ...
-│   ├── css/            # Modular CSS files
-│   ├── types/          # TypeScript interfaces
-│   ├── ui/             # UI Controllers & Components
-│   │   ├── component_loader.ts # HTML Injection
-│   │   ├── quiz.ts     # Quiz logic & orchestration
-│   │   ├── ui_card.ts  # Card rendering (Virtual Scroll)
-│   │   ├── ui_collections.ts # User Lists
-│   │   ├── ui_custom_words.ts # Word Requests
-│   │   ├── ui_bulk.ts  # Bulk Actions
-│   │   └── ...
-│   ├── utils/          # Helper functions
-│   ├── workers/        # Web Workers (Search offloading)
-│   ├── app.ts          # Application Entry point
-│   └── sw.ts           # Service Worker logic
-├── index.html          # Main HTML entry
-└── vite.config.ts      # Vite configuration
-```
+*   `src/`: Исходный код фронтенд-приложения на TypeScript.
+    *   `core/`: Основная бизнес-логика, управление состоянием, работа с БД и синхронизацией.
+    *   `ui/`: Модули, отвечающие за рендеринг и взаимодействие с UI-компонентами.
+    *   `css/`, `html/`: Стили и HTML-шаблоны компонентов.
+*   `scripts/`: Python-скрипты для бэкенд-задач.
+    *   `content_worker.py`: Главный воркер, обрабатывающий запросы на генерацию контента.
+    *   `ai_generator.py`, `tts_generator.py`: Классы для взаимодействия с AI и TTS API.
+    *   `db_manager.py`: Утилиты для управления базой данных (бэкап, восстановление).
+    *   `archive/`: Архив старых скриптов миграции и исправлений.
 
-## ⚡ Installation & Setup
+## ⚙️ Установка и запуск
 
-### Prerequisites
-*   Node.js (v16+)
-*   Python 3.8+ (for content scripts)
-*   Supabase Account
+1.  **Клонируйте репозиторий:**
+    ```bash
+    git clone https://your-repository-url.git
+    cd topik-app
+    ```
 
-### 1. Frontend Setup
+2.  **Настройте переменные окружения:**
+    *   Создайте файл `.env` в корне проекта.
+    *   Скопируйте в него содержимое из `.env.example` (если он есть) и заполните ключи:
+        ```
+        VITE_SUPABASE_URL="YOUR_SUPABASE_URL"
+        VITE_SUPABASE_KEY="YOUR_SUPABASE_ANON_KEY"
+        SUPABASE_SERVICE_KEY="YOUR_SUPABASE_SERVICE_ROLE_KEY"
+        GEMINI_API_KEY="YOUR_GEMINI_API_KEY"
+        ```
 
-```bash
-# Clone the repository
-git clone <repository-url>
-cd topik-app
+3.  **Запустите фронтенд:**
+    ```bash
+    npm install
+    npm run dev
+    ```
 
-# Install dependencies
-npm install
-
-# Configure Environment
-# Create a .env file in the root directory with the following:
-# VITE_SUPABASE_URL=your_supabase_url
-# VITE_SUPABASE_KEY=your_supabase_anon_key
-```
-
-### 2. Python Environment (Optional, for content generation)
-
-```bash
-# Install Python dependencies
-pip install supabase python-dotenv requests idna edge-tts pillow google-genai
-
-# Add to .env:
-# SUPABASE_SERVICE_KEY=your_service_role_key (Required for writing to Storage)
-# GEMINI_API_KEY=your_gemini_key (Optional, for AI generation)
-# PIXABAY_API_KEY=your_pixabay_key (Optional, for images)
-```
-
-## 🏃‍♂️ Running the App
-
-### Development
-```bash
-npm run dev
-```
-Open `http://localhost:5173` in your browser.
-
-### Production Build
-```bash
-npm run build
-npm run preview
-```
-
-## 🏗️ Architecture Highlights
-
-*   **State Management:** The app uses a centralized `state` object initialized from `localStorage` for immediate offline access, syncing with Supabase in the background.
-*   **Virtual Scrolling:** To handle large vocabulary lists efficiently, `src/ui/ui_card.ts` implements a custom virtual scroller that renders only the visible items in the DOM.
-*   **Web Workers:** Search operations are offloaded to `src/workers/searchWorker.ts` to prevent UI blocking during typing.
-*   **PWA Strategy:** Uses a Cache-First strategy for audio files to ensure instant playback during reviews, and Stale-While-Revalidate for static assets.
+4.  **Запустите бэкенд-воркер:**
+    ```bash
+    pip install -r requirements.txt
+    python scripts/content_worker.py
+    ```

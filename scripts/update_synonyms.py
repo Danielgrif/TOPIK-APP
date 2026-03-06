@@ -5,6 +5,7 @@ import logging
 from dotenv import load_dotenv
 from supabase import create_client
 from google import genai
+from constants import GEMINI_MODELS
 
 # Настройка логирования
 logging.basicConfig(
@@ -44,11 +45,7 @@ async def generate_synonyms(word_kr, current_synonyms=None):
 Provide 3-5 common synonyms for the Korean word '{word_kr}'.
 Output ONLY a comma-separated list of Korean words.
 """
-    models_to_try = [
-        'gemini-2.5-flash', 'gemini-2.5-pro', 
-        'gemini-3-flash-preview', 'gemini-3.1-pro-preview',
-        'gemini-2.0-flash', 'gemini-flash-latest'
-    ]
+    models_to_try = GEMINI_MODELS
 
     for model_name in models_to_try:
         try:

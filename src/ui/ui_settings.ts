@@ -1,7 +1,6 @@
 /* eslint-disable no-console */
 import { state } from "../core/state.ts";
 import { showToast, speak } from "../utils/utils.ts";
-import { render } from "./ui_card.ts";
 import { scheduleSaveState } from "../core/db.ts";
 import { openConfirm } from "./ui_modal.ts";
 import { LS_KEYS } from "../core/constants.ts";
@@ -314,7 +313,7 @@ export function updateSettingsUI() {
 export function toggleHanjaMode(el: HTMLInputElement) {
   state.hanjaMode = el.checked;
   localStorage.setItem(LS_KEYS.HANJA_MODE, String(state.hanjaMode));
-  render();
+  document.dispatchEvent(new CustomEvent("state-changed"));
   updateSettingsTimestamp();
   scheduleSaveState();
 }
@@ -335,7 +334,7 @@ export function setVoice(voice: string) {
 
   // Проигрываем тестовый пример
   speak("안녕하세요", null);
-  render();
+  document.dispatchEvent(new CustomEvent("state-changed"));
 }
 
 /**
@@ -697,7 +696,7 @@ export function toggleFocusMode() {
       ? 400
       : Math.floor(window.innerHeight * 0.75);
 
-    render();
+    document.dispatchEvent(new CustomEvent("state-changed"));
 
     if (grid && oldScroll > 0) {
       const newHeight = state.focusMode

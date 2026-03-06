@@ -3,6 +3,7 @@ import logging
 import asyncio
 from google import genai
 from google.genai import types
+from constants import GEMINI_MODELS
 
 class AIContentGenerator:
     def __init__(self, api_key):
@@ -79,17 +80,7 @@ Input: '{word_kr}'
         prompt = self._build_prompt(word_kr)
         
         # Список моделей для перебора (Fallback стратегия)
-        models_to_try = [
-            'gemini-2.5-flash',
-            'gemini-2.5-pro',
-            'gemini-3-flash-preview',
-            'gemini-3-pro-preview',
-            'gemini-3.1-pro-preview',
-            'gemini-2.0-flash',
-            'gemini-2.0-flash-lite',
-            'gemini-flash-latest',
-            'gemini-pro-latest'
-        ]
+        models_to_try = GEMINI_MODELS
         
         last_error = None
 

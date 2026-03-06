@@ -4,7 +4,6 @@ import { openModal, openConfirm } from "./ui_modal.ts";
 import { DB_TABLES } from "../core/constants.ts";
 import { Word } from "../types/index.ts";
 import { state } from "../core/state.ts";
-import { render } from "./ui_card.ts";
 
 export function setupTrash() {
   cleanupExpiredTrash();
@@ -121,7 +120,7 @@ export async function restoreWord(id: string | number) {
 
     if (restored) {
       state.dataStore.unshift(restored);
-      render(); // Update the main grid immediately
+      document.dispatchEvent(new CustomEvent("state-changed"));
       if (window.updateSearchIndex) window.updateSearchIndex();
     }
   }

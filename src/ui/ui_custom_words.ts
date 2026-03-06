@@ -10,7 +10,6 @@ import { closeModal, openConfirm } from "./ui_modal.ts";
 import { state } from "../core/state.ts";
 import { immediateSaveState } from "../core/db.ts";
 import { addFailedRequest } from "./ui_retry.ts";
-import { render } from "./ui_card.ts";
 import { toKorean } from "../utils/hangul.ts";
 import { DB_TABLES, WORD_REQUEST_STATUS } from "../core/constants.ts";
 import { WordRequestState } from "../core/state.ts";
@@ -755,7 +754,7 @@ function trackProgress(
 
     const grid = document.getElementById("vocabulary-grid");
     const savedScroll = grid ? grid.scrollTop : 0;
-    render();
+    document.dispatchEvent(new CustomEvent("state-changed"));
     if (grid) grid.scrollTop = savedScroll;
   };
 
@@ -1204,7 +1203,7 @@ export async function deleteCustomWord(id: string | number) {
 
   const grid = document.getElementById("vocabulary-grid");
   const savedScroll = grid ? grid.scrollTop : 0;
-  render();
+  document.dispatchEvent(new CustomEvent("state-changed"));
   if (window.updateSearchIndex) window.updateSearchIndex();
 
   if (grid) grid.scrollTop = savedScroll;
@@ -1215,7 +1214,7 @@ export async function deleteCustomWord(id: string | number) {
       // Undo
       if (wordBackup) state.customWords.splice(wordIndex, 0, wordBackup);
       if (dataBackup) state.dataStore.splice(dataIndex, 0, dataBackup);
-      render();
+      document.dispatchEvent(new CustomEvent("state-changed"));
     },
     async () => {
       // Commit

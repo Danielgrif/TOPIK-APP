@@ -6,6 +6,7 @@ import { getRole, getTotalXP } from "../core/stats.ts";
 import { escapeHtml, promiseWithTimeout, showToast } from "../utils/utils.ts";
 import { isDatabaseActive } from "../core/db.ts";
 import type { RealtimeChannel } from "@supabase/supabase-js";
+import { LeaderboardEntry } from "../types/index.ts";
 
 let subscription: RealtimeChannel | null = null;
 let currentMode: "weekly" | "all_time" = "weekly";
@@ -125,7 +126,10 @@ async function loadLeaderboard() {
       Promise.resolve(query),
       60000,
       new Error("Timeout"),
-    )) as { data: any[] | null; error: any };
+    )) as {
+      data: LeaderboardEntry[] | null;
+      error: { message: string } | null;
+    };
 
     if (error) throw error;
 
@@ -135,7 +139,7 @@ async function loadLeaderboard() {
     const currentUserId = state.currentUser?.id;
 
     if (currentUserId && top50) {
-      const inTop = top50.find((u: any) => u.user_id === currentUserId); // Keeping any for now
+      const inTop = top50.find((u) => u.user_id === currentUserId);
       if (!inTop) {
         // Загружаем статистику пользователя
         const { data: myStats } = await client
@@ -147,7 +151,7 @@ async function loadLeaderboard() {
           .single();
 
         if (myStats) {
-          myData = myStats;
+          myData = myStats as LeaderboardEntry;
           // Считаем ранг: количество людей, у которых XP больше
           let count = 0;
 
@@ -195,7 +199,11 @@ async function loadLeaderboard() {
   }
 }
 
-function renderLeaderboard(data: any[], myData: any | null, myRank: number) {
+function renderLeaderboard(
+  data: LeaderboardEntry[],
+  myData: LeaderboardEntry | null,
+  myRank: number,
+) {
   const container = document.getElementById("leaderboard-list");
   if (!container) return;
 
@@ -211,7 +219,7 @@ function renderLeaderboard(data: any[], myData: any | null, myRank: number) {
   let html = "";
   const currentUserId = state.currentUser?.id;
 
-  const renderItem = (user: any, rank: number, isMe: boolean) => {
+  const renderItem = (user: LeaderboardEntry, rank: number, isMe: boolean) => {
     const name = user.full_name || "Аноним";
     const avatar = user.avatar_url;
     const score =
