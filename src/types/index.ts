@@ -28,6 +28,8 @@ export interface Word {
   isLocal?: boolean;
 
   // Поля для совместимости с разными версиями БД
+  topic?: string;
+  category?: string;
   topic_ru?: string;
   topic_kr?: string;
   category_ru?: string;

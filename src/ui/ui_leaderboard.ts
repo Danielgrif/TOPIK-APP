@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import { client } from "../core/supabaseClient.ts";
 import { state } from "../core/state.ts";
 import { openModal } from "./ui_modal.ts";
@@ -126,7 +125,7 @@ async function loadLeaderboard() {
       Promise.resolve(query),
       60000,
       new Error("Timeout"),
-    )) as any;
+    )) as { data: any[] | null; error: any };
 
     if (error) throw error;
 
@@ -136,7 +135,7 @@ async function loadLeaderboard() {
     const currentUserId = state.currentUser?.id;
 
     if (currentUserId && top50) {
-      const inTop = top50.find((u: any) => u.user_id === currentUserId);
+      const inTop = top50.find((u: any) => u.user_id === currentUserId); // Keeping any for now
       if (!inTop) {
         // Загружаем статистику пользователя
         const { data: myStats } = await client
@@ -181,7 +180,9 @@ async function loadLeaderboard() {
   } catch (e) {
     console.error("Leaderboard error:", e);
     const errorMessage =
-      e instanceof Error ? e.message : (e as any)?.message || String(e);
+      e instanceof Error
+        ? e.message
+        : (e as { message?: string })?.message || String(e);
     container.innerHTML = `
       <div style="text-align:center; padding:30px 20px; color: var(--text-sub);">
         <div style="font-size: 40px; margin-bottom: 10px;">📡</div>

@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import { state } from "../core/state.ts";
 import { render, getFilteredData } from "./ui_card.ts";
 import { showToast, showUndoToast, escapeHtml } from "../utils/utils.ts";
@@ -281,7 +280,7 @@ export function bulkAddToList() {
   const content = document.getElementById("add-to-list-content");
   if (!modal || !content) return;
 
-  client.auth.getUser().then(({ data: { user } }: any) => {
+  client.auth.getUser().then(({ data: { user } }) => {
     if (!user) {
       showToast("Войдите в аккаунт");
       return;

@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import type { SupabaseClient } from "@supabase/supabase-js";
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_KEY;
@@ -66,7 +65,7 @@ const fetchWithRetries = async (
       }
 
       return response;
-    } catch (error: any) {
+    } catch (error: unknown) {
       // Если запрос был отменен извне (пользователем), не делаем повторных попыток
       if (options.signal?.aborted) {
         throw error;
@@ -76,7 +75,7 @@ const fetchWithRetries = async (
         const delay = initialDelay * Math.pow(2, i);
         console.warn(
           `[Retry ${i + 1}/${retries}] Request failed. Retrying in ${delay}ms...`,
-          error.message,
+          (error as Error).message,
         );
         await new Promise((resolve) => setTimeout(resolve, delay));
       } else {
@@ -91,7 +90,11 @@ const fetchWithRetries = async (
   throw new Error("Fetch with retries failed unexpectedly.");
 };
 
-type SupabaseCreateClient = (url: string, key: string, options?: object) => any;
+type SupabaseCreateClient = (
+  url: string,
+  key: string,
+  options?: object,
+) => SupabaseClient;
 
 export const client: SupabaseClient =
   SUPABASE_URL &&
@@ -103,7 +106,7 @@ export const client: SupabaseClient =
         SUPABASE_KEY,
         {
           global: {
-            fetch: fetchWithRetries as any,
+            fetch: fetchWithRetries as unknown as typeof fetch,
           },
           realtime: {
             worker: true,
@@ -159,4 +162,4 @@ export const client: SupabaseClient =
             list: () => Promise.resolve({ data: [], error: null }),
           }),
         },
-      } as any);
+      } as unknown as SupabaseClient);

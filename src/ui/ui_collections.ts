@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import { state } from "../core/state.ts";
 import { client } from "../core/supabaseClient.ts";
 import { showToast, showUndoToast, escapeHtml } from "../utils/utils.ts";
@@ -303,7 +302,7 @@ export function updateCollectionUI() {
   const container = document.getElementById("collections-list");
   if (container) {
     // FIX: Используем getSession для мгновенного доступа к ID пользователя (без запроса к серверу)
-    client.auth.getSession().then(({ data: { session } }: any) => {
+    client.auth.getSession().then(({ data: { session } }) => {
       const myId = session?.user?.id;
       const lists = collectionsState.userLists || [];
 
@@ -415,7 +414,7 @@ export function updateCollectionUI() {
     "new-word-target-list",
   ) as HTMLSelectElement;
   if (select) {
-    client.auth.getSession().then(({ data: { session } }: any) => {
+    client.auth.getSession().then(({ data: { session } }) => {
       const myLists = collectionsState.userLists.filter(
         (l: UserList) => l.user_id === session?.user?.id,
       );

@@ -1,4 +1,4 @@
-/* eslint-disable no-console, @typescript-eslint/no-explicit-any */
+/* eslint-disable no-console */
 console.log("🚀 App starting...");
 
 import "./css/style.css";
@@ -91,9 +91,7 @@ import {
   openProfileModal,
   handleChangePassword,
   handleChangeEmail,
-  openFailedRequestsModal,
   handleLogout,
-
   handleDeleteAccount,
   toggleResetMode,
   togglePasswordVisibility,
@@ -623,7 +621,9 @@ function setupGlobalListeners() {
           updateBottomNav("open-collections-filter");
           break;
         case "open-failed-requests":
-          import("./ui/ui_failed_requests.ts").then((m) => m.openFailedRequestsModal());
+          import("./ui/ui_failed_requests.ts").then((m) =>
+            m.openFailedRequestsModal(),
+          );
           break;
         case "toggle-select-mode":
           toggleSelectMode();
@@ -665,7 +665,7 @@ function setupGlobalListeners() {
         case "set-collection-filter":
           // FIX: Если пользователь открывает список, подгружаем его личные слова,
           // так как мы скрыли их на главном экране при загрузке.
-          if (value) {
+          if (value && state.dataStore) {
             client.auth.getUser().then(async ({ data: { user } }) => {
               if (user) {
                 const { data } = await client
@@ -674,7 +674,7 @@ function setupGlobalListeners() {
                   .eq("created_by", user.id)
                   .eq("is_public", false);
 
-                if (data && state.dataStore) {
+                if (data) {
                   const currentIds = new Set(state.dataStore.map((w) => w.id));
                   const toAdd = data.filter((w) => !currentIds.has(w.id));
                   if (toAdd.length > 0) {
@@ -742,23 +742,29 @@ function setupGlobalListeners() {
           break;
         case "manage-my-words":
           // FIX: Подгружаем слова и для менеджера слов
-          client.auth.getUser().then(async ({ data: { user } }) => {
-            if (user) {
-              const { data } = await client
-                .from(DB_TABLES.VOCABULARY)
-                .select("*")
-                .eq("created_by", user.id)
-                .eq("is_public", false);
+          client.auth
+            .getUser()
+            .then(
+              async ({ data: { user } }: { data: { user: User | null } }) => {
+                if (user) {
+                  const { data } = await client
+                    .from(DB_TABLES.VOCABULARY)
+                    .select("*")
+                    .eq("created_by", user.id)
+                    .eq("is_public", false);
 
-              if (data && state.dataStore) {
-                const currentIds = new Set(state.dataStore.map((w) => w.id));
-                const toAdd = data.filter((w) => !currentIds.has(w.id));
-                if (toAdd.length > 0) {
-                  state.dataStore.push(...toAdd);
+                  if (data) {
+                    const currentIds = new Set(
+                      state.dataStore.map((w) => w.id),
+                    );
+                    const toAdd = data.filter((w) => !currentIds.has(w.id));
+                    if (toAdd.length > 0) {
+                      state.dataStore.push(...toAdd);
+                    }
+                  }
                 }
-              }
-            }
-          });
+              },
+            );
           manageMyWords(e);
           break;
         case "clear-collection-filter":
@@ -1437,7 +1443,7 @@ async function init() {
   // 2. Приватные слова пользователя (is_public === false) - они не должны быть на главной
   if (state.dataStore) {
     state.dataStore = state.dataStore.filter(
-      (w: any) => !w.deleted_at && w.is_public !== false,
+      (w) => !w.deleted_at && w.is_public !== false,
     );
   }
 
@@ -1467,16 +1473,16 @@ async function init() {
 
       try {
         if (session?.user) {
-          updateAuthUI(session.user as any as User);
+          updateAuthUI(session.user as unknown as User);
           if (event === "SIGNED_IN") {
             cleanAuthUrl();
-            await loadFromSupabase(session.user as any as User);
+            await loadFromSupabase(session.user as unknown as User);
             applyTheme();
             updateVoiceUI();
             saveAndRender();
             closeModal("login-modal");
             import("./ui/ui_collections.ts").then((m) => m.loadCollections());
-            showWelcomeScreen(session.user as any as User);
+            showWelcomeScreen(session.user as unknown as User);
           }
           if (event === "PASSWORD_RECOVERY") {
             openProfileModal();
@@ -1484,7 +1490,6 @@ async function init() {
           }
         } else {
           updateAuthUI(null);
-
         }
       } catch (e) {
         console.error("Auth State Change Error:", e);
@@ -1498,7 +1503,7 @@ async function init() {
     client.auth.getSession(),
     5000, // 5 секунд таймаут
     new Error("Session check timed out"),
-  ).catch((e) => {
+  ).catch((e: unknown) => {
     console.warn("Session check failed/timed out:", e);
     return { data: { session: null } };
   })) as {
@@ -1507,11 +1512,11 @@ async function init() {
 
   const session = data.session;
   if (session) {
-    updateAuthUI(session.user as any as User);
+    updateAuthUI(session.user as unknown as User);
     cleanAuthUrl();
-    await loadFromSupabase(session.user as any as User);
+    await loadFromSupabase(session.user as unknown as User);
     import("./ui/ui_collections.ts").then((m) => m.loadCollections());
-    showWelcomeScreen(session.user as any as User);
+    showWelcomeScreen(session.user as unknown as User);
   } else {
     updateAuthUI(null);
     showWelcomeScreen(); // Приветствие для гостя
@@ -1671,7 +1676,7 @@ window.addEventListener("beforeunload", () => {
   immediateSaveState();
 });
 
-const handleInitError = (e: any) => {
+const handleInitError = (e: Error) => {
   // Если произошла ошибка, тоже убираем спиннер, чтобы показать сообщение
   const loader = document.getElementById("loading-overlay");
   if (loader) loader.remove();
@@ -1820,11 +1825,22 @@ Object.assign(window, {
     import("./ui/ui_edit_word.ts").then((m) =>
       m.openEditWordModal(id, onUpdate),
     ),
-  restoreWord: (id: number) => (window as any).restoreWord(id),
+  restoreWord: (id: number) =>
+    (window as unknown as { restoreWord: (id: number) => void }).restoreWord(
+      id,
+    ),
   permanentlyDeleteWord: (id: number, btn: HTMLElement) =>
-    (window as any).permanentlyDeleteWord(id, btn),
+    (
+      window as unknown as {
+        permanentlyDeleteWord: (id: number, btn: HTMLElement) => void;
+      }
+    ).permanentlyDeleteWord(id, btn),
   toggleTrashSelection: (id: number, checked: boolean) =>
-    (window as any).toggleTrashSelection(id, checked),
+    (
+      window as unknown as {
+        toggleTrashSelection: (id: number, checked: boolean) => void;
+      }
+    ).toggleTrashSelection(id, checked),
   updateSearchIndex: () => {
     if (searchWorker) {
       searchWorker.postMessage({ type: "SET_DATA", data: state.dataStore });

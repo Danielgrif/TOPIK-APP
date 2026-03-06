@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import { state } from "./state.ts";
 import { showToast, playTone, showComboEffect } from "../utils/utils.ts";
 import { showLevelUpAnimation } from "../ui/ui_animations.ts";

@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import { client } from "./supabaseClient.ts";
 import { state } from "./state.ts";
 import { loadFromSupabase } from "./db.ts";
@@ -154,7 +153,7 @@ export function openProfileModal(focusPassword = false) {
             if (error) throw error;
 
             if (data.user) {
-              updateAuthUI(data.user as any);
+              updateAuthUI(data.user as unknown as User);
               // Мгновенное обновление в модальном окне
               if (data.user.user_metadata.avatar_url) {
                 avatarImg.src = data.user.user_metadata.avatar_url;
@@ -164,9 +163,9 @@ export function openProfileModal(focusPassword = false) {
               }
               showToast("✅ Аватар обновлен");
             }
-          } catch (err: any) {
+          } catch (err: unknown) {
             console.error("Avatar upload error:", err);
-            showToast("❌ Ошибка загрузки: " + err.message);
+            showToast("❌ Ошибка загрузки: " + (err as Error).message);
           }
         };
       }
@@ -181,7 +180,7 @@ export function openProfileModal(focusPassword = false) {
               const { data, error } = await AuthService.deleteAvatar(user.id);
               if (error) throw error;
 
-              updateAuthUI(data.user as any);
+              updateAuthUI(data.user as unknown as User);
               // Мгновенное обновление UI
               avatarImg.style.display = "none";
               avatarText.style.display = "block";
@@ -190,9 +189,9 @@ export function openProfileModal(focusPassword = false) {
                 .toUpperCase();
               deleteAvatarBtn.style.display = "none";
               showToast("✅ Фото удалено");
-            } catch (err: any) {
+            } catch (err: unknown) {
               console.error("Avatar delete error:", err);
-              showToast("❌ Ошибка: " + err.message);
+              showToast("❌ Ошибка: " + (err as Error).message);
             }
           });
         };
@@ -381,7 +380,7 @@ async function performLogin(email: string, password: string) {
       password,
     );
     if (error) throw error;
-    if (data.user) await finalizeAuth(data.user as any);
+    if (data.user) await finalizeAuth(data.user as unknown as User);
   } catch (e) {
     handleAuthError(e);
   }
@@ -401,7 +400,7 @@ async function performSignup(email: string, password: string) {
       if (data.user) {
         await AuthService.initUserStats(data.user.id);
       }
-      if (data.user) await finalizeAuth(data.user as any);
+      if (data.user) await finalizeAuth(data.user as unknown as User);
     }
   } catch (e) {
     handleAuthError(e);

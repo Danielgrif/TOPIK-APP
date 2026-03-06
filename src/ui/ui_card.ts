@@ -1,4 +1,4 @@
-/* eslint-disable no-console, @typescript-eslint/no-explicit-any */
+/* eslint-disable no-console */
 import { state } from "../core/state.ts";
 import {
   speak,
@@ -949,9 +949,10 @@ function createCardBack(item: Word): HTMLElement {
               );
               showToast("✅ Картинка загружена!");
               return true;
-            } catch (err: any) {
+            } catch (err: unknown) {
               showToast(
-                "❌ Ошибка: " + (err.message || "Не удалось загрузить"),
+                "❌ Ошибка: " +
+                  ((err as Error).message || "Не удалось загрузить"),
               );
               return false; // Оставляем окно открытым, чтобы можно было исправить URL
             } finally {
@@ -995,7 +996,7 @@ function createCardBack(item: Word): HTMLElement {
           // Re-render the card back to show "Add Image" button
           imgWrapper.remove();
           showToast("🗑️ Картинка удалена");
-        } catch (err: any) {
+        } catch (err: unknown) {
           console.error("Delete error:", err);
           showToast("❌ Ошибка удаления");
           deleteBtn.disabled = false;
@@ -1053,8 +1054,10 @@ function createCardBack(item: Word): HTMLElement {
           deleteBtn,
         );
         showToast("✅ Картинка загружена!");
-      } catch (err: any) {
-        showToast("❌ Ошибка: " + (err.message || "Не удалось загрузить"));
+      } catch (err: unknown) {
+        showToast(
+          "❌ Ошибка: " + ((err as Error).message || "Не удалось загрузить"),
+        );
       } finally {
         uploadBtn.disabled = false;
         uploadBtn.classList.remove("rotating");
@@ -1365,8 +1368,8 @@ async function openImagePicker(item: Word, btn: HTMLElement) {
     };
 
     openModal("image-picker-modal");
-  } catch (err: any) {
-    showToast(`❌ Ошибка: ${err.message}`);
+  } catch (err: unknown) {
+    showToast(`❌ Ошибка: ${(err as Error).message}`);
   } finally {
     if (btn instanceof HTMLButtonElement) {
       btn.disabled = false;
@@ -1419,8 +1422,8 @@ async function finalizeImageSelection(
 
     closeModal("image-picker-modal");
     showToast("✅ Изображение обновлено!");
-  } catch (err: any) {
-    showToast(`❌ Ошибка сохранения: ${err.message}`);
+  } catch (err: unknown) {
+    showToast(`❌ Ошибка сохранения: ${(err as Error).message}`);
     const grid = document.getElementById("image-picker-grid");
     if (grid) {
       grid.querySelectorAll(".image-preview-item").forEach((el) => {

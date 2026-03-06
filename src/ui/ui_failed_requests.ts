@@ -61,7 +61,7 @@ async function loadFailedRequests() {
   }
 
   container.innerHTML = allData
-    .map((w: any) => {
+    .map((w) => {
       return `
             <div class="trash-item">
               <div class="trash-item-info">
@@ -98,7 +98,9 @@ async function loadFailedRequests() {
             loadFailedRequests(); // Refresh the list
           } catch (err) {
             console.error("Failed to retry request:", err);
-            showToast(`Ошибка при повторной отправке: ${(err as any).message}`);
+            showToast(
+              `Ошибка при повторной отправке: ${(err as Error).message}`,
+            );
           }
         }
       });

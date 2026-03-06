@@ -114,9 +114,9 @@
   - Python-скрипт для наполнения контента (Asyncio).
   - Генерирует аудио (Edge TTS) и загружает картинки (Pixabay) в Supabase Storage.
   - Обновляет таблицу `vocabulary`.
-- **`validate_schema.py`**:
-  - Скрипт валидации схемы БД (Supabase) и наличия бакетов.
-  - Проверяет таблицы `vocabulary` и `user_progress`.
+- **`db_manager.py`**:
+  - Единый инструмент для бэкапов (`backup`), восстановления (`restore`) и проверки здоровья БД (`validate`).
+  - Заменяет разрозненные скрипты обслуживания (`backup_tables.py`, `validate_schema.py` и др.).
 
 ## 4. Data Flow (Типичный сценарий)
 1. **Start**: `app.ts` -> `db.ts` (fetchVocabulary) -> `state.ts` (загрузка LocalStorage) -> `ui.ts` (render).

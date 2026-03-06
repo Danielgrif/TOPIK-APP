@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import { client } from "../core/supabaseClient.ts";
 import {
   showToast,
@@ -15,7 +14,10 @@ import { render } from "./ui_card.ts";
 import { toKorean } from "../utils/hangul.ts";
 import { DB_TABLES, WORD_REQUEST_STATUS } from "../core/constants.ts";
 import { WordRequestState } from "../core/state.ts";
-import type { RealtimePostgresChangesPayload } from "@supabase/supabase-js";
+import type {
+  RealtimePostgresChangesPayload,
+  User,
+} from "@supabase/supabase-js";
 
 interface CancellationToken {
   isCancelled: boolean;
@@ -136,14 +138,17 @@ export async function submitWordRequest() {
     // Если пользователя нет в стейте, пробуем получить его с таймаутом
     if (!user) {
       updateButtonText("Авторизация...", true);
-      const { data, error: authError } = await promiseWithTimeout<any>(
+      const { data, error: authError } = await promiseWithTimeout<{
+        data: { session: { user: User } | null };
+        error: unknown;
+      }>(
         client.auth.getSession(),
         10000,
         new Error("Время проверки авторизации истекло. Проверьте интернет."),
       );
 
       if (authError) throw authError as Error;
-      user = data?.session?.user;
+      user = data?.session?.user as unknown as import("../types/index.ts").User;
     }
 
     if (currentToken.isCancelled) throw new Error("Cancelled by user");
@@ -221,9 +226,7 @@ export async function submitWordRequest() {
 
     for (const w of validWords) {
       // Ищем точное совпадение по написанию в текущем словаре
-      const existing = state.dataStore.filter(
-        (item: any) => item.word_kr === w,
-      );
+      const existing = state.dataStore.filter((item) => item.word_kr === w);
       if (existing.length > 0) {
         duplicates.push({
           word: w,
@@ -325,8 +328,31 @@ export async function submitWordRequest() {
     updateButtonText("Сохранение...", false); // Отключаем отмену на последнем шаге
 
     // 1. Отправляем заявки и получаем их ID (select() важен для отслеживания)
-    const { data: insertedData, error } = await promiseWithTimeout<any>(
-      client.from(DB_TABLES.WORD_REQUESTS).insert(payload).select() as any,
+    const { data: insertedData, error } = await promiseWithTimeout<{
+      data:
+        | {
+            id: string | number;
+            word_kr: string;
+            created_at: string;
+            my_notes?: string;
+          }[]
+        | null;
+      error: unknown;
+    }>(
+      client
+        .from(DB_TABLES.WORD_REQUESTS)
+        .insert(payload)
+        .select() as unknown as Promise<{
+        data:
+          | {
+              id: string | number;
+              word_kr: string;
+              created_at: string;
+              my_notes?: string;
+            }[]
+          | null;
+        error: unknown;
+      }>,
       60000,
       new Error("Сервер не ответил на запрос сохранения (timed out)."),
     );
@@ -379,7 +405,7 @@ export async function submitWordRequest() {
       e.message?.includes("timed out") ||
       e.message?.includes("Время ожидания");
 
-    if (e.message === "Cancelled by user") {
+    if ((e as Error).message === "Cancelled by user") {
       showToast("🚫 Отменено");
     } else if (isOffline || isNetworkError) {
       validWords.forEach((word: string) => {
@@ -997,10 +1023,20 @@ function trackProgress(
     }
 
     try {
-      const { data, error } = await client
+      const { data, error } = await (client
         .from(DB_TABLES.WORD_REQUESTS)
         .select("id, status, my_notes, word_kr")
-        .in("id", pendingIds);
+        .in("id", pendingIds) as unknown as Promise<{
+        data:
+          | {
+              id: string | number;
+              status: string;
+              my_notes: string;
+              word_kr: string;
+            }[]
+          | null;
+        error: unknown;
+      }>);
 
       if (!error && data) {
         let changed = false;
@@ -1045,8 +1081,8 @@ function trackProgress(
 
   // --- Realtime Listeners ---
   const handleVocabInsert = (payload: RealtimePostgresChangesPayload<any>) => {
-    const newWord = payload.new as any;
-    if (!newWord) return;
+    const newWord = payload.new as { word_kr: string };
+    if (!newWord || !("word_kr" in newWord)) return;
 
     // Find the request that matches the newly inserted word
     for (const progress of requestProgress.values()) {
