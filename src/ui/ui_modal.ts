@@ -195,12 +195,13 @@ export function closeConfirm() {
   closeModal("confirm-modal");
 }
 
-declare global {
-  interface Window {
-    openModal: typeof openModal;
-    closeModal: typeof closeModal;
-  }
-}
+// Listen for custom events to allow decoupling
+document.addEventListener("open-modal", (e: Event) => {
+  const detail = (e as CustomEvent).detail;
+  if (detail && detail.id) openModal(detail.id);
+});
 
-window.openModal = openModal;
-window.closeModal = closeModal;
+document.addEventListener("close-modal", (e: Event) => {
+  const detail = (e as CustomEvent).detail;
+  if (detail && detail.id) closeModal(detail.id);
+});

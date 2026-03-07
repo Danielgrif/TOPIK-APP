@@ -1,18 +1,4 @@
 body.dark-mode {
-    --bg: #1e1b4b;
-    --surface-1: #28235e;
-    --surface-2: #312e6f;
-    --surface-3: #3730a3;
-    --text-main: #e2e8f0;     /* Soft white */
-    --text-sub: #94a3b8;      /* Slate-400 */
-    --text-tertiary: #64748b;
-    --border-color: #3730a3;
-    --input-bg: #312e6f;
-
-    --primary: #a78bfa;
-    --primary-hover: #8b5cf6;
-    --primary-light: rgba(167, 139, 250, 0.15);
-    --accent: #c4b5fd;
     --success: #34d399;
     --danger: #fb7185;
     --warning: #fbbf24;
@@ -21,40 +7,6 @@ body.dark-mode {
     --shadow-sm: 0 2px 8px rgba(0,0,0,0.3);
     --shadow-md: 0 8px 24px rgba(0,0,0,0.4);
     --shadow-lg: 0 16px 48px rgba(0,0,0,0.5);
-}
-
-/* --- Ruby Theme (Rare) --- */
-body[data-theme="ruby"] {
-    --primary: #e11d48; /* Rose 600 */
-    --primary-hover: #be123c; /* Rose 700 */
-    --primary-light: rgba(225, 29, 72, 0.15);
-    --accent: #f43f5e; /* Rose 500 */
-    --bg: #fff1f2; /* Rose 50 */
-    --surface-1: #ffffff;
-    --surface-2: #ffe4e6; /* Rose 100 */
-    --surface-3: #fecdd3; /* Rose 200 */
-    --border-color: #fecdd3;
-    --input-bg: #ffe4e6;
-    --text-main: #881337; /* Rose 900 */
-    --text-sub: #9f1239; /* Rose 800 */
-    --text-tertiary: #be123c; /* Rose 700 */
-}
-
-/* --- Amethyst Theme (Rare) --- */
-body[data-theme="amethyst"] {
-    --primary: #9333ea; /* Purple 600 */
-    --primary-hover: #7e22ce; /* Purple 700 */
-    --primary-light: rgba(147, 51, 234, 0.15);
-    --accent: #a855f7; /* Purple 500 */
-    --bg: #f5f3ff; /* Violet 50 */
-    --surface-1: #ffffff;
-    --surface-2: #ede9fe; /* Violet 100 */
-    --surface-3: #ddd6fe; /* Violet 200 */
-    --border-color: #ddd6fe;
-    --input-bg: #ede9fe;
-    --text-main: #4c1d95; /* Violet 900 */
-    --text-sub: #5b21b6; /* Violet 800 */
-    --text-tertiary: #6d28d9; /* Violet 700 */
 }
 
 /* Flash Effects */

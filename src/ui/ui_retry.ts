@@ -74,7 +74,7 @@ export function renderRequestErrors() {
                 <div style="font-size:11px; opacity:0.8">${escapeHtml(req.error || "")}</div>
             </div>
             <button class="retry-btn">Повторить</button>
-            <button class="btn-icon-tiny-cancel" style="margin-left:8px">✕</button>
+            <button class="btn-icon-tiny-cancel" style="margin-left:8px" aria-label="Отменить">✕</button>
         `;
 
     const retryBtn = div.querySelector(".retry-btn") as HTMLButtonElement;

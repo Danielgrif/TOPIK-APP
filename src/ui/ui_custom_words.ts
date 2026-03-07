@@ -16,6 +16,7 @@ import { WordRequestState } from "../core/state.ts";
 import type {
   RealtimePostgresChangesPayload,
   User,
+  RealtimeChannel,
 } from "@supabase/supabase-js";
 
 interface CancellationToken {
@@ -96,7 +97,7 @@ export async function submitWordRequest() {
   const updateButtonText = (text: string, showCancel: boolean = true) => {
     if (btn) {
       const cancelHtml = showCancel
-        ? `<button id="submission-cancel-btn" class="btn-icon-tiny-cancel" title="Отменить">✕</button>`
+        ? `<button id="submission-cancel-btn" class="btn-icon-tiny-cancel" title="Отменить" aria-label="Отменить">✕</button>`
         : "";
       btn.innerHTML = `<div class="spinner-tiny"></div> ${text} ${cancelHtml}`;
       if (showCancel) {
@@ -229,9 +230,7 @@ export async function submitWordRequest() {
       if (existing.length > 0) {
         duplicates.push({
           word: w,
-          translations: existing
-            .map((e: any) => e.translation)
-            .filter((t: any) => !!t),
+          translations: existing.map((e) => e.translation).filter((t) => !!t),
         });
       }
     }
@@ -372,9 +371,21 @@ export async function submitWordRequest() {
         if (container) container.scrollTop = 0;
 
         keepButtonDisabled = true; // Передаем управление кнопкой в trackProgress
+
+        const requests: WordRequestState[] = insertedData.map((item) => ({
+          id: item.id,
+          word: item.word_kr,
+          status: "pending",
+          timestamp: new Date(item.created_at).getTime(),
+          targetListId: targetListId || undefined,
+          topic: customTopic || undefined,
+          category: customCategory || undefined,
+          level: levelSelect ? levelSelect.value : "★★★",
+        }));
+
         // Запускаем отслеживание
         trackProgress(
-          insertedData,
+          requests,
           input,
           listSelect,
           topicInput,
@@ -396,15 +407,16 @@ export async function submitWordRequest() {
         closeModal("add-word-modal");
       }
     }
-  } catch (e: any) {
+  } catch (e: unknown) {
+    const err = e as Error;
     const isOffline = !navigator.onLine;
     const isNetworkError =
-      e.message?.includes("Failed to fetch") ||
-      e.message?.includes("network error") ||
-      e.message?.includes("timed out") ||
-      e.message?.includes("Время ожидания");
+      err.message?.includes("Failed to fetch") ||
+      err.message?.includes("network error") ||
+      err.message?.includes("timed out") ||
+      err.message?.includes("Время ожидания");
 
-    if ((e as Error).message === "Cancelled by user") {
+    if (err.message === "Cancelled by user") {
       showToast("🚫 Отменено");
     } else if (isOffline || isNetworkError) {
       validWords.forEach((word: string) => {
@@ -426,8 +438,8 @@ export async function submitWordRequest() {
       if (categoryInput) categoryInput.value = "";
       closeModal("add-word-modal");
     } else {
-      console.error("❌ Error in submitWordRequest:", e);
-      showToast("Ошибка: " + (e.message || "Не удалось отправить"));
+      console.error("❌ Error in submitWordRequest:", err);
+      showToast("Ошибка: " + (err.message || "Не удалось отправить"));
     }
   } finally {
     // Восстанавливаем кнопку, если мы НЕ перешли в режим прогресса (там своя логика восстановления)
@@ -473,13 +485,20 @@ async function restorePendingRequests() {
       formView.style.display = "none";
       progressView.style.display = "block";
 
-      const requests: WordRequestState[] = data.map((row: any) => ({
-        id: row.id,
-        word: row.word_kr,
-        status: "pending",
-        timestamp: new Date(row.created_at).getTime(),
-        error: row.my_notes,
-      }));
+      const requests: WordRequestState[] = data.map(
+        (row: {
+          id: string | number;
+          word_kr: string;
+          created_at: string;
+          my_notes?: string;
+        }) => ({
+          id: row.id,
+          word: row.word_kr,
+          status: "pending",
+          timestamp: new Date(row.created_at).getTime(),
+          error: row.my_notes,
+        }),
+      );
 
       trackProgress(
         requests,
@@ -593,17 +612,15 @@ function renderPreview(container: HTMLElement, word: string, level: string) {
   const isSkeleton = !word;
   const displayWord = word || "";
 
-  container.innerHTML = `
+  // Check if structure exists to avoid full re-render
+  if (!container.querySelector(".card")) {
+    container.innerHTML = `
     <div class="card" style="height: 180px; pointer-events: none; transform: none; box-shadow: var(--shadow-sm);">
         <div class="card-inner">
             <div class="card-front" style="background: var(--surface-2); border: 1px solid var(--border-color);">
                 <div class="card-main" style="justify-content: center; padding: 15px;">
-                    <div class="card-level-stars" style="font-size: 24px; margin-bottom: 8px;">${level}</div>
-                    ${
-                      isSkeleton
-                        ? `<div class="skeleton-pulse" style="height: 32px; width: 60%; border-radius: 8px; margin: 0 auto;"></div>`
-                        : `<div class="word" style="font-size: 32px; margin-bottom: 0;">${escapeHtml(displayWord)}</div>`
-                    }
+                    <div class="card-level-stars" style="font-size: 24px; margin-bottom: 8px;"></div>
+                    <div id="preview-word-container"></div>
                     <div class="card-tags" style="margin-top: 12px; opacity: 0.7;">
                         <span class="tag-pill topic">🏷️ Тема</span>
                         <span class="tag-pill category">🔹 Категория</span>
@@ -614,6 +631,27 @@ function renderPreview(container: HTMLElement, word: string, level: string) {
     </div>
     <div style="text-align: center; font-size: 11px; color: var(--text-tertiary); margin-top: 8px; text-transform: uppercase; letter-spacing: 1px;">Предпросмотр</div>
   `;
+  }
+
+  const levelEl = container.querySelector(".card-level-stars");
+  if (levelEl && levelEl.textContent !== level) levelEl.textContent = level;
+
+  const wordContainer = container.querySelector("#preview-word-container");
+  if (wordContainer) {
+    if (isSkeleton) {
+      if (!wordContainer.querySelector(".skeleton-pulse")) {
+        wordContainer.innerHTML = `<div class="skeleton-pulse" style="height: 32px; width: 60%; border-radius: 8px; margin: 0 auto;"></div>`;
+      }
+    } else {
+      const wordEl = wordContainer.querySelector(".word");
+      if (wordEl) {
+        if (wordEl.textContent !== displayWord)
+          wordEl.textContent = displayWord;
+      } else {
+        wordContainer.innerHTML = `<div class="word" style="font-size: 32px; margin-bottom: 0;">${escapeHtml(displayWord)}</div>`;
+      }
+    }
+  }
 }
 
 function trackProgress(
@@ -633,9 +671,9 @@ function trackProgress(
     progressView.querySelector(".modal-body-container") || progressView;
   let errorCount = 0;
 
-  let vocabChannel: any = null;
+  let vocabChannel: RealtimeChannel | null = null;
 
-  let requestChannel: any = null;
+  let requestChannel: RealtimeChannel | null = null;
   let safetyTimeout: number | null = null;
   let observer: MutationObserver | null = null;
   let workerWarningTimeout: number | null = null;
@@ -769,7 +807,7 @@ function trackProgress(
     // Если статус уже есть (например, при восстановлении), используем его, иначе pending
     const initialStatus = req.status === "error" ? "error" : "pending";
     requestProgress.set(req.id, {
-      status: initialStatus as any,
+      status: initialStatus,
       word: req.word,
       error: req.error,
     });
@@ -815,7 +853,7 @@ function trackProgress(
                     <span class="progress-icon">${icon}</span>
                     <span class="progress-text">${text}</span>
                 </div>
-                <button class="btn-icon-tiny-cancel" data-action="cancel-single-request" data-id="${id}" title="Отменить и удалить">✕</button>
+                <button class="btn-icon-tiny-cancel" data-action="cancel-single-request" data-id="${id}" title="Отменить и удалить" aria-label="Отменить и удалить">✕</button>
             </div>
         `;
       })
@@ -981,7 +1019,7 @@ function trackProgress(
   // Set initial stage to 'ai' to start the progress
   requestProgress.forEach((item) => {
     if (item.status === "pending") {
-      item.status = WORD_REQUEST_STATUS.AI as any;
+      item.status = WORD_REQUEST_STATUS.AI as "ai";
     }
   });
   updateUIWithStages();
@@ -1039,31 +1077,43 @@ function trackProgress(
 
       if (!error && data) {
         let changed = false;
-        data.forEach((row: any) => {
-          const progress = requestProgress.get(row.id);
-          if (progress) {
-            let newStatus = progress.status;
-            // Маппинг статусов из БД в UI
-            if (row.status === WORD_REQUEST_STATUS.PROCESSED)
-              newStatus = "done";
-            else if (row.status === WORD_REQUEST_STATUS.ERROR)
-              newStatus = "error";
-            else if (row.status === WORD_REQUEST_STATUS.AI) newStatus = "ai";
-            else if (row.status === WORD_REQUEST_STATUS.AUDIO)
-              newStatus = "audio";
+        data.forEach(
+          (row: {
+            id: string | number;
+            status: string;
+            my_notes: string;
+            word_kr: string;
+          }) => {
+            const progress = requestProgress.get(row.id);
+            if (progress) {
+              let newStatus = progress.status;
+              // Маппинг статусов из БД в UI
+              if (row.status === WORD_REQUEST_STATUS.PROCESSED)
+                newStatus = "done";
+              else if (row.status === WORD_REQUEST_STATUS.ERROR)
+                newStatus = "error";
+              else if (row.status === WORD_REQUEST_STATUS.AI) newStatus = "ai";
+              else if (row.status === WORD_REQUEST_STATUS.AUDIO)
+                newStatus = "audio";
 
-            if (newStatus !== progress.status) {
-              progress.status = newStatus;
-              if (newStatus === "done") progress.justFinished = true;
-              if (newStatus === "error") {
-                progress.error = row.my_notes || "Ошибка обработки";
-                // Увеличиваем счетчик ошибок только если это новая ошибка
-                if (progress.status !== "error") errorCount++;
+              if (newStatus !== progress.status) {
+                progress.status = newStatus as
+                  | "pending"
+                  | "ai"
+                  | "audio"
+                  | "done"
+                  | "error";
+                if (newStatus === "done") progress.justFinished = true;
+                if (newStatus === "error") {
+                  progress.error = row.my_notes || "Ошибка обработки";
+                  // Увеличиваем счетчик ошибок только если это новая ошибка
+                  if (progress.status !== "error") errorCount++;
+                }
+                changed = true;
               }
-              changed = true;
             }
-          }
-        });
+          },
+        );
         if (changed) updateUIWithStages();
       }
     } catch (e) {
@@ -1079,14 +1129,16 @@ function trackProgress(
   pollStatus();
 
   // --- Realtime Listeners ---
-  const handleVocabInsert = (payload: RealtimePostgresChangesPayload<any>) => {
-    const newWord = payload.new as { word_kr: string };
+  const handleVocabInsert = (
+    payload: RealtimePostgresChangesPayload<{ word_kr: string }>,
+  ) => {
+    const newWord = payload.new;
     if (!newWord || !("word_kr" in newWord)) return;
 
     // Find the request that matches the newly inserted word
     for (const progress of requestProgress.values()) {
       if (progress.word === newWord.word_kr && progress.status !== "done") {
-        progress.status = WORD_REQUEST_STATUS.AUDIO as any;
+        progress.status = WORD_REQUEST_STATUS.AUDIO as "audio";
         updateUIWithStages();
         break; // Assume one request per word_kr for now
       }
@@ -1116,8 +1168,15 @@ function trackProgress(
         table: DB_TABLES.WORD_REQUESTS,
         filter: `id=in.(${requests.map((r) => r.id).join(",")})`,
       },
-      (payload: RealtimePostgresChangesPayload<any>) => {
-        const updated = payload.new as any;
+      (
+        payload: RealtimePostgresChangesPayload<{
+          id: string | number;
+          status: string;
+          my_notes?: string;
+        }>,
+      ) => {
+        const updated = payload.new;
+        if (!updated || !("id" in updated)) return;
         const progress = requestProgress.get(updated.id);
         if (
           progress &&

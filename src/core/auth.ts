@@ -623,23 +623,51 @@ export async function handleDeleteAccount() {
       const uid = session.user.id;
 
       try {
-        // Удаляем данные из всех таблиц
-        await client.from(DB_TABLES.USER_PROGRESS).delete().eq("user_id", uid);
-        await client
-          .from(DB_TABLES.USER_GLOBAL_STATS)
-          .delete()
-          .eq("user_id", uid);
-        await client
-          .from(DB_TABLES.USER_VOCABULARY)
-          .delete()
-          .eq("user_id", uid);
-        await client.from(DB_TABLES.WORD_REQUESTS).delete().eq("user_id", uid);
-        await client.from(DB_TABLES.USER_LISTS).delete().eq("user_id", uid);
+        // --- Deleting user data from all related tables ---
 
-        // Выходим из системы
+        // 1. Delete avatar from storage
+        await AuthService.deleteAvatar(uid);
+
+        // 2. Get all list IDs owned by the user
+        const { data: lists, error: listError } = await client
+          .from(DB_TABLES.USER_LISTS)
+          .select("id")
+          .eq("user_id", uid);
+
+        if (listError) throw listError;
+
+        if (lists && lists.length > 0) {
+          const listIds = lists.map((l) => l.id);
+          // 3. Delete items from those lists first
+          await client
+            .from(DB_TABLES.LIST_ITEMS)
+            .delete()
+            .in("list_id", listIds);
+        }
+
+        // 4. Delete all other user-specific data in parallel
+        await Promise.all([
+          client.from(DB_TABLES.USER_PROGRESS).delete().eq("user_id", uid),
+          client.from(DB_TABLES.USER_GLOBAL_STATS).delete().eq("user_id", uid),
+          client.from(DB_TABLES.WORD_REQUESTS).delete().eq("user_id", uid),
+          client.from(DB_TABLES.USER_LISTS).delete().eq("user_id", uid),
+          // Delete words created by the user from the main vocabulary table
+          client.from(DB_TABLES.VOCABULARY).delete().eq("created_by", uid),
+        ]);
+
+        // 5. Call the Edge Function to delete the user from auth.users
+        const { error: functionError } =
+          await client.functions.invoke("delete-user");
+
+        if (functionError) {
+          // Even if the function fails, we proceed with local cleanup.
+          // The user data is already deleted from tables.
+          console.error("Edge Function delete-user error:", functionError);
+          showToast("❌ Ошибка полного удаления аккаунта на сервере.");
+        }
+
+        // 6. Sign out and clean up local data
         await AuthService.signOut();
-
-        // Очищаем локальное хранилище
         localStorage.clear();
 
         alert("Аккаунт и все данные удалены.");
@@ -647,6 +675,7 @@ export async function handleDeleteAccount() {
       } catch (e) {
         console.error("Delete account error:", e);
         showToast("❌ Ошибка при удалении данных");
+        showToast("❌ Ошибка при удалении данных: " + (e as Error).message);
       }
     },
     {

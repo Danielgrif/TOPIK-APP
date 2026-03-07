@@ -24,7 +24,7 @@ export async function openTrashModal() {
           <h3>🗑️ Корзина</h3>
           <div style="display: flex; align-items: center; gap: 10px;">
             <button class="btn-text" data-action="empty-trash" style="color: var(--danger); font-size: 13px; font-weight: 600;">Очистить всё</button>
-            <button class="btn btn-icon close-modal-btn" data-close-modal="${modalId}">✕</button>
+            <button class="btn btn-icon close-modal-btn" data-close-modal="${modalId}" aria-label="Закрыть">✕</button>
           </div>
         </div>
         <div id="trash-list" class="trash-list-container">
@@ -84,8 +84,8 @@ async function loadTrashItems() {
         <div class="trash-item-date">${w.deleted_at ? new Date(w.deleted_at).toLocaleDateString() : ""}</div>
       </div>
       <div class="trash-item-actions">
-        <button class="btn-icon" data-action="restore-word" data-value="${w.id}" title="Восстановить">♻️</button>
-        <button class="btn-icon" data-action="delete-word-permanent" data-value="${w.id}" title="Удалить навсегда" style="color:var(--danger);">✕</button>
+        <button class="btn-icon" data-action="restore-word" data-value="${w.id}" title="Восстановить" aria-label="Восстановить">♻️</button>
+        <button class="btn-icon" data-action="delete-word-permanent" data-value="${w.id}" title="Удалить навсегда" style="color:var(--danger);" aria-label="Удалить навсегда">✕</button>
       </div>
     </div>
   `;

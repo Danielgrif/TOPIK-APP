@@ -17,7 +17,7 @@ export async function openFailedRequestsModal() {
         <div class="modal-header">
           <h3>❌ Ошибочные Заявки</h3>
           <div class="header-actions">
-            <button class="btn btn-icon close-modal-btn" data-close-modal="${modalId}">✕</button>
+            <button class="btn btn-icon close-modal-btn" data-close-modal="${modalId}" aria-label="Закрыть">✕</button>
           </div>
         </div>
         <div id="failed-requests-list" class="trash-list-container">
@@ -70,7 +70,7 @@ async function loadFailedRequests() {
                 <div class="trash-item-date">${w.created_at ? new Date(w.created_at).toLocaleDateString() : ""}</div>
               </div>
               <div class="trash-item-actions">
-                <button class="btn-icon" data-action="retry-request" data-id="${w.id}" title="Повторить отправку">↻</button>
+                <button class="btn-icon" data-action="retry-request" data-id="${w.id}" title="Повторить отправку" aria-label="Повторить отправку">↻</button>
               </div>
             </div>
           `;
@@ -106,11 +106,3 @@ async function loadFailedRequests() {
       });
     });
 }
-
-declare global {
-  interface Window {
-    openFailedRequestsModal: typeof openFailedRequestsModal;
-  }
-}
-
-window.openFailedRequestsModal = openFailedRequestsModal;

@@ -192,7 +192,7 @@ async function loadLeaderboard() {
         <div style="font-size: 40px; margin-bottom: 10px;">📡</div>
         <div style="margin-bottom: 5px;">Не удалось загрузить таблицу лидеров</div>
         <div style="font-size: 12px; color: var(--danger); margin-bottom: 15px; max-width: 250px; margin-left: auto; margin-right: auto; line-height: 1.4;">${escapeHtml(errorMessage)}</div>
-        <button class="btn btn-quiz" onclick="document.querySelector('[data-close-modal=\\'leaderboard-modal\\']').click(); setTimeout(() => import('./ui/ui_leaderboard.ts').then(m => m.openLeaderboard()), 100);">
+        <button class="btn btn-quiz" data-action="open-leaderboard">
           ↻ Повторить
         </button>
       </div>`;
@@ -261,7 +261,8 @@ function renderLeaderboard(
       <div class="leaderboard-item ${isMe ? "is-me" : ""} ${rankClass}">
           <div class="lb-rank">${rankDisplay}</div>
           <div class="lb-avatar">
-              ${avatar ? `<img src="${escapeHtml(avatar)}" alt="Avatar">` : `<div class="lb-avatar-placeholder">${name.charAt(0).toUpperCase()}</div>`}
+              ${avatar ? `<img src="${escapeHtml(avatar)}" alt="Avatar" loading="lazy">` : `<div class="lb-avatar-placeholder">${name.charAt(0).toUpperCase()}</div>`}
+              ${avatar ? `<img src="${escapeHtml(avatar)}" alt="Avatar" loading="lazy" width="40" height="40">` : `<div class="lb-avatar-placeholder">${name.charAt(0).toUpperCase()}</div>`}
           </div>
           <div class="lb-info">
               <div class="lb-name">${escapeHtml(name)} ${isMe ? "(Вы)" : ""}</div>

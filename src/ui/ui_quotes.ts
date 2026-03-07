@@ -29,8 +29,8 @@ export function renderFavoriteQuotes() {
         ${quote.literal_translation ? `<div class="quote-literal">(${escapeHtml(quote.literal_translation)})</div>` : ""}
       </div>
       <div class="quote-actions">
-        <button class="btn-icon speak-quote-btn">🔊</button>
-        <button class="btn-icon delete-quote-btn">🗑</button>
+        <button class="btn-icon speak-quote-btn" aria-label="Прослушать">🔊</button>
+        <button class="btn-icon delete-quote-btn" aria-label="Удалить">🗑</button>
       </div>
     `;
 

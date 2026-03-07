@@ -65,6 +65,7 @@ function updateBulkBar() {
           removeBtn.className = "btn-icon";
           removeBtn.setAttribute("data-action", "bulk-remove-list");
           removeBtn.title = "Исключить из текущего списка";
+          removeBtn.setAttribute("aria-label", "Исключить из текущего списка");
           removeBtn.innerHTML = "➖";
           removeBtn.style.color = "var(--warning)";
           // Вставляем перед кнопкой удаления (обычно последняя)
@@ -298,14 +299,14 @@ export function bulkAddToList() {
             </div>
         ` +
       `
-        <div class="multiselect-item" onclick="window.createNewListForBulk()">
+        <div class="multiselect-item" data-action="create-new-list-bulk">
             <span style="margin-left: 10px; font-weight: bold; color: var(--primary);">➕ Создать новый список...</span>
         </div>
       ` +
       myLists
         .map(
           (list: UserList) => `
-            <div class="multiselect-item" onclick="window.handleBulkAddToList('${list.id}')">
+            <div class="multiselect-item" data-action="bulk-add-to-list-item" data-value="${list.id}">
                 <span style="margin-left: 10px;">${escapeHtml(list.icon || "📁")} ${escapeHtml(list.title)}</span>
             </div>
         `,

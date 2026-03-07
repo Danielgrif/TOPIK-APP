@@ -34,7 +34,7 @@ function buildReviewModal(queue: Word[]) {
     modalEl.className = "modal";
     modalEl.setAttribute("role", "dialog");
     modalEl.setAttribute("aria-modal", "true");
-    modalEl.innerHTML = `<div class="modal-content"><div class="modal-header"><h3>🔁 Повторение <span id="review-counter" style="font-size:0.6em; opacity:0.7; margin-left:10px;"></span></h3><button class="btn btn-icon close-modal-btn" id="review-close-btn">✕</button></div><div id="review-container"></div></div>`;
+    modalEl.innerHTML = `<div class="modal-content"><div class="modal-header"><h3>🔁 Повторение <span id="review-counter" style="font-size:0.6em; opacity:0.7; margin-left:10px;"></span></h3><button class="btn btn-icon close-modal-btn" id="review-close-btn" aria-label="Закрыть">✕</button></div><div id="review-container"></div></div>`;
     document.body.appendChild(modalEl);
   }
 

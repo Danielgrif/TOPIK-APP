@@ -37,10 +37,10 @@ function createShopModal() {
   modal.innerHTML = `
         <div class="modal-content shop-modal-content">
             <div class="modal-header shop-header">
-                <h3>Магазин</h3>
+                <h3>🛒 Магазин</h3>
                 <div class="shop-header-right">
                     <div class="shop-points" id="shop-user-points">💰 ${state.userStats.coins || 0}</div>
-                    <button class="btn-icon close-modal-btn" data-close-modal="shop-modal">✕</button>
+                    <button class="btn-icon close-modal-btn" data-close-modal="shop-modal" aria-label="Закрыть">✕</button>
                 </div>
             </div>
             
@@ -67,8 +67,8 @@ function createShopModal() {
 
 export function openShopModal() {
   createShopModal();
+  switchShopTab("all");
   renderDailyRewardUI();
-  updateShopUI();
 
   // Reset scroll position when opening
   const container = document.getElementById("shop-scroll-container");

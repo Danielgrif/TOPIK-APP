@@ -1,47 +1,30 @@
 <!-- Shop Modal -->
 <div id="shop-modal" class="modal">
-  <div class="modal-content">
-    <div class="modal-header">
+  <div class="modal-content shop-modal-content">
+    <div class="modal-header shop-header">
       <h3>🛒 Магазин</h3>
-      <div class="header-actions">
-        <div class="shop-balance" id="shop-balance-container">
-          💰 <span id="shop-balance">0</span>
-        </div>
-        <button class="btn-icon close-modal-btn" data-close-modal="shop-modal">✕</button>
+      <div class="shop-header-right">
+        <div class="shop-points" id="shop-user-points">💰 0</div>
+        <button class="btn-icon close-modal-btn" data-close-modal="shop-modal" aria-label="Закрыть">✕</button>
       </div>
     </div>
-    <div class="modal-body">
-      <div class="segment-control" style="margin-bottom: 20px;">
-        <button class="segment-btn active" onclick="window.switchShopTab('items')">Предметы</button>
-        <button class="segment-btn" onclick="window.switchShopTab('rewards')">Награды</button>
-      </div>
-
-      <div id="shop-items-tab">
-        <div class="shop-item">
-          <div class="shop-item-icon">❄️</div>
-          <div class="shop-item-info">
-            <div class="shop-item-title">Заморозка серии</div>
-            <div class="shop-item-desc">Сохранит вашу серию, если пропустите день.</div>
-          </div>
-          <button class="btn btn-primary shop-buy-btn" data-action="buyItem" data-value="streak_freeze">
-            1000 💰
-          </button>
+    
+    <div class="shop-tabs">
+        <div class="segment-control">
+            <button class="segment-btn active" data-action="switch-shop-tab" data-value="all">Все</button>
+            <button class="segment-btn" data-action="switch-shop-tab" data-value="theme">Темы</button>
+            <button class="segment-btn" data-action="switch-shop-tab" data-value="feature">Улучшения</button>
+            <button class="segment-btn" data-action="switch-shop-tab" data-value="rewards">🎁 Награды</button>
         </div>
-        <!-- More items can be added here -->
-      </div>
+    </div>
 
-      <div id="shop-rewards-tab" style="display: none;">
-        <div class="shop-item">
-          <div class="shop-item-icon">🎁</div>
-          <div class="shop-item-info">
-            <div class="shop-item-title">Ежедневная награда</div>
-            <div class="shop-item-desc">Заходите каждый день и получайте монеты!</div>
-          </div>
-          <button id="daily-reward-btn" class="btn btn-primary shop-buy-btn" data-action="claimDailyReward">
-            Получить
-          </button>
+    <div class="modal-body-container" id="shop-scroll-container">
+        <!-- Daily Reward Section -->
+        <div id="daily-reward-section" style="display: none;"></div>
+
+        <div class="shop-grid" id="shop-items-container">
+            <!-- Items will be rendered here -->
         </div>
-      </div>
     </div>
   </div>
 </div>

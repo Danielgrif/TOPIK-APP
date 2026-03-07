@@ -49,7 +49,7 @@ import {
   resetSearchHandler,
   setupGridEffects,
   restoreScroll,
-  toggleWordInList,
+  render,
 } from "./ui/ui_card.ts";
 import {
   openModal,
@@ -152,6 +152,7 @@ import {
   manageMyWords,
   clearCollectionFilter,
   editListTitleInline,
+  toggleWordInList,
 } from "./ui/ui_collections.ts";
 import {
   openEditWordModal,
@@ -1101,7 +1102,13 @@ function updateDbStatus(status: "active" | "waking" | "error") {
 }
 
 function setupNetworkListeners() {
-  const indicator = document.getElementById("offline-indicator");
+  let indicator = document.getElementById("offline-indicator");
+  if (!indicator) {
+    indicator = document.createElement("div");
+    indicator.id = "offline-indicator";
+    indicator.textContent = "📡 Нет подключения к интернету";
+    document.body.appendChild(indicator);
+  }
 
   const updateStatus = () => {
     if (navigator.onLine) {
@@ -1724,8 +1731,6 @@ if (document.readyState === "loading") {
 }
 
 Object.assign(window, {
-  openModal,
-  closeModal,
   openConfirm,
   closeConfirm,
   exportProgress: () =>

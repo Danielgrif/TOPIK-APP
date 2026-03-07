@@ -21,7 +21,7 @@ export function openMistakesModal() {
         <div class="modal-header">
           <h3>⚠️ Анализ ошибок</h3>
           <div class="header-actions">
-            <button class="btn btn-icon close-modal-btn" data-close-modal="${modalId}">✕</button>
+            <button class="btn btn-icon close-modal-btn" data-close-modal="${modalId}" aria-label="Закрыть">✕</button>
           </div>
         </div>
         <div id="mistakes-content"></div>

@@ -2098,3 +2098,48 @@ button[data-action="submit-word-request"]:active {
 .toast-undo-bar {
     position: absolute; bottom: 0; left: 0; height: 3px; background: rgba(255,255,255,0.7); width: 100%;
 }
+
+/* --- Update Notification --- */
+#update-notification {
+    position: fixed;
+    bottom: 20px;
+    left: 20px;
+    background: var(--surface-1);
+    padding: 12px 20px;
+    border-radius: 16px;
+    box-shadow: var(--shadow-lg);
+    border: 1px solid var(--border-color);
+    z-index: 10000;
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    transform: translateY(100px);
+    opacity: 0;
+    transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+#update-notification.show {
+    transform: translateY(0);
+    opacity: 1;
+}
+
+/* --- Offline Indicator --- */
+#offline-indicator {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    background: var(--danger);
+    color: white;
+    text-align: center;
+    padding: 4px;
+    font-size: 12px;
+    font-weight: 700;
+    z-index: 10001;
+    transform: translateY(-100%);
+    transition: transform 0.3s ease;
+}
+
+#offline-indicator.visible {
+    transform: translateY(0);
+}

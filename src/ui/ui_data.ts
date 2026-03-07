@@ -43,6 +43,12 @@ export async function resetAllProgress() {
       achievements: [],
       survivalHealth: 0,
       lastFreezeDate: null,
+      timeFreeze: 0,
+      skipQuestion: 0,
+      fiftyFifty: 0,
+      weeklyXp: 0,
+      league: "Bronze",
+      lastWeekId: "",
     };
     state.learned = new Set();
     state.mistakes = new Set();
@@ -61,9 +67,14 @@ export async function resetAllProgress() {
         .from("user_progress")
         .delete()
         .eq("user_id", data.session.user.id);
+      // Также сбрасываем глобальную статистику (удаляем строку, она пересоздастся при входе)
+      await client
+        .from("user_global_stats")
+        .delete()
+        .eq("user_id", data.session.user.id);
     }
 
-    const shopBalance = document.getElementById("shop-balance");
+    const shopBalance = document.getElementById("shop-user-points");
     if (shopBalance) shopBalance.innerText = "0";
 
     scheduleSaveState();

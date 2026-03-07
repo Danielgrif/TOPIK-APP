@@ -217,7 +217,7 @@ export const QuizStrategies: Record<string, Strategy> = {
     render(word, container, onAnswer, qEl) {
       let html = "";
       if (word.image) {
-        html += `<img src="${word.image}" class="quiz-image">`;
+        html += `<img src="${word.image}" class="quiz-image" loading="lazy">`;
       }
       html += `<div class="quiz-question-text">${escapeHtml(word.translation || "")}</div><div class="quiz-question-sub">Напишите на корейском</div>`;
 

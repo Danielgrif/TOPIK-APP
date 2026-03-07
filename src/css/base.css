@@ -30,7 +30,7 @@ html {
     --border-color: #ddd6fe;
     --text-main: #111827;     /* Gray-900 - High contrast */
     --text-sub: #4b5563;      /* Gray-600 - Readable secondary */
-    --text-tertiary: #9ca3af; /* Gray-400 */
+    --text-tertiary: #6b7280; /* Gray-500 - Better contrast (4.5:1) */
     --text-inverse: #ffffff;
 
     /* --- Effects --- */

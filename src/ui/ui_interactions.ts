@@ -14,11 +14,13 @@ export function showUpdateNotification(worker: ServiceWorker) {
             <button class="btn btn-quiz" id="update-btn" style="padding: 6px 14px; font-size:12px; border-radius:20px; min-height: 32px;">Обновить</button>
         `;
     document.body.appendChild(el);
-    const btn = document.getElementById("update-btn");
-    if (btn)
-      btn.onclick = () =>
-        worker.postMessage({ type: SW_MESSAGES.SKIP_WAITING });
   }
+
+  // Обновляем обработчик всегда, даже если элемент уже существует
+  const btn = document.getElementById("update-btn");
+  if (btn)
+    btn.onclick = () => worker.postMessage({ type: SW_MESSAGES.SKIP_WAITING });
+
   setTimeout(() => el!.classList.add("show"), 100);
 }
 

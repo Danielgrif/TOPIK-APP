@@ -3,7 +3,6 @@ import { showToast, playTone, showComboEffect } from "../utils/utils.ts";
 import { showLevelUpAnimation } from "../ui/ui_animations.ts";
 import { Scheduler } from "./scheduler.ts";
 import { scheduleSaveState } from "./db.ts";
-import { openModal } from "../ui/ui_modal.ts";
 
 export const LEAGUES = [
   "Bronze",
@@ -1438,7 +1437,7 @@ export function openRolesModal() {
         <div class="modal-content" style="max-width: 400px;">
             <div class="modal-header">
                 <h3>🏆 Звания</h3>
-                <button class="btn btn-icon close-modal-btn" data-close-modal="roles-modal">✕</button>
+                <button class="btn btn-icon close-modal-btn" data-close-modal="roles-modal" aria-label="Закрыть">✕</button>
             </div>
             <div class="modal-body" style="max-height: 60vh; overflow-y: auto; padding-right: 5px;">
                 ${progressHtml}
@@ -1447,5 +1446,7 @@ export function openRolesModal() {
         </div>
     `;
 
-  openModal("roles-modal");
+  document.dispatchEvent(
+    new CustomEvent("open-modal", { detail: { id: "roles-modal" } }),
+  );
 }

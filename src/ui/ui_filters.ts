@@ -132,6 +132,19 @@ export function populateFilters() {
   // Render Topic Modal Content
   const topicContainer = document.getElementById("topic-modal-content");
   if (topicContainer) {
+    // Save state before wipe
+    let savedScroll = 0;
+    const existingList = topicContainer.querySelector(
+      ".multiselect-scroll-container",
+    );
+    if (existingList) savedScroll = existingList.scrollTop;
+
+    let savedSearch = "";
+    const existingSearch = topicContainer.querySelector(
+      "input.search-box",
+    ) as HTMLInputElement;
+    if (existingSearch) savedSearch = existingSearch.value;
+
     topicContainer.innerHTML = "";
 
     // --- Search Input for Topics ---
@@ -140,6 +153,7 @@ export function populateFilters() {
     searchInput.placeholder = "🔍 Поиск тем...";
     searchInput.className = "search-box";
     searchInput.style.marginBottom = "10px";
+    searchInput.value = savedSearch;
     searchInput.oninput = (e) => {
       const val = (e.target as HTMLInputElement).value.toLowerCase();
       topicContainer.querySelectorAll(".multiselect-item").forEach((el) => {
@@ -200,6 +214,12 @@ export function populateFilters() {
       })),
     ];
     let searchFilteredItems = allItems;
+    if (savedSearch) {
+      const val = savedSearch.toLowerCase();
+      searchFilteredItems = allItems.filter((item) =>
+        item.label.toLowerCase().includes(val),
+      );
+    }
 
     const renderVisibleItems = () => {
       const scrollTop = listContainer.scrollTop;
@@ -240,8 +260,8 @@ export function populateFilters() {
 
     listContainer.onscroll = renderVisibleItems;
     sizer.style.height = `${searchFilteredItems.length * VIRTUAL_ITEM_HEIGHT}px`;
+    if (savedScroll > 0) listContainer.scrollTop = savedScroll;
     renderVisibleItems();
-    listContainer.scrollTop = 0; // Reset scroll on open
   }
 
   populateCategoryFilter();
@@ -265,6 +285,19 @@ function populateCategoryFilter() {
   // Render Category Modal Content
   const catContainer = document.getElementById("category-modal-content");
   if (catContainer) {
+    // Save state
+    let savedScroll = 0;
+    const existingList = catContainer.querySelector(
+      ".multiselect-scroll-container",
+    );
+    if (existingList) savedScroll = existingList.scrollTop;
+
+    let savedSearch = "";
+    const existingSearch = catContainer.querySelector(
+      "input.search-box",
+    ) as HTMLInputElement;
+    if (existingSearch) savedSearch = existingSearch.value;
+
     catContainer.innerHTML = "";
 
     const getCategories = () => {
@@ -292,6 +325,7 @@ function populateCategoryFilter() {
     searchInput.placeholder = "🔍 Поиск категорий...";
     searchInput.className = "search-box";
     searchInput.style.marginBottom = "10px";
+    searchInput.value = savedSearch;
 
     const actionsDiv = document.createElement("div");
     actionsDiv.className = "multiselect-actions";
@@ -342,6 +376,12 @@ function populateCategoryFilter() {
       })),
     ];
     let searchFilteredItems = allItems;
+    if (savedSearch) {
+      const val = savedSearch.toLowerCase();
+      searchFilteredItems = allItems.filter((item) =>
+        item.label.toLowerCase().includes(val),
+      );
+    }
 
     const renderVisibleItems = () => {
       const scrollTop = listContainer.scrollTop;
@@ -381,8 +421,8 @@ function populateCategoryFilter() {
 
     listContainer.onscroll = renderVisibleItems;
     sizer.style.height = `${searchFilteredItems.length * VIRTUAL_ITEM_HEIGHT}px`;
+    if (savedScroll > 0) listContainer.scrollTop = savedScroll;
     renderVisibleItems();
-    listContainer.scrollTop = 0; // Reset scroll on open
   }
 }
 
