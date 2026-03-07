@@ -656,7 +656,7 @@ export async function handleDeleteAccount() {
         ]);
 
         // 5. Call the Edge Function to delete the user from auth.users
-        const { error: functionError } =
+        const { data: funcData, error: functionError } =
           await client.functions.invoke("delete-user");
 
         if (functionError) {
@@ -664,6 +664,8 @@ export async function handleDeleteAccount() {
           // The user data is already deleted from tables.
           console.error("Edge Function delete-user error:", functionError);
           showToast("❌ Ошибка полного удаления аккаунта на сервере.");
+        } else {
+          console.info("✅ Edge Function delete-user success:", funcData);
         }
 
         // 6. Sign out and clean up local data
@@ -674,7 +676,6 @@ export async function handleDeleteAccount() {
         location.reload();
       } catch (e) {
         console.error("Delete account error:", e);
-        showToast("❌ Ошибка при удалении данных");
         showToast("❌ Ошибка при удалении данных: " + (e as Error).message);
       }
     },

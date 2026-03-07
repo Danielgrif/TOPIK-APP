@@ -766,7 +766,7 @@ export async function uploadAndSaveImage(
   revealOverlay: HTMLElement,
   deleteBtn: HTMLButtonElement,
 ) {
-  const compressedBlob = await compressImage(imageBlob as File);
+  const compressedBlob = await compressImage(imageBlob);
   const fileName = `${item.id}_custom_${Date.now()}.jpg`;
 
   const { error: uploadError } = await client.storage
@@ -837,13 +837,13 @@ export function showFullScreenImage(src: string, alt: string) {
 
 /**
  * Compresses an image file before upload by drawing it to a canvas.
- * @param file The image file.
+ * @param file The image file or blob.
  * @param maxWidth The maximum width/height of the output image.
  * @param quality The JPEG quality (0 to 1).
  * @returns A promise that resolves with the compressed Blob.
  */
 export function compressImage(
-  file: File,
+  file: Blob,
   maxWidth: number = 1280,
   quality: number = 0.8,
 ): Promise<Blob> {

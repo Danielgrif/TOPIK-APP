@@ -58,9 +58,9 @@ export async function shareStats(themeOverride?: string) {
   ctx.fillStyle = "rgba(255, 255, 255, 0.8)";
   ctx.fillText(new Date().toLocaleDateString(), 42, 105);
 
-  const centerX = 200;
-  const centerY = 320;
-  const radius = 110;
+  const centerX = 400;
+  const centerY = 600;
+  const radius = 180;
 
   ctx.beginPath();
   ctx.arc(centerX, centerY, radius, 0, 2 * Math.PI);
@@ -83,17 +83,19 @@ export async function shareStats(themeOverride?: string) {
   ctx.textAlign = "center";
   ctx.fillStyle = "#ffffff";
   ctx.font = "bold 40px sans-serif";
-  ctx.fillText("LEVEL", centerX, centerY - 100);
+  ctx.fillText("LEVEL", centerX, centerY - 140);
 
-  ctx.font = "bold 160px sans-serif";
-  ctx.fillText(String(state.userStats.level), centerX, centerY + 50);
+  const levelStr = String(state.userStats.level);
+  ctx.font =
+    levelStr.length > 2 ? "bold 120px sans-serif" : "bold 160px sans-serif";
+  ctx.fillText(levelStr, centerX, centerY + 60);
 
   ctx.font = "32px sans-serif";
   ctx.fillStyle = "rgba(255, 255, 255, 0.9)";
   ctx.fillText(
     `${state.userStats.xp} / ${nextLevelXP} XP`,
     centerX,
-    centerY + 300,
+    centerY + 260,
   );
 
   const stats = [
@@ -105,7 +107,7 @@ export async function shareStats(themeOverride?: string) {
     { label: "РЕКОРД", value: state.userStats.sprintRecord || 0, icon: "⚡" },
   ];
 
-  const gridStartX = 760;
+  const gridStartX = 800;
   const gridStartY = 280;
   const cardW = 360;
   const cardH = 220;

@@ -57,6 +57,7 @@ export const DB_TABLES = {
   USER_LISTS: "user_lists",
   LIST_ITEMS: "list_items",
   USER_VOCABULARY: "user_vocabulary",
+  ARTICLES: "articles",
 };
 
 // Имена бакетов Supabase Storage

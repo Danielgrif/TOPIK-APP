@@ -6,7 +6,12 @@ import {
   escapeHtml,
   showComboEffect,
 } from "../utils/utils.ts";
-import { ensureSessionStarted, playAndSpeak, saveAndRender } from "./ui.ts";
+import {
+  ensureSessionStarted,
+  playAndSpeak,
+  saveAndRender,
+  openWritingModal,
+} from "./ui.ts";
 import { closeModal, openModal, openConfirm } from "./ui_modal.ts";
 import { recordAttempt, scheduleSaveState } from "../core/db.ts";
 import { addXP, checkAchievements } from "../core/stats.ts";
@@ -205,6 +210,13 @@ export function buildQuizModes() {
       mode: "essay",
       category: "writing",
     },
+    {
+      id: "writing-ai",
+      emoji: "🤖",
+      label: "AI Письмо",
+      mode: "writing-ai",
+      category: "writing",
+    },
 
     // Audio
     {
@@ -326,7 +338,12 @@ export function buildQuizModes() {
           btn.innerHTML = `<span class="mode-icon">${m.emoji}</span><span class="mode-label">${m.label}</span>`;
           btn.onclick = (e) => {
             createRipple(e, btn);
-            setTimeout(() => startQuizMode(m.mode), 300);
+            if (m.mode === "writing-ai") {
+              closeModal("quiz-modal");
+              setTimeout(() => openWritingModal(), 100);
+            } else {
+              setTimeout(() => startQuizMode(m.mode), 300);
+            }
           };
           grid.appendChild(btn);
         });

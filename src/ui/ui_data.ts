@@ -1,4 +1,4 @@
-import { state } from "../core/state.ts";
+import { state, Session, WordRequestState } from "../core/state.ts";
 import { client } from "../core/supabaseClient.ts";
 import { showToast } from "../utils/utils.ts";
 import { LS_KEYS } from "../core/constants.ts";
@@ -13,6 +13,15 @@ import {
 } from "../core/stats.ts";
 import { openConfirm } from "./ui_modal.ts";
 import { saveAndRender } from "./ui.ts";
+import {
+  Word,
+  WordHistoryItem,
+  DailyChallenge,
+  Achievement,
+  UserStats,
+  StudyGoal,
+  Quote,
+} from "../types/index.ts";
 
 export async function resetAllProgress() {
   try {
@@ -86,7 +95,8 @@ export async function resetAllProgress() {
     showToast("✅ Прогресс полностью сброшен");
   } catch (e: unknown) {
     console.error("resetAllProgress error", e);
-    showToast("Ошибка: " + (e as Error).message);
+    const error = e as Error;
+    showToast("Ошибка: " + (error.message || String(e)));
   }
 }
 
@@ -154,8 +164,19 @@ export function exportProgress() {
             viewMode: state.viewMode,
             studyGoal: state.studyGoal,
             themeColor: state.themeColor,
+            autoTheme: state.autoTheme,
+            autoThemeStart: state.autoThemeStart,
+            autoThemeEnd: state.autoThemeEnd,
+            backgroundMusicEnabled: state.backgroundMusicEnabled,
+            backgroundMusicVolume: state.backgroundMusicVolume,
+            ttsVolume: state.ttsVolume,
+            trashRetentionDays: state.trashRetentionDays,
           },
           searchHistory: state.searchHistory,
+          customWords: state.customWords,
+          wordRequests: state.wordRequests,
+          purchasedItems: state.purchasedItems,
+          favoriteQuotes: state.favoriteQuotes,
         },
         null,
         2,
@@ -176,7 +197,42 @@ export function importProgress(event: Event) {
     try {
       createLocalBackup(); // Создаем резервную копию перед перезаписью
       const target = e.target as FileReader;
-      const data = JSON.parse(target.result as string);
+      const data = JSON.parse(target.result as string) as {
+        stats?: Partial<UserStats>;
+        learned?: unknown[];
+        mistakes?: unknown[];
+        favorites?: unknown[];
+        wordHistory?: unknown;
+        streak?: unknown;
+        sessions?: unknown[];
+        achievements?: unknown[];
+        dailyChallenge?: unknown;
+        searchHistory?: unknown[];
+        customWords?: unknown[];
+        wordRequests?: unknown[];
+        purchasedItems?: string[];
+        favoriteQuotes?: unknown[];
+        settings?: {
+          darkMode?: boolean;
+          hanjaMode?: boolean;
+          audioSpeed?: number;
+          currentVoice?: string;
+          autoUpdate?: boolean;
+          focusMode?: boolean;
+          zenMode?: boolean;
+          viewMode?: string;
+          studyGoal?: StudyGoal;
+          themeColor?: string;
+          lastDailyReward?: number | null;
+          autoTheme?: boolean;
+          autoThemeStart?: number;
+          autoThemeEnd?: number;
+          backgroundMusicEnabled?: boolean;
+          backgroundMusicVolume?: number;
+          ttsVolume?: number;
+          trashRetentionDays?: number;
+        };
+      };
       if (!data || typeof data !== "object")
         throw new Error("Invalid data format");
 
@@ -188,19 +244,44 @@ export function importProgress(event: Event) {
         state.userStats.coins = data.stats.coins || 0;
         state.userStats.streakFreeze = data.stats.streakFreeze || 0;
         state.userStats.lastDailyReward = data.stats.lastDailyReward || null;
+        state.userStats.dailyRewardStreak = data.stats.dailyRewardStreak || 0;
+        state.userStats.survivalHealth = data.stats.survivalHealth || 0;
+        state.userStats.lastFreezeDate = data.stats.lastFreezeDate || null;
+        state.userStats.timeFreeze = data.stats.timeFreeze || 0;
+        state.userStats.skipQuestion = data.stats.skipQuestion || 0;
+        state.userStats.fiftyFifty = data.stats.fiftyFifty || 0;
+        state.userStats.weeklyXp = data.stats.weeklyXp || 0;
+        state.userStats.league = data.stats.league || "Bronze";
+        state.userStats.lastWeekId = data.stats.lastWeekId || "";
       }
-      if (Array.isArray(data.learned)) state.learned = new Set(data.learned);
-      if (Array.isArray(data.mistakes)) state.mistakes = new Set(data.mistakes);
+      if (Array.isArray(data.learned))
+        state.learned = new Set(data.learned as (string | number)[]);
+      if (Array.isArray(data.mistakes))
+        state.mistakes = new Set(data.mistakes as (string | number)[]);
       if (Array.isArray(data.favorites))
-        state.favorites = new Set(data.favorites);
-      if (data.wordHistory) state.wordHistory = data.wordHistory;
-      if (data.streak) state.streak = data.streak;
-      if (Array.isArray(data.sessions)) state.sessions = data.sessions;
+        state.favorites = new Set(data.favorites as (string | number)[]);
+      if (data.wordHistory)
+        state.wordHistory = data.wordHistory as Record<
+          string | number,
+          WordHistoryItem
+        >;
+      if (data.streak) state.streak = data.streak as typeof state.streak;
+      if (Array.isArray(data.sessions))
+        state.sessions = data.sessions as Session[];
       if (Array.isArray(data.achievements))
-        state.achievements = data.achievements;
-      if (data.dailyChallenge) state.dailyChallenge = data.dailyChallenge;
+        state.achievements = data.achievements as Achievement[];
+      if (data.dailyChallenge)
+        state.dailyChallenge = data.dailyChallenge as DailyChallenge;
       if (Array.isArray(data.searchHistory))
-        state.searchHistory = data.searchHistory;
+        state.searchHistory = data.searchHistory as string[];
+      if (Array.isArray(data.customWords))
+        state.customWords = data.customWords as Word[];
+      if (Array.isArray(data.wordRequests))
+        state.wordRequests = data.wordRequests as WordRequestState[];
+      if (Array.isArray(data.purchasedItems))
+        state.purchasedItems = data.purchasedItems;
+      if (Array.isArray(data.favoriteQuotes))
+        state.favoriteQuotes = data.favoriteQuotes as Quote[];
 
       if (data.settings) {
         const s = data.settings;
@@ -216,14 +297,36 @@ export function importProgress(event: Event) {
         if (s.themeColor !== undefined) state.themeColor = s.themeColor;
         if (s.lastDailyReward !== undefined)
           state.userStats.lastDailyReward = s.lastDailyReward;
+        if (s.autoTheme !== undefined) state.autoTheme = s.autoTheme;
+        if (s.autoThemeStart !== undefined)
+          state.autoThemeStart = s.autoThemeStart;
+        if (s.autoThemeEnd !== undefined) state.autoThemeEnd = s.autoThemeEnd;
+        if (s.backgroundMusicEnabled !== undefined)
+          state.backgroundMusicEnabled = s.backgroundMusicEnabled;
+        if (s.backgroundMusicVolume !== undefined)
+          state.backgroundMusicVolume = s.backgroundMusicVolume;
+        if (s.ttsVolume !== undefined) state.ttsVolume = s.ttsVolume;
+        if (s.trashRetentionDays !== undefined)
+          state.trashRetentionDays = s.trashRetentionDays;
       }
+
+      // Помечаем все восстановленные данные как "грязные", чтобы они синхронизировались с облаком
+      const markDirty = (ids: (string | number)[]) => {
+        ids.forEach((id) => state.dirtyWordIds.add(id));
+      };
+
+      if (state.learned.size > 0) markDirty([...state.learned]);
+      if (state.mistakes.size > 0) markDirty([...state.mistakes]);
+      if (state.favorites.size > 0) markDirty([...state.favorites]);
+      if (state.wordHistory) markDirty(Object.keys(state.wordHistory));
 
       saveAndRender();
       invalidateTopicMasteryCache();
       checkAchievements(false);
       showToast("✅ Данные импортированы!");
     } catch (err: unknown) {
-      showToast("❌ Ошибка импорта: " + (err as Error).message);
+      const error = err as Error;
+      showToast("❌ Ошибка импорта: " + (error.message || String(err)));
     }
   };
   reader.readAsText(file);

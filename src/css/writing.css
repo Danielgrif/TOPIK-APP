@@ -1,0 +1,35 @@
+.writing-correction-item {
+    background: var(--surface-1);
+    padding: 10px;
+    border-radius: 8px;
+    margin-bottom: 8px;
+    border-left: 3px solid var(--warning);
+    font-size: 14px;
+}
+
+.writing-correction-original {
+    color: var(--danger);
+    text-decoration: line-through;
+    margin-right: 6px;
+}
+
+.writing-correction-fixed {
+    color: var(--success);
+    font-weight: bold;
+}
+
+.writing-correction-reason {
+    display: block;
+    margin-top: 4px;
+    font-size: 12px;
+    color: var(--text-sub);
+}
+
+.writing-improved-box {
+    background: rgba(16, 185, 129, 0.1);
+    padding: 12px;
+    border-radius: 12px;
+    margin-top: 15px;
+    font-size: 14px;
+    line-height: 1.6;
+}

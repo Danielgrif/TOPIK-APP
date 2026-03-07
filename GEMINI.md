@@ -1,47 +1,36 @@
-# Интеграция с Google Gemini API
+# TOPIK Master Pro - AI Context & Architecture
 
-Этот документ описывает, как Google Gemini используется в проекте TOPIK APP для автоматической генерации контента.
+## Project Overview
+TOPIK Master Pro is an advanced Progressive Web App (PWA) designed for preparing for the TOPIK (Test of Proficiency in Korean) exam. It focuses on vocabulary acquisition, spaced repetition (SM-2), and gamified learning.
 
-## Ключевой файл
+## Tech Stack
+- **Frontend:** TypeScript, HTML5, CSS3 (Variables, Animations). No frameworks (Vanilla JS architecture).
+- **Backend:** Supabase (PostgreSQL, Auth, Storage, Realtime, Edge Functions).
+- **AI/Content:** Python scripts (`scripts/`) using Google Gemini (Content Generation) and EdgeTTS (Audio).
+- **Build:** Vite.
 
-Основная логика взаимодействия с Gemini API находится в `scripts/ai_generator.py`.
+## Core Architecture
+1.  **State Management (`src/core/state.ts`):** Centralized reactive state object. Changes trigger UI updates via custom events.
+2.  **Offline-First (`src/core/db.ts`):** Data is loaded from `localStorage` immediately for instant UI, then synced with Supabase in the background.
+3.  **Sync Logic (`src/core/sync.ts`):** Bidirectional sync for user progress. "Dirty" records are pushed to the cloud.
+4.  **UI Components (`src/ui/`):** Modular UI logic. HTML templates are injected dynamically (`component_loader.ts`).
+5.  **Content Worker (`scripts/content_worker.py`):** Async Python worker that monitors `word_requests` table, generates translations/examples/audio using AI, and updates the `vocabulary` table.
 
-## 1. Промпт-инжиниринг
+## Database Schema (Key Tables)
+- `vocabulary`: The master dictionary. Contains words, translations, examples, audio URLs.
+- `user_progress`: SRS data (SM-2 intervals) for each user-word pair.
+- `user_global_stats`: XP, Level, Coins, Settings.
+- `word_requests`: Queue for AI generation.
+- `user_lists` / `list_items`: Custom user collections.
 
-Сердцем интеграции является функция `_build_prompt`, которая конструирует детализированный промпт для модели.
+## Key Features
+- **SM-2 Algorithm:** Custom implementation in `src/core/scheduler.ts`.
+- **Gamification:** Leagues, XP, Daily Challenges, Shop (`src/core/shop_data.ts`).
+- **Modes:** Sprint, Survival, Typing, Audio, Flashcards.
+- **Hanja:** Dedicated support for Sino-Korean characters.
 
-### Структура Промпта:
-
-1.  **Ролевая модель:** Промпт начинается с инструкции `You are an expert Korean language teacher for Russian speakers`, что настраивает модель на нужный контекст и стиль ответа.
-2.  **Строгий формат JSON:** Модели дается четкое указание вернуть ответ **только** в формате JSON без Markdown-оберток (````json`). Это критически важно для автоматического парсинга.
-3.  **Детализированная структура JSON:** Промпт содержит исчерпывающее описание каждого поля в требуемой JSON-структуре, включая типы данных и возможные значения (например, `frequency`, `tone`).
-4.  **Обработка омонимов:** Промпт инструктирует модель вернуть JSON-массив, если у слова есть несколько значений, и один объект, если значение одно.
-5.  **Валидация данных:** В промпт встроены списки допустимых тем (`valid_topics`) и категорий (`valid_categories`), что заставляет модель придерживаться заранее определенной таксономии.
-6.  **Коррекция ввода:** Модель обучена исправлять опечатки и транслитерацию (например, 'gks' -> '한', 'annyeong' -> '안녕').
-7.  **Анализ Hanja:** Промпт требует всегда объяснять происхождение слова от иероглифов Hanja, если это применимо.
-
-## 2. Взаимодействие с API
-
-Функция `generate_word_data` отвечает за отправку запроса и обработку ответа.
-
-### Ключевые особенности:
-
-*   **Асинхронность:** Используется асинхронный клиент (`self.client.aio.models.generate_content`) для неблокирующей работы в `content_worker.py`.
-*   **Стратегия отказоустойчивости (Fallback):**
-    - В коде определен список `models_to_try`, содержащий несколько моделей Gemini (от `gemini-1.5-flash` до `gemini-pro-latest`).
-    - В случае сбоя запроса к одной модели (например, из-за перегрузки или ошибки), скрипт автоматически пытается выполнить запрос к следующей модели в списке.
-    - Это значительно повышает надежность системы.
-*   **Обработка ошибок квот:** Код специально отлавливает ошибки с кодом `429 (Quota Exceeded)` и переходит к следующей модели, логируя предупреждение.
-*   **Очистка ответа:** Перед парсингом JSON ответ модели очищается от возможных Markdown-блоков, что делает парсинг более надежным.
-
-## 3. Другие сценарии использования
-
-Помимо основного анализа слов, Gemini используется в `ai_handler.py` для вспомогательных задач:
-
-*   `generate_examples`: Генерирует 3 дополнительных примера использования слова.
-*   `generate_grammar_explanation`: Создает подробное объяснение грамматической конструкции в формате Markdown.
-*   `generate_synonyms`: Находит и дополняет синонимы для слова.
-
-## Заключение
-
-Интеграция с Gemini API в этом проекте является примером качественного инжиниринга. Она не просто выполняет запрос, а делает это надежно, эффективно и с расчетом на автоматическую обработку данных благодаря продуманной структуре промптов.
+## Development Guidelines
+- **Strict Typing:** Use TypeScript interfaces (`src/types/index.ts`).
+- **No Frameworks:** Keep the runtime lightweight. Direct DOM manipulation.
+- **Error Handling:** Use `showToast` for user feedback and `console.error` for debugging.
+- **AI Generation:** All heavy content generation happens server-side (Python worker), not in the client.

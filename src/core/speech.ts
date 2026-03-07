@@ -83,9 +83,9 @@ export function checkPronunciation(
         // Setup Visualizer
         if (visualizerCanvas && stream) {
           try {
-            audioContext =
-              new // eslint-disable-next-line @typescript-eslint/no-explicit-any
-              (window.AudioContext || (window as any).webkitAudioContext)();
+            audioContext = new (
+              window.AudioContext || window.webkitAudioContext
+            )();
             const source = audioContext.createMediaStreamSource(stream);
             analyser = audioContext.createAnalyser();
             analyser.fftSize = 2048;

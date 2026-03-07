@@ -150,3 +150,28 @@ export interface LeaderboardEntry {
   avatar_url: string | null;
   league: string;
 }
+
+export interface Article {
+  id: string;
+  title: string;
+  content: string;
+  translation?: string;
+  level: string;
+  topic: string;
+  image_url?: string;
+  audio_url?: string;
+  created_at: string;
+  source?: string;
+}
+
+export interface ConfirmOptions {
+  onCancel?: () => void;
+  confirmText?: string;
+  cancelText?: string;
+  showInput?: boolean;
+  inputPlaceholder?: string;
+  onValidate?: (value: string) => boolean | Promise<boolean>;
+  showCopy?: boolean;
+  copyText?: string;
+  showCancel?: boolean;
+}

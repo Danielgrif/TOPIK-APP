@@ -1,4 +1,5 @@
 import { showToast } from "../utils/utils.ts";
+import { ConfirmOptions } from "../types/index.ts";
 
 // Хранит элемент, который был в фокусе до открытия модального окна
 let lastFocusedElement: HTMLElement | null = null;
@@ -103,17 +104,7 @@ let confirmOnValidate: ((value: string) => boolean | Promise<boolean>) | null =
 export function openConfirm(
   message: string,
   onConfirm: () => void,
-  options: {
-    onCancel?: () => void;
-    confirmText?: string;
-    cancelText?: string;
-    showInput?: boolean;
-    inputPlaceholder?: string;
-    onValidate?: (value: string) => boolean | Promise<boolean>;
-    showCopy?: boolean;
-    copyText?: string;
-    showCancel?: boolean;
-  } = {},
+  options: ConfirmOptions = {},
 ) {
   const modal = document.getElementById("confirm-modal");
   const msgEl = document.getElementById("confirm-message");

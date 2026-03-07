@@ -10,6 +10,8 @@ export {
   editSessionTime,
 } from "../core/session.ts";
 import { Word } from "../types/index.ts";
+export { openReadingModal } from "./ui_reading.ts";
+export { openWritingModal } from "./ui_writing.ts";
 
 /**
  * Saves state to DB/LocalStorage and re-renders the UI.

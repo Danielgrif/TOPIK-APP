@@ -39,9 +39,10 @@ function validateSchema(data: Word[]) {
  * @param stats The user stats object to validate.
  * @returns True if valid, false otherwise.
  */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function validateUserStats(stats: any): boolean {
+function validateUserStats(stats: unknown): boolean {
   if (!stats || typeof stats !== "object") return false;
+
+  const s = stats as Record<string, unknown>;
 
   // Проверяем, что числовые поля действительно числа и не NaN
   const numericFields = [
@@ -52,7 +53,7 @@ function validateUserStats(stats: any): boolean {
     "survivalRecord",
   ];
   const isValid = numericFields.every(
-    (field) => typeof stats[field] === "number" && !isNaN(stats[field]),
+    (field) => typeof s[field] === "number" && !isNaN(s[field] as number),
   );
 
   if (!isValid) console.error("❌ Validation failed for UserStats:", stats);
@@ -132,12 +133,12 @@ export function immediateSaveState() {
     localStorage.setItem(LS_KEYS.VOCAB_CACHE, JSON.stringify(state.dataStore));
     localStorage.setItem(LS_KEYS.TTS_VOLUME, String(state.ttsVolume));
     localStorage.setItem(LS_KEYS.VOCAB_VERSION, VOCABULARY_CACHE_VERSION);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  } catch (e: any) {
+  } catch (e: unknown) {
     console.error("Save error:", e);
+    const error = e as { name?: string };
     if (
-      e.name === "QuotaExceededError" ||
-      e.name === "NS_ERROR_DOM_QUOTA_REACHED"
+      error?.name === "QuotaExceededError" ||
+      error?.name === "NS_ERROR_DOM_QUOTA_REACHED"
     ) {
       showToast("⚠️ Память переполнена! Данные могут не сохраниться.");
     }
@@ -368,10 +369,9 @@ export async function fetchVocabulary() {
         "Request aborted. This might be due to a timeout or navigation.",
       );
     } else if (typeof e === "object" && e !== null) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      if ("message" in e) console.error("Error Message:", (e as any).message);
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      if ("details" in e) console.error("Error Details:", (e as any).details);
+      const err = e as { message?: string; details?: string };
+      if ("message" in err) console.error("Error Message:", err.message);
+      if ("details" in err) console.error("Error Details:", err.details);
     }
     if (state.dataStore.length > 0) {
       showToast("⚠️ Ошибка сети. Используются кэшированные данные.");

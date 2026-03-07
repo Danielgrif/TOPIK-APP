@@ -12,12 +12,20 @@ if (!SUPABASE_URL || !SUPABASE_KEY) {
 
 // Обертка для fetch с таймаутом
 const fetchWithRetries = async (
-  resource: RequestInfo,
-  options: RequestInit = {},
-  defaultRetries = 4,
-  initialDelay = 1500,
-) => {
-  const url = typeof resource === "string" ? resource : resource.url;
+  input: RequestInfo | URL,
+  init?: RequestInit,
+): Promise<Response> => {
+  const defaultRetries = 4;
+  const initialDelay = 1500;
+
+  // Безопасное получение URL из строки, Request или URL объекта
+  const url =
+    typeof input === "string"
+      ? input
+      : "url" in input
+        ? input.url
+        : input.toString();
+
   let timeout = 10000; // Оптимизация: 10 сек (было 20), чтобы успеть сделать больше попыток при сбоях
   let retries = defaultRetries;
 
@@ -34,11 +42,11 @@ const fetchWithRetries = async (
       const controller = new AbortController();
 
       // Поддержка внешней отмены (например, при уходе со страницы)
-      if (options.signal) {
-        if (options.signal.aborted) {
+      if (init?.signal) {
+        if (init.signal.aborted) {
           controller.abort();
         } else {
-          options.signal.addEventListener("abort", () => controller.abort(), {
+          init.signal.addEventListener("abort", () => controller.abort(), {
             once: true,
           });
         }
@@ -47,13 +55,13 @@ const fetchWithRetries = async (
       const id = setTimeout(() => {
         console.warn(
           `Supabase request timed out after ${timeout / 1000}s for`,
-          resource,
+          url,
         );
         controller.abort();
       }, timeout);
 
-      const response = await window.fetch(resource, {
-        ...options,
+      const response = await window.fetch(input, {
+        ...init,
         signal: controller.signal,
       });
 
@@ -67,7 +75,7 @@ const fetchWithRetries = async (
       return response;
     } catch (error: unknown) {
       // Если запрос был отменен извне (пользователем), не делаем повторных попыток
-      if (options.signal?.aborted) {
+      if (init?.signal?.aborted) {
         throw error;
       }
 
@@ -106,7 +114,7 @@ export const client: SupabaseClient =
         SUPABASE_KEY,
         {
           global: {
-            fetch: fetchWithRetries as unknown as typeof fetch,
+            fetch: fetchWithRetries,
           },
           realtime: {
             worker: true,

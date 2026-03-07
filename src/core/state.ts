@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import {
   Word,
   UserStats,
@@ -256,7 +255,7 @@ try {
         const raw = safeGetItem(key);
         if (raw) {
           try {
-            const stats = JSON.parse(raw);
+            const stats: Partial<UserStats> = JSON.parse(raw);
 
             // Пример переименования поля: oldField -> newField
             // if (stats.oldField !== undefined) {
@@ -279,9 +278,9 @@ try {
         const raw = safeGetItem(key);
         if (raw) {
           try {
-            const sessions = JSON.parse(raw);
+            const sessions = JSON.parse(raw) as Partial<Session>[];
             if (Array.isArray(sessions)) {
-              const updatedSessions = sessions.map((s: any) => ({
+              const updatedSessions = sessions.map((s: Partial<Session>) => ({
                 ...s,
                 platform: s.platform || "web", // Значение по умолчанию
               }));
@@ -298,10 +297,11 @@ try {
         const raw = safeGetItem(key);
         if (raw) {
           try {
-            const sessions = JSON.parse(raw);
+            const sessions = JSON.parse(raw) as Partial<Session>[];
             if (Array.isArray(sessions)) {
-              const seen = new Set();
-              const uniqueSessions = sessions.filter((s: any) => {
+              const seen = new Set<string>();
+              const uniqueSessions = sessions.filter((s: Partial<Session>) => {
+                if (!s.date) return false;
                 const isDuplicate = seen.has(s.date);
                 seen.add(s.date);
                 return !isDuplicate;
@@ -362,7 +362,7 @@ try {
         const key = "user_stats_v5";
         const raw = safeGetItem(key);
         if (raw) {
-          const stats = JSON.parse(raw);
+          const stats: Partial<UserStats> = JSON.parse(raw);
           if (stats.weeklyXp === undefined) stats.weeklyXp = 0;
           if (stats.league === undefined) stats.league = "Bronze";
           if (stats.lastWeekId === undefined) stats.lastWeekId = "";
@@ -381,7 +381,7 @@ try {
     const val = safeGetItem(key);
     if (!val) return def;
     try {
-      return JSON.parse(val);
+      return JSON.parse(val) as T;
     } catch (e) {
       console.warn(
         `⚠️ Corrupted data for key "${key}". Resetting to default.`,

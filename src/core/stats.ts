@@ -635,8 +635,10 @@ export function renderTopicMastery() {
   cachedCurrentType = currentType;
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const chartInstances: Record<string, any> = {};
+interface ChartInstance {
+  destroy: () => void;
+}
+const chartInstances: Record<string, ChartInstance> = {};
 
 interface ChartTooltipContext {
   raw: number;

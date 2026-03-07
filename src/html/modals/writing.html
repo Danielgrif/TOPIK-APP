@@ -1,0 +1,43 @@
+<!-- Writing AI Modal -->
+<div id="writing-modal" class="modal">
+  <div class="modal-content" style="max-width: 700px; height: 90vh; display: flex; flex-direction: column;">
+    <div class="modal-header">
+      <h3>✍️ TOPIK Writing AI</h3>
+      <button class="btn-icon close-modal-btn" data-close-modal="writing-modal" aria-label="Закрыть">✕</button>
+    </div>
+    <div class="modal-body" style="flex: 1; display: flex; flex-direction: column; gap: 15px; overflow-y: auto;">
+      
+      <!-- Task Selection -->
+      <div class="segment-control" id="writing-task-selector">
+        <button class="segment-btn active" data-task="51">Задание 51</button>
+        <button class="segment-btn" data-task="52">Задание 52</button>
+        <button class="segment-btn" data-task="53">Задание 53</button>
+        <button class="segment-btn" data-task="54">Задание 54</button>
+      </div>
+
+      <!-- Question Input -->
+      <div class="input-group">
+        <label class="form-label">Вопрос / Тема / Описание графика</label>
+        <textarea id="writing-question" class="auth-input" rows="3" placeholder="Введите текст задания или описание графика..."></textarea>
+      </div>
+
+      <!-- Answer Input -->
+      <div class="input-group" style="flex: 1; display: flex; flex-direction: column;">
+        <label class="form-label">Ваш ответ <span id="char-count" style="float: right; font-weight: normal; opacity: 0.7;">0 знаков</span></label>
+        <textarea id="writing-answer" class="auth-input" style="flex: 1; resize: none; min-height: 200px;" placeholder="Напишите ваш ответ здесь..."></textarea>
+      </div>
+
+      <!-- Action -->
+      <button id="check-writing-btn" class="btn btn-quiz" style="width: 100%;">✨ Проверить с AI</button>
+
+      <!-- Result Area (Hidden by default) -->
+      <div id="writing-result" style="display: none; background: var(--surface-2); padding: 15px; border-radius: 16px; margin-top: 10px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+            <h4 style="margin: 0;">Результат</h4>
+            <span id="writing-score" class="shop-points"></span>
+        </div>
+        <div id="writing-feedback-content"></div>
+      </div>
+    </div>
+  </div>
+</div>

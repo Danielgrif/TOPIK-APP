@@ -49,7 +49,7 @@ export function restoreLocalBackup(): boolean {
     const raw = localStorage.getItem(LS_KEYS.SAFETY_BACKUP);
     if (!raw) return false;
 
-    const backup = JSON.parse(raw);
+    const backup = JSON.parse(raw) as Record<string, unknown>;
     Object.entries(backup).forEach(([key, val]) => {
       if (typeof val === "string") localStorage.setItem(key, val);
     });
