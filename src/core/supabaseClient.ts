@@ -83,7 +83,7 @@ const fetchWithRetries = async (
         const delay = initialDelay * Math.pow(2, i);
         console.warn(
           `[Retry ${i + 1}/${retries}] Request failed. Retrying in ${delay}ms...`,
-          (error as Error).message,
+          error,
         );
         await new Promise((resolve) => setTimeout(resolve, delay));
       } else {

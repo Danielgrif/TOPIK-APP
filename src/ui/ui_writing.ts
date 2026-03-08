@@ -4,6 +4,20 @@ import { showToast, escapeHtml } from "../utils/utils.ts";
 
 let currentTask = "51";
 
+const TASK_DESCRIPTIONS: Record<string, string> = {
+  "51": "📝 <b>Задание 51 (Практическое):</b> Заполнение пропусков в объявлениях, письмах или сообщениях. Используйте официально-вежливый стиль (습니다/습니까).",
+  "52": "🧠 <b>Задание 52 (Описательное):</b> Объяснение фактов или явлений. Логическое завершение предложений. Используйте письменный стиль (한다/인다).",
+  "53": "📊 <b>Задание 53 (Анализ данных):</b> Описание графиков, таблиц и диаграмм. Сравнение данных. Объем: 200-300 знаков.",
+  "54": "✍️ <b>Задание 54 (Эссе):</b> Аргументированное сочинение на заданную тему. Выражение собственного мнения. Объем: 600-700 знаков.",
+};
+
+const TASK_PLACEHOLDERS: Record<string, string> = {
+  "51": "Например: Приглашение на вечеринку, объявление о потере вещи...",
+  "52": "Например: О пользе чтения, почему важно спать...",
+  "53": "Опишите данные графика: 'Рост экспорта Кореи за 2020-2023 годы'...",
+  "54": "Тема: 'Преимущества и недостатки раннего образования'...",
+};
+
 export function openWritingModal() {
   openModal("writing-modal");
   setupWritingListeners();
@@ -24,6 +38,16 @@ function setupWritingListeners() {
       taskBtns.forEach((b) => b.classList.remove("active"));
       btn.classList.add("active");
       currentTask = (btn as HTMLElement).dataset.task || "51";
+
+      // Update description
+      const descEl = document.getElementById("writing-task-desc");
+      if (descEl) descEl.innerHTML = TASK_DESCRIPTIONS[currentTask];
+
+      // Update placeholder
+      const qInput = document.getElementById(
+        "writing-question",
+      ) as HTMLTextAreaElement;
+      if (qInput) qInput.placeholder = TASK_PLACEHOLDERS[currentTask];
     });
   });
 

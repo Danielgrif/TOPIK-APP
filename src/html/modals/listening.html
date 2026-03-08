@@ -1,0 +1,24 @@
+<!-- Listening Lab Modal -->
+<div id="listening-modal" class="modal">
+  <div class="modal-content listening-modal-content">
+    <div class="modal-header">
+      <h3>🎧 Аудирование</h3>
+      <button class="btn-icon close-modal-btn" data-close-modal="listening-modal" aria-label="Закрыть">✕</button>
+    </div>
+    <div class="modal-body">
+       <canvas id="listening-visualizer" width="600" height="120"></canvas>
+       
+       <div class="listening-controls">
+         <button id="listening-play-btn" class="btn-icon-lg">▶️</button>
+         <div class="listening-speed-control" id="listening-speed-control">
+            <button class="btn-text" data-speed="0.8">0.8x</button>
+            <button class="btn-text active" data-speed="1.0">1.0x</button>
+            <button class="btn-text" data-speed="1.2">1.2x</button>
+         </div>
+       </div>
+
+       <div id="listening-status" class="listening-status">Нажмите Play, чтобы прослушать</div>
+       <div id="listening-options" class="listening-options-grid"></div>
+    </div>
+  </div>
+</div>

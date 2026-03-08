@@ -73,6 +73,20 @@ function updateBulkBar() {
           if (deleteBtn) actionsDiv.insertBefore(removeBtn, deleteBtn);
           else actionsDiv.appendChild(removeBtn);
         }
+
+        // Инъекция кнопки "Переместить"
+        if (!bar.querySelector('[data-action="bulk-move"]')) {
+          const moveBtn = document.createElement("button");
+          moveBtn.className = "btn-icon";
+          moveBtn.setAttribute("data-action", "bulk-move");
+          moveBtn.title = "Изменить тему";
+          moveBtn.innerHTML = "🏷️";
+          const deleteBtn = bar.querySelector('[data-action="bulk-delete"]');
+          if (actionsDiv) {
+            if (deleteBtn) actionsDiv.insertBefore(moveBtn, deleteBtn);
+            else actionsDiv.appendChild(moveBtn);
+          }
+        }
       }
       const listId = collectionsState.currentCollectionFilter;
       const isSpecificList =

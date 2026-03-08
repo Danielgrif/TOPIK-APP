@@ -19,7 +19,7 @@ export async function shareStats(themeOverride?: string) {
     showToast("❌ Ошибка: Не удалось создать холст для изображения.");
     return;
   }
-  const width = 1600;
+  const width = 1200;
   const height = 1200;
 
   canvas.width = width;
@@ -34,38 +34,50 @@ export async function shareStats(themeOverride?: string) {
   ctx.fillStyle = gradient;
   ctx.fillRect(0, 0, width, height);
 
-  const roundRect = (x: number, y: number, w: number, h: number, r: number) => {
-    if (w < 2 * r) r = w / 2;
-    if (h < 2 * r) r = h / 2;
-    ctx.beginPath();
-    ctx.moveTo(x + r, y);
-    ctx.arcTo(x + w, y, x + w, y + h, r);
-    ctx.arcTo(x + w, y + h, x, y + h, r);
-    ctx.arcTo(x, y + h, x, y, r);
-    ctx.arcTo(x, y, x + w, y, r);
-    ctx.closePath();
+  const drawRoundRect = (
+    x: number,
+    y: number,
+    w: number,
+    h: number,
+    r: number,
+  ) => {
+    if (ctx.roundRect) {
+      ctx.beginPath();
+      ctx.roundRect(x, y, w, h, r);
+      ctx.closePath();
+    } else {
+      if (w < 2 * r) r = w / 2;
+      if (h < 2 * r) r = h / 2;
+      ctx.beginPath();
+      ctx.moveTo(x + r, y);
+      ctx.arcTo(x + w, y, x + w, y + h, r);
+      ctx.arcTo(x + w, y + h, x, y + h, r);
+      ctx.arcTo(x, y + h, x, y, r);
+      ctx.arcTo(x, y, x + w, y, r);
+      ctx.closePath();
+    }
   };
 
   ctx.shadowColor = "rgba(0, 0, 0, 0.2)";
   ctx.shadowBlur = 15;
   ctx.fillStyle = "#ffffff";
-  ctx.font = "bold 42px sans-serif";
-  ctx.textAlign = "left";
-  ctx.fillText("TOPIK II Master Pro", 40, 70);
+  ctx.font = "bold 48px sans-serif";
+  ctx.textAlign = "center";
+  ctx.fillText("TOPIK Master Pro", width / 2, 80);
   ctx.shadowBlur = 0;
 
-  ctx.font = "18px sans-serif";
+  ctx.font = "24px sans-serif";
   ctx.fillStyle = "rgba(255, 255, 255, 0.8)";
-  ctx.fillText(new Date().toLocaleDateString(), 42, 105);
+  ctx.fillText(new Date().toLocaleDateString(), width / 2, 120);
 
-  const centerX = 400;
-  const centerY = 600;
-  const radius = 180;
+  const centerX = width / 2;
+  const centerY = 400;
+  const radius = 160;
 
   ctx.beginPath();
   ctx.arc(centerX, centerY, radius, 0, 2 * Math.PI);
-  ctx.lineWidth = 15;
-  ctx.strokeStyle = "rgba(255, 255, 255, 0.15)";
+  ctx.lineWidth = 20;
+  ctx.strokeStyle = "rgba(255, 255, 255, 0.2)";
   ctx.stroke();
 
   const nextLevelXP = getXPForNextLevel(state.userStats.level);
@@ -75,27 +87,26 @@ export async function shareStats(themeOverride?: string) {
 
   ctx.beginPath();
   ctx.arc(centerX, centerY, radius, startAngle, endAngle);
-  ctx.lineWidth = 30;
+  ctx.lineWidth = 20;
   ctx.strokeStyle = "#ffffff";
   ctx.lineCap = "round";
   ctx.stroke();
 
   ctx.textAlign = "center";
   ctx.fillStyle = "#ffffff";
-  ctx.font = "bold 40px sans-serif";
-  ctx.fillText("LEVEL", centerX, centerY - 140);
+  ctx.font = "bold 32px sans-serif";
+  ctx.fillText("LEVEL", centerX, centerY - 50);
 
   const levelStr = String(state.userStats.level);
-  ctx.font =
-    levelStr.length > 2 ? "bold 120px sans-serif" : "bold 160px sans-serif";
+  ctx.font = "bold 120px sans-serif";
   ctx.fillText(levelStr, centerX, centerY + 60);
 
-  ctx.font = "32px sans-serif";
+  ctx.font = "28px sans-serif";
   ctx.fillStyle = "rgba(255, 255, 255, 0.9)";
   ctx.fillText(
     `${state.userStats.xp} / ${nextLevelXP} XP`,
     centerX,
-    centerY + 260,
+    centerY + 230,
   );
 
   const stats = [
@@ -107,39 +118,40 @@ export async function shareStats(themeOverride?: string) {
     { label: "РЕКОРД", value: state.userStats.sprintRecord || 0, icon: "⚡" },
   ];
 
-  const gridStartX = 800;
-  const gridStartY = 280;
-  const cardW = 360;
-  const cardH = 220;
-  const gapX = 40;
+  const gridStartX = 100;
+  const gridStartY = 650;
+  const cardW = 300;
+  const cardH = 180;
+  const gapX = 50;
   const gapY = 40;
+  const cols = 3;
 
   stats.forEach((stat, i) => {
-    const col = i % 2;
-    const row = Math.floor(i / 2);
+    const col = i % cols;
+    const row = Math.floor(i / cols);
     const x = gridStartX + col * (cardW + gapX);
     const y = gridStartY + row * (cardH + gapY);
 
     ctx.fillStyle = "rgba(255, 255, 255, 0.15)";
-    roundRect(x, y, cardW, cardH, 32);
+    drawRoundRect(x, y, cardW, cardH, 24);
     ctx.fill();
 
-    ctx.font = "64px sans-serif";
+    ctx.font = "48px sans-serif";
     ctx.textAlign = "left";
-    ctx.fillText(stat.icon, x + 40, y + 90);
+    ctx.fillText(stat.icon, x + 30, y + 70);
 
-    ctx.fillStyle = "rgba(255, 255, 255, 0.7)";
-    ctx.font = "bold 22px sans-serif";
-    ctx.fillText(stat.label, x + 130, y + 76);
+    ctx.fillStyle = "rgba(255, 255, 255, 0.8)";
+    ctx.font = "bold 18px sans-serif";
+    ctx.fillText(stat.label, x + 100, y + 60);
 
     ctx.fillStyle = "#ffffff";
-    ctx.font = "bold 56px sans-serif";
-    ctx.fillText(String(stat.value), x + 40, y + 170);
+    ctx.font = "bold 42px sans-serif";
+    ctx.fillText(String(stat.value), x + 30, y + 140);
   });
 
   ctx.textAlign = "center";
-  ctx.font = "28px sans-serif";
-  ctx.fillStyle = "rgba(255, 255, 255, 0.5)";
+  ctx.font = "24px sans-serif";
+  ctx.fillStyle = "rgba(255, 255, 255, 0.6)";
   ctx.fillText("topik-master.app", width / 2, height - 40);
 
   try {
@@ -150,20 +162,24 @@ export async function shareStats(themeOverride?: string) {
     const file = new File([blob], "topik_stats.png", { type: "image/png" });
     let shared = false;
 
-    const isWindows = navigator.userAgent.includes("Windows");
-
+    // Check for Web Share API support
     if (
-      !isWindows &&
       navigator.share &&
-      (typeof navigator.canShare === "function"
-        ? navigator.canShare({ files: [file] })
-        : true)
+      navigator.canShare &&
+      navigator.canShare({ files: [file] })
     ) {
       try {
-        await navigator.share({ files: [file], title: "Мой прогресс в TOPIK" });
+        await navigator.share({
+          files: [file],
+          title: "Мой прогресс в TOPIK",
+          text: `Я достиг ${state.userStats.level} уровня в TOPIK Master Pro!`,
+        });
         shared = true;
       } catch (e) {
-        console.warn("Share API failed, falling back to download:", e);
+        console.warn(
+          "Share API failed/cancelled, falling back to download:",
+          e,
+        );
       }
     }
 

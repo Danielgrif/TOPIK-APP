@@ -11,6 +11,7 @@ import {
   playAndSpeak,
   saveAndRender,
   openWritingModal,
+  openListeningModal,
 } from "./ui.ts";
 import { closeModal, openModal, openConfirm } from "./ui_modal.ts";
 import { recordAttempt, scheduleSaveState } from "../core/db.ts";
@@ -110,10 +111,6 @@ export function checkSuperChallengeNotification() {
 }
 
 export function buildQuizModes() {
-  const searchInput = document.getElementById("quiz-search-input");
-  if (searchInput) searchInput.style.display = "block";
-  const quizCount = document.getElementById("quiz-count");
-  if (quizCount) quizCount.style.display = "block";
   const header = document.querySelector(
     "#quiz-modal .modal-header",
   ) as HTMLElement;
@@ -122,10 +119,9 @@ export function buildQuizModes() {
   if (quizGame) quizGame.style.display = "none";
   const modeSelector = document.getElementById("quiz-mode-selector");
   if (modeSelector) modeSelector.style.display = "flex";
-  const quizDiff = document.getElementById("quiz-difficulty");
-  if (quizDiff) quizDiff.style.display = "flex";
-  const quizFilters = document.getElementById("quiz-filters");
-  if (quizFilters) quizFilters.style.display = "flex";
+
+  const controlsWrapper = document.getElementById("quiz-controls-wrapper");
+  if (controlsWrapper) controlsWrapper.classList.remove("hidden");
 
   const modes = [
     // Challenges
@@ -341,6 +337,9 @@ export function buildQuizModes() {
             if (m.mode === "writing-ai") {
               closeModal("quiz-modal");
               setTimeout(() => openWritingModal(), 100);
+            } else if (m.mode === "audio") {
+              closeModal("quiz-modal");
+              setTimeout(() => openListeningModal(), 100);
             } else {
               setTimeout(() => startQuizMode(m.mode), 300);
             }
@@ -395,6 +394,14 @@ function populateQuizFilters() {
         tSelect.appendChild(opt);
       }
     });
+
+  // FIX: Если текущая тема не найдена в списке (например, слова удалены), сбрасываем на "all"
+  if (quizTopic !== "all" && !topics.has(quizTopic)) {
+    quizTopic = "all";
+    state.quizTopic = "all";
+    localStorage.setItem("quiz_topic_v1", "all");
+  }
+
   tSelect.value = quizTopic;
   tSelect.onchange = () => {
     quizTopic = tSelect.value;
@@ -433,6 +440,14 @@ function populateQuizCategories() {
         cSelect.appendChild(opt);
       }
     });
+
+  // FIX: Если текущая категория не найдена, сбрасываем на "all"
+  if (quizCategory !== "all" && !categories.has(quizCategory)) {
+    quizCategory = "all";
+    state.quizCategory = "all";
+    localStorage.setItem("quiz_category_v1", "all");
+  }
+
   cSelect.value = quizCategory;
   cSelect.onchange = () => {
     quizCategory = cSelect.value;
@@ -449,14 +464,14 @@ function populateQuizDifficulty() {
   const levels = ["all", "★★★", "★★☆", "★☆☆"];
   levels.forEach((lvl) => {
     const btn = document.createElement("button");
-    btn.className = "btn quiz-difficulty-btn";
+    btn.className = "quiz-difficulty-btn"; // Removed 'btn' class to use custom styling
     btn.dataset.lvl = lvl;
     if (lvl === quizStar) btn.classList.add("active");
     btn.textContent = lvl === "all" ? "Все уровни" : lvl;
     btn.onclick = () => {
       quizStar = lvl;
       container
-        .querySelectorAll(".btn")
+        .querySelectorAll(".quiz-difficulty-btn")
         .forEach((b) => b.classList.remove("active"));
       btn.classList.add("active");
       state.quizDifficulty = lvl;
@@ -590,21 +605,15 @@ export function startQuizMode(mode: string) {
     if (gameOver) endQuiz(false);
   }, 1000);
 
-  const quizDiff = document.getElementById("quiz-difficulty");
-  if (quizDiff) quizDiff.style.display = "none";
-  const quizFilters = document.getElementById("quiz-filters");
-  if (quizFilters) quizFilters.style.display = "none";
   const modeSelector = document.getElementById("quiz-mode-selector");
   if (modeSelector) modeSelector.style.display = "none";
-
-  const searchInput = document.getElementById("quiz-search-input");
-  if (searchInput) searchInput.style.display = "none";
-  const quizCount = document.getElementById("quiz-count");
-  if (quizCount) quizCount.style.display = "none";
   const header = document.querySelector(
     "#quiz-modal .modal-header",
   ) as HTMLElement;
   if (header) header.style.display = "none";
+
+  const controlsWrapper = document.getElementById("quiz-controls-wrapper");
+  if (controlsWrapper) controlsWrapper.classList.add("hidden");
 
   const quizGame = document.getElementById("quiz-game");
   if (quizGame) quizGame.style.display = "flex";
@@ -641,7 +650,9 @@ export function startDailyChallenge() {
     quizWords = currentConfig.getWords(state.dataStore);
 
     if (!quizWords || quizWords.length === 0) {
-      showToast("⚠️ Не удалось подобрать слова для вызова. Попробуйте позже.");
+      showToast(
+        "⚠️ Недостаточно слов для вызова. Добавьте больше слов в словарь.",
+      );
       return;
     }
 
@@ -651,20 +662,15 @@ export function startDailyChallenge() {
     quizXPGained = 0;
     quizStreak = 0;
 
-    const quizDiff = document.getElementById("quiz-difficulty");
-    if (quizDiff) quizDiff.style.display = "none";
-    const quizFilters = document.getElementById("quiz-filters");
-    if (quizFilters) quizFilters.style.display = "none";
     const modeSelector = document.getElementById("quiz-mode-selector");
     if (modeSelector) modeSelector.style.display = "none";
-    const searchInput = document.getElementById("quiz-search-input");
-    if (searchInput) searchInput.style.display = "none";
-    const quizCount = document.getElementById("quiz-count");
-    if (quizCount) quizCount.style.display = "none";
     const header = document.querySelector(
       "#quiz-modal .modal-header",
     ) as HTMLElement;
     if (header) header.style.display = "none";
+
+    const controlsWrapper = document.getElementById("quiz-controls-wrapper");
+    if (controlsWrapper) controlsWrapper.classList.add("hidden");
 
     const quizGame = document.getElementById("quiz-game");
     if (quizGame) quizGame.style.display = "flex";
@@ -679,10 +685,12 @@ export function startDailyChallenge() {
     );
   };
 
+  // Если модальное окно не активно, открываем его и запускаем квиз
   const modal = document.getElementById("quiz-modal");
   if (modal && !modal.classList.contains("active")) {
     openModal("quiz-modal");
-    setTimeout(launch, 300);
+    // Небольшая задержка для анимации открытия, затем запуск
+    setTimeout(launch, 400);
   } else {
     launch();
   }
@@ -723,7 +731,7 @@ function openDailyStatusModal() {
   modal.innerHTML = `
         <div class="modal-content modal-centered" style="text-align: center; max-width: 350px;">
             <div style="position: absolute; top: 15px; right: 15px;">
-                <button class="btn btn-icon close-modal-btn" onclick="closeModal('daily-status-modal')">✕</button>
+                <button class="btn btn-icon close-modal-btn" id="daily-status-close-x">✕</button>
             </div>
             <div style="font-size: 64px; margin-bottom: 10px;">${isTomorrowSuper ? "🌟" : "🔥"}</div>
             <div style="font-size: 24px; font-weight: 800; margin-bottom: 5px;">Серия: ${streak} дн.</div>
@@ -747,9 +755,20 @@ function openDailyStatusModal() {
                 ${h}ч ${String(m).padStart(2, "0")}м
             </div>
             
-            <button class="btn btn-quiz" style="width: 100%; padding: 15px; font-size: 16px;" onclick="closeModal('daily-status-modal')">Отлично</button>
+            <button class="btn btn-quiz" style="width: 100%; padding: 15px; font-size: 16px;" id="daily-status-close-btn">Отлично</button>
         </div>
     `;
+
+  // Назначаем обработчики событий программно
+  const closeX = modal.querySelector("#daily-status-close-x");
+  if (closeX) {
+    (closeX as HTMLElement).onclick = () => closeModal("daily-status-modal");
+  }
+
+  const closeBtn = modal.querySelector("#daily-status-close-btn");
+  if (closeBtn) {
+    (closeBtn as HTMLElement).onclick = () => closeModal("daily-status-modal");
+  }
 
   openModal("daily-status-modal");
 }
@@ -1053,23 +1072,18 @@ function endQuiz(forceEnd: boolean = false) {
   if (quizGameEl) quizGameEl.style.display = "none";
   const quizModeSelectorEl = document.getElementById("quiz-mode-selector");
   if (quizModeSelectorEl) quizModeSelectorEl.style.display = "flex";
-  const quizDifficultyEl = document.getElementById("quiz-difficulty");
-  if (quizDifficultyEl) quizDifficultyEl.style.display = "flex";
-  const quizFiltersEl = document.getElementById("quiz-filters");
-  if (quizFiltersEl) quizFiltersEl.style.display = "flex";
   applyBackgroundMusic();
 
   const modalContent = document.querySelector("#quiz-modal .modal-content");
   if (modalContent) modalContent.classList.remove("game-active");
 
-  const searchInputEl = document.getElementById("quiz-search-input");
-  if (searchInputEl) searchInputEl.style.display = "block";
-  const quizCountEl = document.getElementById("quiz-count");
-  if (quizCountEl) quizCountEl.style.display = "block";
   const header = document.querySelector(
     "#quiz-modal .modal-header",
   ) as HTMLElement;
   if (header) header.style.display = "flex";
+
+  const controlsWrapper = document.getElementById("quiz-controls-wrapper");
+  if (controlsWrapper) controlsWrapper.classList.remove("hidden");
 
   if (!forceEnd) {
     let total = quizWords.length;
@@ -1350,6 +1364,9 @@ function updateQuizModesAvailability() {
       count = state.dataStore.length;
     } else if (mode === "association") {
       count = state.dataStore.length;
+    } else if (mode === "writing-ai") {
+      count = 1; // Всегда доступно
+      minWords = 0;
     } else {
       if (count < 1) reason = `Нет слов`;
     }

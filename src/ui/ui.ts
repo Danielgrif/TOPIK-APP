@@ -12,6 +12,7 @@ export {
 import { Word } from "../types/index.ts";
 export { openReadingModal } from "./ui_reading.ts";
 export { openWritingModal } from "./ui_writing.ts";
+export { openListeningModal } from "./ui_listening.ts";
 
 /**
  * Saves state to DB/LocalStorage and re-renders the UI.

@@ -236,8 +236,14 @@ Output ONLY a comma-separated list of Korean words.
                     continue
                 
             # Применяем ручные настройки темы/категории, если они были указаны пользователем
-                if request.get('topic_ru'): data['topic_ru'] = request.get('topic_ru')
-                if request.get('category'): data['category'] = request.get('category')
+                if request.get('topic_ru'): 
+                    data['topic_ru'] = request.get('topic_ru')
+                    # Если пользователь задал тему, то topic_kr можно оставить пустым или скопировать
+                    if 'topic' in data: del data['topic'] # Удаляем AI тему, чтобы не перезаписала
+                
+                if request.get('category_ru'): 
+                    data['category_ru'] = request.get('category_ru')
+                    if 'category' in data: del data['category']
 
                 # Парсинг темы и категории из AI (формат "En/Kr (Ru)")
                 # Если AI вернул "Daily Life (Повседневная жизнь)", разбиваем

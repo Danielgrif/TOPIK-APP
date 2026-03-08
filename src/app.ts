@@ -47,7 +47,6 @@ import { checkAndShowOnboarding, startOnboarding } from "./ui/ui_onboarding.ts";
 import {
   renderSkeletons,
   resetSearchHandler,
-  setupGridEffects,
   restoreScroll,
   render,
 } from "./ui/ui_card.ts";
@@ -153,6 +152,7 @@ import {
   clearCollectionFilter,
   editListTitleInline,
   toggleWordInList,
+  shareList,
 } from "./ui/ui_collections.ts";
 import {
   openEditWordModal,
@@ -763,6 +763,9 @@ function setupGlobalListeners() {
           break;
         case "clear-collection-filter":
           clearCollectionFilter(e);
+          break;
+        case "share-list":
+          if (value) shareList(value);
           break;
         case "edit-list-title-inline":
           if (value)
@@ -1553,9 +1556,51 @@ async function init() {
 
   setupGestures();
   setupScrollBehavior();
-  setupGridEffects();
   setupTrash();
   setupLevelUpObserver();
+
+  // Check for shared list in URL
+  const urlParams = new URLSearchParams(window.location.search);
+  const sharedListId = urlParams.get("share_list");
+  if (sharedListId) {
+    // Clean URL
+    window.history.replaceState(
+      null,
+      "",
+      window.location.pathname + window.location.hash,
+    );
+
+    setTimeout(async () => {
+      const { data: list, error } = await client
+        .from(DB_TABLES.USER_LISTS)
+        .select("*")
+        .eq("id", sharedListId)
+        .single();
+
+      if (error || !list) {
+        showToast("❌ Список не найден или он приватный");
+        return;
+      }
+
+      openConfirm(
+        `Добавить список "${list.title}" к себе?`,
+        async () => {
+          // В текущей реализации мы просто подписываемся на список, если он публичный.
+          // Если нужно копировать - это другая логика.
+          // Здесь мы просто открываем его.
+          import("./ui/ui_collections.ts").then((m) => {
+            // Добавляем в локальный стейт, если его там нет
+            if (!collectionsState.userLists.find((l) => l.id === list.id)) {
+              collectionsState.userLists.push(list);
+            }
+            m.setCollectionFilter(list.id);
+            showToast(`📂 Список "${list.title}" открыт`);
+          });
+        },
+        { confirmText: "Открыть", cancelText: "Отмена" },
+      );
+    }, 1000); // Wait for app init
+  }
 
   // Запускаем периодическое измерение пинга
   setInterval(measurePing, 15000);

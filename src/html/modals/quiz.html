@@ -16,37 +16,29 @@
           <button class="btn btn-icon close-modal-btn" data-close-modal="quiz-modal" aria-label="Закрыть">✕</button>
         </div>
       </div>
-    <label for="quiz-search-input" class="visually-hidden">Поиск слов для тренировки</label>
-    <input type="text" id="quiz-search-input" name="quiz-search" class="search-box" placeholder="🔍 Поиск слов для тренировки..." style="width: 100%; margin-bottom: 12px; box-sizing: border-box; padding: 10px 15px;">
-    <div
-      id="quiz-filters"
-      style="margin-bottom: 12px; display: flex; gap: 8px"
-    >
-      <label for="quiz-topic-select" class="visually-hidden">Фильтр по теме</label>
-      <select
-        id="quiz-topic-select"
-        name="quiz-topic"
-        class="search-box"
-        style="padding: 8px; font-size: 13px; flex: 1"
-      ></select>
-      <label for="quiz-category-select" class="visually-hidden">Фильтр по категории</label>
-      <select
-        id="quiz-category-select"
-        name="quiz-category"
-        class="search-box"
-        style="padding: 8px; font-size: 13px; flex: 1"
-      ></select>
-    </div>
-    <div
-      id="quiz-difficulty"
-      style="margin-bottom: 12px; display: flex; gap: 8px; flex-wrap: wrap"
-    ></div>
-    <div
-      id="quiz-count"
-      style="margin-bottom: 12px; color: var(--text-sub); font-weight: 600"
-    >
-      Слов: 0
-    </div>
+
+      <!-- New Controls Wrapper -->
+      <div id="quiz-controls-wrapper" class="quiz-controls-wrapper">
+        <div class="input-wrapper">
+            <label for="quiz-search-input" class="visually-hidden">Поиск слов</label>
+            <input type="text" id="quiz-search-input" name="quiz-search" class="search-box quiz-search" placeholder="Поиск слов для тренировки..." autocomplete="off">
+            <span class="search-icon-overlay">🔍</span>
+        </div>
+        
+        <div id="quiz-filters" class="quiz-filters-row">
+          <div class="select-wrapper">
+            <select id="quiz-topic-select" name="quiz-topic"></select>
+          </div>
+          <div class="select-wrapper">
+            <select id="quiz-category-select" name="quiz-category"></select>
+          </div>
+        </div>
+        
+        <div id="quiz-difficulty" class="quiz-difficulty-group"></div>
+        
+        <div id="quiz-count" class="quiz-count-label">Слов: 0</div>
+      </div>
+
     <div class="quiz-modes" id="quiz-mode-selector"></div>
     <div id="quiz-game">
       <div class="quiz-header">

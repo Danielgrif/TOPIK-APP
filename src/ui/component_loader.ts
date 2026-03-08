@@ -20,6 +20,7 @@ import selectionModalsHtml from "../html/modals/selection_modals.html?raw";
 import leaderboardHtml from "../html/modals/leaderboard.html?raw";
 import readingHtml from "../html/modals/reading.html?raw";
 import writingHtml from "../html/modals/writing.html?raw";
+import listeningHtml from "../html/modals/listening.html?raw";
 
 /**
  * Загружает HTML-компоненты (модальные окна) и вставляет их в DOM.
@@ -68,6 +69,7 @@ export function injectComponents(): void {
     leaderboardHtml,
     readingHtml,
     writingHtml,
+    listeningHtml,
   ].join("\n");
 
   // Вставляем в конец body

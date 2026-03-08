@@ -28,17 +28,17 @@
 .stats-strip {
     display: grid;
     grid-template-columns: repeat(2, 1fr);
-    gap: 12px;
+    gap: 16px;
     margin-bottom: 24px;
 }
 @media (min-width: 600px) {
-    .stats-strip { grid-template-columns: repeat(4, 1fr); }
+    .stats-strip { grid-template-columns: repeat(3, 1fr); }
 }
 
 .stat-card-primary {
-    background: var(--surface-1);
-    border-radius: 20px;
-    padding: 16px;
+    background: var(--surface-2);
+    border-radius: 24px;
+    padding: 20px;
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -46,14 +46,14 @@
     gap: 8px;
     border: 1px solid var(--border-color);
     box-shadow: var(--shadow-sm);
-    transition: transform 0.2s;
+    transition: transform 0.2s, box-shadow 0.2s;
 }
-.stat-card-primary:hover { transform: translateY(-2px); }
+.stat-card-primary:hover { transform: translateY(-2px); box-shadow: var(--shadow-md); }
 
 .stat-icon-primary {
-    font-size: 20px;
-    width: 40px;
-    height: 40px;
+    font-size: 24px;
+    width: 48px;
+    height: 48px;
     border-radius: 12px;
     display: flex;
     align-items: center;
@@ -68,14 +68,14 @@
 }
 
 .stat-value-primary {
-    font-size: 20px;
-    font-weight: 800;
+    font-size: 24px;
+    font-weight: 900;
     color: var(--text-main);
     line-height: 1.2;
 }
 
 .stat-label-primary {
-    font-size: 11px;
+    font-size: 12px;
     color: var(--text-sub);
     font-weight: 600;
     text-transform: uppercase;
@@ -84,8 +84,8 @@
 
 .stat-chart-wrapper {
     position: relative;
-    width: 60px;
-    height: 60px;
+    width: 70px;
+    height: 70px;
     margin-bottom: 8px;
 }
 
@@ -94,7 +94,7 @@
     top: 50%;
     left: 50%;
     transform: translate(-50%, -50%);
-    font-size: 16px;
+    font-size: 18px;
     font-weight: 800;
 }
 
@@ -119,8 +119,8 @@
 
 /* --- Streak Calendar Redesign --- */
 .streak-calendar-card {
-    background: var(--surface-1);
-    padding: 24px;
+    background: var(--surface-2);
+    padding: 24px 20px;
     border-radius: 24px;
     border: 1px solid var(--border-color);
     margin-bottom: 24px;
@@ -128,7 +128,7 @@
     align-items: center;
     justify-content: space-between;
     flex-wrap: wrap;
-    gap: 20px;
+    gap: 16px;
     box-shadow: var(--shadow-sm);
 }
 
@@ -139,12 +139,12 @@
 }
 
 .streak-icon-lg {
-    font-size: 42px;
+    font-size: 48px;
     filter: drop-shadow(0 4px 8px rgba(255, 118, 117, 0.3));
     animation: pulse-fire 3s infinite;
 }
 
-.streak-label { font-size: 13px; color: var(--text-sub); font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
+.streak-label { font-size: 12px; color: var(--text-sub); font-weight: 700; text-transform: uppercase; letter-spacing: 1px; }
 .streak-value { font-size: 28px; font-weight: 900; color: var(--text-main); line-height: 1; }
 
 .streak-days-grid {
@@ -203,14 +203,14 @@
 }
 
 .chart-card {
-    background: var(--surface-1);
+    background: var(--surface-2);
     padding: 20px;
     border-radius: 24px;
     border: 1px solid var(--border-color);
     box-shadow: var(--shadow-sm);
 }
 
-.chart-title { margin: 0 0 20px 0; font-size: 16px; font-weight: 800; color: var(--text-main); }
+.chart-title { margin: 0 0 20px 0; font-size: 18px; font-weight: 800; color: var(--text-main); letter-spacing: -0.5px; }
 .chart-container { position: relative; height: 220px; width: 100%; }
 
 /* --- Topic Mastery Redesign --- */
@@ -221,7 +221,7 @@
 }
 
 .topic-mastery-card {
-    background: var(--surface-1);
+    background: var(--surface-2);
     border: 1px solid var(--border-color);
     border-radius: 16px;
     padding: 16px;
@@ -239,7 +239,7 @@
 
 .topic-progress {
     height: 8px;
-    background: var(--surface-2);
+    background: var(--surface-3);
     border-radius: 4px;
     overflow: hidden;
     margin-bottom: 6px;

@@ -1,25 +1,36 @@
-<!-- Toolbar -->
 <div id="toolbar">
   <div class="search-container">
-    <label for="searchInput" class="visually-hidden">Поиск по словарю</label>
-    <span class="search-icon">
-      <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
-    </span>
-    <input type="search" id="searchInput" name="search" class="search-input" placeholder="Поиск по словарю..." autocomplete="off" />
-    <button class="search-clear-btn" data-action="reset-search" title="Очистить" tabindex="-1">✕</button>
-    <div id="search-history-container"></div>
+    <input type="text" id="searchInput" class="search-input" placeholder="Поиск слов..." autocomplete="off">
+    <div class="search-icon">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+    </div>
+    <button class="search-clear-btn" onclick="window.resetSearchHandler()">✕</button>
   </div>
+
   <div class="toolbar-actions">
-    <button class="tool-btn" data-action="toggle-filter-panel" title="Фильтры">
-      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" width="24" height="24"><path d="M10 18h4v-2h-4v2zM3 6v2h18V6H3zm3 7h12v-2H6v2z"/></svg>
-    </button>
     <div class="view-toggle">
-      <button class="view-btn active" data-action="toggle-view" data-value="grid" title="Вид: Сетка">
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" width="20" height="20"><path d="M4 4h6v6H4V4zm8 0h6v6h-6V4zM4 14h6v6H4v-6zm8 0h6v6h-6v-6z"/></svg>
+      <button class="view-btn active" data-value="grid" onclick="window.toggleViewMode('grid')" title="Плитка">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg>
       </button>
-      <button class="view-btn" data-action="toggle-view" data-value="list" title="Вид: Список">
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" width="20" height="20"><path d="M3 18h18v-2H3v2zm0-5h18v-2H3v2zm0-7v2h18V6H3z"/></svg>
+      <button class="view-btn" data-value="list" onclick="window.toggleViewMode('list')" title="Список">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line><line x1="3" y1="6" x2="3.01" y2="6"></line><line x1="3" y1="12" x2="3.01" y2="12"></line><line x1="3" y1="18" x2="3.01" y2="18"></line></svg>
       </button>
     </div>
+
+    <button id="collection-filter-btn" class="tool-btn" style="display: none; width: auto; padding: 0 12px; gap: 6px; font-size: 13px; font-weight: 600;" title="Списки">
+        <span>Все слова</span>
+    </button>
+
+    <button class="tool-btn" data-action="toggle-filter-panel" onclick="window.toggleFilterPanel()" title="Фильтры">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon></svg>
+    </button>
+
+    <button id="focus-mode-btn" class="tool-btn" onclick="window.toggleFocusMode()" title="Режим фокусировки">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><circle cx="12" cy="12" r="3"></circle></svg>
+    </button>
+
+    <button class="tool-btn fire-btn" onclick="window.startDailyChallenge()" title="Ежедневный вызов">
+      🔥
+    </button>
   </div>
 </div>

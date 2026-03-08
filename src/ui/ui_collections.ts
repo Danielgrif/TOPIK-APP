@@ -326,7 +326,7 @@ export function updateCollectionUI() {
         <div class="collection-item-card special">
             <div class="collection-word-count">${myCustomWordsCount} слов</div>
             <div class="collection-info" data-action="set-collection-filter" data-value="my-custom" title="Показать мои слова">
-                <div class="collection-icon" style="background: rgba(124, 58, 237, 0.1); color: var(--primary);">✍️</div>
+                <div class="collection-icon" style="background: var(--surface-1); color: var(--primary);">✍️</div>
                 <div class="collection-text">
                     <div class="collection-title" style="color: var(--primary);">Мои слова</div>
                     <div class="collection-meta">Созданные вами слова</div>
@@ -341,7 +341,7 @@ export function updateCollectionUI() {
 
       // 2. My Lists
       if (myLists.length === 0) {
-        html += `<div style="text-align:center; padding: 40px 20px; color:var(--text-sub); background: var(--surface-2); border-radius: 16px; border: 1px dashed var(--border-color); margin-bottom: 15px;">
+        html += `<div style="text-align:center; padding: 40px 20px; color:var(--text-sub); background: var(--surface-2); border-radius: 20px; border: 1px dashed var(--border-color); margin-bottom: 15px;">
             <div style="font-size: 40px; margin-bottom: 10px; opacity: 0.6;">📭</div>
             <div style="font-weight: 700; font-size: 15px; margin-bottom: 4px;">У вас нет личных списков</div>
             <div style="font-size: 13px; opacity: 0.8;">Создайте первый список выше!</div>
@@ -371,6 +371,7 @@ export function updateCollectionUI() {
                         </div>
                     </div>
                     <div class="collection-actions">
+                        <button class="btn-collection-action" data-action="share-list" data-value="${list.id}" title="Поделиться ссылкой">🔗</button>
                         <button class="btn-collection-action" data-action="edit-list" data-value="${list.id}" data-title="${safeTitle}" data-icon="${safeIcon}" title="Редактировать">✏️</button>
                         <button class="btn-collection-action" data-action="open-add-word-modal" data-value="${list.id}" title="Добавить слово">➕</button>
                         <button class="btn-collection-action delete" data-action="delete-list" data-value="${list.id}" title="Удалить">🗑️</button>
@@ -397,6 +398,9 @@ export function updateCollectionUI() {
                             <div class="collection-title">${escapeHtml(list.title)}</div>
                             <div class="collection-meta">Автор: ${list.user_id ? "Пользователь" : "Система"}</div>
                         </div>
+                    </div>
+                    <div class="collection-actions">
+                        <button class="btn-collection-action" data-action="share-list" data-value="${list.id}" title="Поделиться ссылкой">🔗</button>
                     </div>
                 </div>
                 `;
@@ -434,6 +438,7 @@ export function updateCollectionUI() {
   const filterBtn = document.getElementById("collection-filter-btn");
   if (filterBtn) {
     if (collectionsState.currentCollectionFilter) {
+      filterBtn.style.display = "inline-flex";
       const backBtnStyle = `
         display: inline-flex; 
         align-items: center; 
@@ -498,8 +503,7 @@ export function updateCollectionUI() {
         el.onmouseout = () => (el.style.background = "var(--surface-2)");
       });
     } else {
-      filterBtn.innerHTML = `<span>Все слова</span> <span style="opacity: 0.5; font-size: 0.9em; margin-left: 6px;">▼</span>`;
-      filterBtn.onclick = () => openModal("collections-modal");
+      filterBtn.style.display = "none";
     }
   }
 }
@@ -547,6 +551,20 @@ export function manageMyWords(e: Event) {
 export function clearCollectionFilter(e: Event) {
   e.stopPropagation();
   setCollectionFilter(null);
+}
+
+export function shareList(listId: string) {
+  const list = collectionsState.userLists.find((l) => l.id === listId);
+  if (!list) return;
+
+  if (!list.is_public) {
+    showToast("⚠️ Сделайте список публичным, чтобы делиться им");
+    return;
+  }
+
+  const url = `${window.location.origin}${window.location.pathname}?share_list=${listId}`;
+  navigator.clipboard.writeText(url);
+  showToast("🔗 Ссылка скопирована в буфер обмена!");
 }
 
 export function editListTitleInline(listId: string, el: HTMLElement, e: Event) {
@@ -716,17 +734,27 @@ export async function openAddToListModal(wordId: number) {
   openModal("add-to-list-modal");
 }
 
-export async function toggleWordInList(listId: string, wId: number, el: HTMLElement) {
+export async function toggleWordInList(
+  listId: string,
+  wId: number,
+  el: HTMLElement,
+) {
   const checkbox = el.querySelector("input") as HTMLInputElement;
   const isAdding = !checkbox.checked;
   checkbox.checked = isAdding;
 
   if (isAdding) {
-    await client.from(DB_TABLES.LIST_ITEMS).insert({ list_id: listId, word_id: wId });
-    if (!collectionsState.listItems[listId]) collectionsState.listItems[listId] = new Set();
+    await client
+      .from(DB_TABLES.LIST_ITEMS)
+      .insert({ list_id: listId, word_id: wId });
+    if (!collectionsState.listItems[listId])
+      collectionsState.listItems[listId] = new Set();
     collectionsState.listItems[listId].add(wId);
   } else {
-    await client.from(DB_TABLES.LIST_ITEMS).delete().match({ list_id: listId, word_id: wId });
+    await client
+      .from(DB_TABLES.LIST_ITEMS)
+      .delete()
+      .match({ list_id: listId, word_id: wId });
     collectionsState.listItems[listId]?.delete(wId);
   }
 }

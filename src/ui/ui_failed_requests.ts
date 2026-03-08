@@ -56,7 +56,7 @@ async function loadFailedRequests() {
   }
 
   if (!allData || allData.length === 0) {
-    container.innerHTML = `<div style="text-align:center; color:var(--text-sub); padding:20px;">Нет неудачных заявок</div>`;
+    container.innerHTML = `<div style="text-align:center; color:var(--text-sub); padding:40px 20px;"><div style="font-size:40px; margin-bottom:10px; opacity:0.5;">✅</div><div>Все заявки обработаны успешно</div></div>`;
     return;
   }
 

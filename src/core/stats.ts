@@ -29,7 +29,7 @@ export function getTotalXP(level: number, currentXP: number): number {
   return total;
 }
 
-export function getCurrentWeekId() {
+function getCurrentWeekId() {
   const d = new Date();
   d.setHours(0, 0, 0, 0);
   d.setDate(d.getDate() + 4 - (d.getDay() || 7));
@@ -270,7 +270,7 @@ export function updateStats() {
         return `
           <div class="stat-card-primary">
               <div class="stat-icon-primary" style="background: ${s.color}20; color: ${s.color};">${s.icon}</div>
-              <div class="stat-info-primary">
+              <div class="stat-info-primary" style="text-align: center;">
                   <div class="stat-value-primary">${s.value}</div>
                   <div class="stat-label-primary">${s.label}</div>
               </div>
@@ -753,31 +753,43 @@ export function renderDetailedStats() {
         <div class="chart-card">
           <h3 class="chart-title">📊 Активность (7 дней)</h3>
           <div class="chart-container">
-            <canvas id="activityChart"></canvas>
+            <canvas id="activityChart" style="width: 100%; height: 100%;"></canvas>
           </div>
         </div>
         <div class="chart-card">
-          <h3 class="chart-title">📅 Изучено слов</h3>
-          <div class="chart-container">
-            <canvas id="learnedChart"></canvas>
-          </div>
-        </div>
-        <div class="chart-card">
-          <h3 class="chart-title">🧠 Распределение SRS</h3>
+          <h3 class="chart-title">🧠 Прогресс (SRS)</h3>
           <div class="chart-container">
             <canvas id="srsChart"></canvas>
           </div>
         </div>
         <div class="chart-card">
-          <h3 class="chart-title">📉 Кривая забывания</h3>
+          <h3 class="chart-title">📅 Изучено по уровням</h3>
           <div class="chart-container">
-            <canvas id="forgettingChart"></canvas>
+            <canvas id="learnedChart"></canvas>
+          </div>
+        </div>
+        <div class="chart-card">
+          <h3 class="chart-title">🏷️ По категориям</h3>
+          <div class="chart-container">
+            <canvas id="typesChart"></canvas>
+          </div>
+        </div>
+        <div class="chart-card">
+          <h3 class="chart-title">⏰ Время занятий</h3>
+          <div class="chart-container">
+            <canvas id="hourlyChart"></canvas>
           </div>
         </div>
         <div class="chart-card">
           <h3 class="chart-title">🎯 Точность сессий</h3>
           <div class="chart-container">
             <canvas id="accuracyChart"></canvas>
+          </div>
+        </div>
+        <div class="chart-card">
+          <h3 class="chart-title">📉 Кривая забывания</h3>
+          <div class="chart-container">
+            <canvas id="forgettingChart"></canvas>
           </div>
         </div>
       </div>
@@ -789,10 +801,12 @@ export function renderDetailedStats() {
   // FIX: Явно вызываем рендеринг графиков после вставки HTML
   requestAnimationFrame(() => {
     renderActivityChart();
-    renderLearnedChart();
     renderSRSDistributionChart();
-    renderForgettingCurve();
+    renderLearnedChart();
+    renderWordTypesChart();
+    renderHourlyActivityChart();
     renderAccuracyChart();
+    renderForgettingCurve();
   });
 }
 
@@ -812,8 +826,11 @@ export function renderActivityChart() {
   const activityMap = new Map<string, number>();
   Object.values(state.wordHistory).forEach((h) => {
     if (h.learnedDate) {
-      const ld = new Date(h.learnedDate).toLocaleDateString("en-CA");
-      activityMap.set(ld, (activityMap.get(ld) || 0) + 1);
+      const d = new Date(h.learnedDate);
+      if (!isNaN(d.getTime())) {
+        const ld = d.toLocaleDateString("en-CA");
+        activityMap.set(ld, (activityMap.get(ld) || 0) + 1);
+      }
     }
   });
 
@@ -831,9 +848,14 @@ export function renderActivityChart() {
     // This ensures the chart isn't empty for past active days
     if (learnedCount === 0 && i > 0) {
       const sessionActivity = state.sessions
-        .filter(
-          (s) => new Date(s.date).toLocaleDateString("en-CA") === localDateStr,
-        )
+        .filter((s) => {
+          if (!s.date) return false;
+          const sd = new Date(s.date);
+          return (
+            !isNaN(sd.getTime()) &&
+            sd.toLocaleDateString("en-CA") === localDateStr
+          );
+        })
         .reduce((acc, s) => acc + (s.wordsReviewed || 0), 0);
       // Use session activity but scale it down slightly to approximate "learned" vs "reviewed"
       learnedCount = Math.ceil(sessionActivity * 0.5);
@@ -844,8 +866,8 @@ export function renderActivityChart() {
 
   // Gradient
   const gradient = ctx.createLinearGradient(0, 0, 0, 200);
-  gradient.addColorStop(0, "rgba(108, 92, 231, 0.8)");
-  gradient.addColorStop(1, "rgba(108, 92, 231, 0.2)");
+  gradient.addColorStop(0, "rgba(124, 58, 237, 0.9)");
+  gradient.addColorStop(1, "rgba(124, 58, 237, 0.2)");
 
   chartInstances["activity"] = new window.Chart(ctx, {
     type: "bar",
@@ -858,7 +880,8 @@ export function renderActivityChart() {
           backgroundColor: gradient,
           borderRadius: 6,
           borderSkipped: false,
-          barThickness: 20,
+          barThickness: "flex",
+          maxBarThickness: 30,
         },
       ],
     },
@@ -948,9 +971,10 @@ export function renderLearnedChart() {
         {
           label: "Изучено",
           data: Object.values(levels),
-          backgroundColor: ["#00b894", "#0984e3", "#6c5ce7"],
+          backgroundColor: ["#34d399", "#60a5fa", "#a78bfa"],
           borderRadius: 6,
-          barThickness: 25,
+          barThickness: "flex",
+          maxBarThickness: 40,
         },
       ],
     },
@@ -1048,7 +1072,7 @@ export function renderAccuracyChart() {
           borderWidth: 3,
           pointBackgroundColor: "#ffffff",
           pointBorderColor: "#00b894",
-          pointRadius: 4,
+          pointRadius: 3,
           pointHoverRadius: 6,
           fill: true,
           tension: 0.4,
@@ -1148,7 +1172,7 @@ export function renderForgettingCurve() {
           borderColor: theme.success,
           backgroundColor: gradientUser,
           borderWidth: 3,
-          pointRadius: 2,
+          pointRadius: 0,
           pointBackgroundColor: theme.success,
           pointHoverRadius: 4,
           fill: true,
@@ -1241,10 +1265,10 @@ export function renderSRSDistributionChart() {
         {
           data: counts,
           backgroundColor: [
-            theme.gridColor,
-            "rgba(96, 165, 250, 0.8)", // --info
-            "rgba(167, 139, 250, 0.9)", // --primary
-            "rgba(52, 211, 153, 0.9)", // --success
+            theme.gridColor, // New (Gray/Transparent)
+            "#60a5fa", // Learning (Blue)
+            "#a78bfa", // Reviewing (Purple)
+            "#34d399", // Mastered (Green)
           ],
           borderColor: theme.tooltipBg, // Use background for separation
           borderWidth: 3,
@@ -1329,6 +1353,140 @@ export function renderSRSDistributionChart() {
         },
       },
     ],
+  });
+}
+
+export function renderWordTypesChart() {
+  const ctx = (
+    document.getElementById("typesChart") as HTMLCanvasElement
+  )?.getContext("2d");
+  if (!ctx) return;
+  destroyChart("types");
+
+  const theme = getChartTheme();
+  const counts: Record<string, number> = {};
+
+  state.dataStore.forEach((w) => {
+    // Пытаемся определить категорию/часть речи
+    // Часто это хранится в category_ru, например "Глаголы", "Существительные"
+    // Или можно парсить из my_notes/grammar_info если там есть теги
+    let cat = w.category_ru || w.category || "Другое";
+    // Упрощаем названия (убираем скобки и лишнее)
+    cat = cat.split("(")[0].trim();
+    counts[cat] = (counts[cat] || 0) + 1;
+  });
+
+  // Сортируем и берем топ-6, остальные в "Другое"
+  const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]);
+  const top = sorted.slice(0, 6);
+  const otherCount = sorted.slice(6).reduce((acc, curr) => acc + curr[1], 0);
+  if (otherCount > 0) top.push(["Другое", otherCount]);
+
+  const labels = top.map((x) => x[0]);
+  const data = top.map((x) => x[1]);
+
+  chartInstances["types"] = new window.Chart(ctx, {
+    type: "polarArea",
+    data: {
+      labels,
+      datasets: [
+        {
+          data,
+          backgroundColor: [
+            "rgba(251, 146, 60, 0.7)", // Orange
+            "rgba(52, 211, 153, 0.7)", // Green
+            "rgba(96, 165, 250, 0.7)", // Blue
+            "rgba(167, 139, 250, 0.7)", // Purple
+            "rgba(244, 114, 182, 0.7)", // Pink
+            "rgba(251, 113, 133, 0.7)", // Rose
+            "rgba(148, 163, 184, 0.7)", // Slate
+          ],
+          borderWidth: 1,
+          borderColor: theme.tooltipBg,
+        },
+      ],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      scales: {
+        r: {
+          grid: { color: theme.gridColor },
+          ticks: { display: false, backdropColor: "transparent" },
+        },
+      },
+      plugins: {
+        legend: {
+          position: "right",
+          labels: {
+            color: theme.textColor,
+            font: { family: theme.fontFamily, size: 11 },
+            boxWidth: 10,
+          },
+        },
+      },
+    },
+  });
+}
+
+export function renderHourlyActivityChart() {
+  const ctx = (
+    document.getElementById("hourlyChart") as HTMLCanvasElement
+  )?.getContext("2d");
+  if (!ctx) return;
+  destroyChart("hourly");
+
+  const theme = getChartTheme();
+  const hours = new Array(24).fill(0);
+
+  state.sessions.forEach((s) => {
+    if (s.date) {
+      const d = new Date(s.date);
+      if (!isNaN(d.getTime())) {
+        const h = d.getHours();
+        hours[h] += s.duration / 60; // Минуты
+      }
+    }
+  });
+
+  const gradient = ctx.createLinearGradient(0, 0, 0, 200);
+  gradient.addColorStop(0, "rgba(245, 158, 11, 0.8)"); // Amber
+  gradient.addColorStop(1, "rgba(245, 158, 11, 0.1)");
+
+  chartInstances["hourly"] = new window.Chart(ctx, {
+    type: "bar",
+    data: {
+      labels: hours.map((_, i) => String(i)),
+      datasets: [
+        {
+          label: "Минут",
+          data: hours,
+          backgroundColor: gradient,
+          borderRadius: 4,
+          barThickness: "flex",
+        },
+      ],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        y: {
+          display: false, // Скрываем ось Y для чистоты
+        },
+        x: {
+          grid: { display: false },
+          ticks: {
+            color: theme.textColor,
+            font: { family: theme.fontFamily, size: 10 },
+            maxRotation: 0,
+            autoSkip: true,
+            maxTicksLimit: 12, // Показываем каждые 2 часа
+          },
+        },
+      },
+    },
   });
 }
 

@@ -751,10 +751,6 @@ export function resetSearchHandler() {
   }
 }
 
-export function setupGridEffects() {
-  // 3D tilt effect removed to improve scroll performance and prevent jitter
-}
-
 /**
  * General helper to compress, upload, and save an image from a Blob/File.
  */

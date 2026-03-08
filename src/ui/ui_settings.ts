@@ -721,6 +721,9 @@ export function applyFocusMode() {
   }
   const mainBtn = document.getElementById("focus-mode-btn");
   if (mainBtn) mainBtn.classList.toggle("active", state.focusMode);
+
+  const exitBtn = document.getElementById("exit-focus-btn");
+  if (exitBtn) exitBtn.style.display = state.focusMode ? "flex" : "none";
 }
 
 /**
