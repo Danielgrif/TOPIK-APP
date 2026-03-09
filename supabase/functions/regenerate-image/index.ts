@@ -1,5 +1,12 @@
 // @ts-nocheck
+// deno-lint-ignore-file ban-ts-comment
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+
+declare const Deno: {
+  env: {
+    get(key: string): string | undefined;
+  };
+};
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 import { Image } from "https://deno.land/x/imagescript@1.2.15/mod.ts";
 
@@ -8,6 +15,24 @@ const corsHeaders = {
   "Access-Control-Allow-Headers":
     "authorization, x-client-info, apikey, content-type",
 };
+
+interface ImageResult {
+  url: string;
+  source: string;
+}
+
+interface UnsplashPhoto {
+  urls: {
+    regular: string;
+  };
+}
+
+interface PexelsPhoto {
+  src: {
+    large: string;
+  };
+}
+
 
 // Вспомогательная функция для поиска в Pixabay
 async function searchPixabay(
@@ -18,7 +43,7 @@ async function searchPixabay(
   try {
     const encodedQuery = encodeURIComponent(query);
     // eslint-disable-next-line no-console
-    console.log(`Searching Pixabay for: "${query}" (${lang})`);
+      console.log(`Searching Pixabay for: "${query}" (${lang})`);
     const res = await fetch(
       `https://pixabay.com/api/?key=${apiKey}&q=${encodedQuery}&image_type=photo&per_page=3&lang=${lang}&safesearch=true&orientation=horizontal`,
     );
@@ -32,8 +57,7 @@ async function searchPixabay(
       return (
         data.hits
           .slice(0, 5)
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          .map((hit: any) => ({ url: hit.webformatURL, source: "pixabay" }))
+          .map((hit: PexelsPhoto) => ({ url: hit.src.large, source: "pexels" }))
       );
     }
   } catch (e) {
@@ -64,8 +88,8 @@ async function searchUnsplash(
       return (
         data.results
           .slice(0, 5)
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          .map((hit: any) => ({ url: hit.urls.regular, source: "unsplash" }))
+          
+          .map((hit: UnsplashPhoto) => ({ url: hit.urls.regular, source: "unsplash" }))
       );
     }
   } catch (e) {
@@ -97,8 +121,8 @@ async function searchPexels(
       return (
         data.photos
           .slice(0, 5)
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          .map((hit: any) => ({ url: hit.src.large, source: "pexels" }))
+          
+          .map((hit: PexelsPhoto) => ({ url: hit.src.large, source: "pexels" }))
       );
     }
   } catch (e) {
@@ -110,7 +134,7 @@ async function searchPexels(
 async function generateImageWithGemini(
   apiKey: string,
   prompt: string,
-): Promise<{ url: string; source: string } | null> {
+): Promise<ImageResult | null> {
   const models = [
     "imagen-3.0-generate-001",
     "gemini-3.1-flash-image-preview",
@@ -127,7 +151,7 @@ async function generateImageWithGemini(
         `https://generativelanguage.googleapis.com/v1beta/models/${model}:predict?key=${apiKey}`,
         {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: { "Content-Type": "application/json; charset=utf-8" },
           body: JSON.stringify({
             instances: [{ prompt }],
             parameters: { sampleCount: 1, aspectRatio: "4:3" },
@@ -139,7 +163,7 @@ async function generateImageWithGemini(
         console.warn(`${model} API error: ${res.status} ${err}`);
         continue; // Пробуем следующую модель
       }
-      const data = await res.json();
+      const data: GeminiResponse = await res.json();
       if (data.predictions && data.predictions.length > 0) {
         const img = data.predictions[0];
         const mimeType = img.mimeType || "image/jpeg";
@@ -185,7 +209,7 @@ async function optimizeAndUpload(supabaseAdmin, imageBlob, id, source) {
   return `${publicUrl}?t=${Date.now()}`;
 }
 
-serve(async (req) => {
+serve(async (req: Request): Promise<Response> => {
   // Handle CORS preflight requests
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
@@ -193,7 +217,7 @@ serve(async (req) => {
 
   try {
     const { mode, id, word, translation, selectedUrl, source } =
-      await req.json();
+       await req.json();
 
     const PIXABAY_API_KEY = Deno.env.get("PIXABAY_API_KEY");
     const UNSPLASH_ACCESS_KEY = Deno.env.get("UNSPLASH_ACCESS_KEY"); // Опционально
@@ -369,5 +393,5 @@ serve(async (req) => {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
       status: 500,
     });
-  }
+  };
 });

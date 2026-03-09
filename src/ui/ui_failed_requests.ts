@@ -17,6 +17,7 @@ export async function openFailedRequestsModal() {
         <div class="modal-header">
           <h3>❌ Ошибочные Заявки</h3>
           <div class="header-actions">
+            <button class="btn-text" id="retry-all-failed-btn" style="color: var(--primary); font-size: 13px; font-weight: 600; display: none;">Повторить все</button>
             <button class="btn btn-icon close-modal-btn" data-close-modal="${modalId}" aria-label="Закрыть">✕</button>
           </div>
         </div>
@@ -55,9 +56,53 @@ async function loadFailedRequests() {
     return;
   }
 
+  const retryAllBtn = document.getElementById(
+    "retry-all-failed-btn",
+  ) as HTMLButtonElement | null;
+
   if (!allData || allData.length === 0) {
     container.innerHTML = `<div style="text-align:center; color:var(--text-sub); padding:40px 20px;"><div style="font-size:40px; margin-bottom:10px; opacity:0.5;">✅</div><div>Все заявки обработаны успешно</div></div>`;
+    if (retryAllBtn) retryAllBtn.style.display = "none";
     return;
+  }
+
+  if (retryAllBtn) {
+    retryAllBtn.style.display = "inline-block";
+    retryAllBtn.textContent = `Повторить все (${allData.length})`;
+    retryAllBtn.onclick = async () => {
+      const ids = allData.map((w) => w.id);
+      if (ids.length === 0) return;
+
+      retryAllBtn.disabled = true;
+      retryAllBtn.innerHTML = '<div class="spinner-tiny"></div>';
+
+      const promises = ids.map((id) =>
+        client.functions.invoke("retry-word-request", {
+          body: { request_id: id },
+        }),
+      );
+
+      try {
+        const results = await Promise.allSettled(promises);
+        const failedCount = results.filter(
+          (r) =>
+            r.status === "rejected" ||
+            (r.status === "fulfilled" && r.value.error),
+        ).length;
+
+        if (failedCount > 0) {
+          showToast(
+            `❌ ${failedCount} из ${ids.length} заявок не удалось повторить.`,
+          );
+        } else {
+          showToast(`✅ Все ${ids.length} заявок отправлены повторно.`);
+        }
+        loadFailedRequests(); // Refresh the list
+      } catch (e) {
+        showToast(`Критическая ошибка: ${(e as Error).message}`);
+        retryAllBtn.disabled = false;
+      }
+    };
   }
 
   container.innerHTML = allData
@@ -82,25 +127,30 @@ async function loadFailedRequests() {
     .querySelectorAll('[data-action="retry-request"]')
     .forEach((button) => {
       button.addEventListener("click", async (e) => {
-        const id = (e.target as HTMLElement).dataset.id;
+        const btn = e.currentTarget as HTMLButtonElement;
+        const id = btn.dataset.id;
         if (id) {
+          btn.disabled = true;
+          btn.innerHTML = '<div class="spinner-tiny"></div>';
+
           try {
-            // Update the status back to pending
-            const { error } = await client
-              .from(DB_TABLES.WORD_REQUESTS)
-              .update({ status: WORD_REQUEST_STATUS.PENDING, my_notes: null })
-              .eq("id", id);
+            // Вызываем "умную" функцию повтора
+            const { error } = await client.functions.invoke(
+              "retry-word-request",
+              { body: { request_id: id } },
+            );
 
             if (error) {
               throw error;
             }
             showToast("Заявка отправлена повторно.");
-            loadFailedRequests(); // Refresh the list
+            // Оптимистично удаляем элемент из списка
+            btn.closest(".trash-item")?.remove();
           } catch (err) {
             console.error("Failed to retry request:", err);
-            showToast(
-              `Ошибка при повторной отправке: ${(err as Error).message}`,
-            );
+            showToast(`Ошибка: ${(err as Error).message}`);
+            btn.disabled = false;
+            btn.innerHTML = "↻";
           }
         }
       });

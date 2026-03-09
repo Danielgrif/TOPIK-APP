@@ -1,0 +1,12 @@
+// .vscode/settings.json
+{
+  "deno.enable": true,
+  "deno.lint": true,
+  
+  // Указываем VS Code использовать Deno только для этих папок
+  "deno.enablePaths": [
+    "supabase/functions/"
+  ],
+  // Эта строка помогает избежать конфликтов, если у вас есть и tsconfig.json для фронтенда
+  // "typescript.tsdk": "node_modules/typescript/lib" // Deprecated: Use #js/ts.tsdk.path# instead
+}

@@ -8,7 +8,7 @@ import {
   getIconForValue,
 } from "../utils/utils.ts";
 import { client } from "./supabaseClient.ts";
-import { DB_BUCKETS, DB_TABLES } from "./constants.ts";
+import { DB_TABLES } from "./constants.ts";
 import { collectionsState } from "./collections_data.ts";
 import { openConfirm } from "../ui/ui_modal.ts";
 
@@ -132,7 +132,7 @@ export function createCardElement(item: Word, index: number): HTMLElement {
   return el;
 }
 
-function createCardFront(item: Word, index: number): HTMLElement {
+function createCardFront(item: Word, _index: number): HTMLElement {
   const front = document.createElement("div");
   front.className = "card-front";
   const isFav = state.favorites.has(item.id);
@@ -549,7 +549,7 @@ function createCardBack(item: Word): HTMLElement {
   return back;
 }
 
-export function createListItem(item: Word, index: number): HTMLElement {
+export function createListItem(item: Word, _index: number): HTMLElement {
   const container = document.createElement("div");
   container.className = "list-item-wrapper";
   container.dataset.wordId = String(item.id);

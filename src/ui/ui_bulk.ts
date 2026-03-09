@@ -261,12 +261,12 @@ export function bulkMoveToTopic() {
       if (!newTopic.trim()) return false;
 
       const ids = editableIds;
-      const updates = { topic_ru: newTopic.trim() }; // Обновляем только RU
+      const updates = { topic: newTopic.trim() };
 
       // Обновляем локально
       state.dataStore.forEach((w) => {
         if (ids.includes(w.id)) {
-          w.topic_ru = newTopic.trim();
+          w.topic = newTopic.trim();
         }
       });
 

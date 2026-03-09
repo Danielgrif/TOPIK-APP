@@ -379,7 +379,7 @@ function populateQuizFilters() {
   const topics = new Set<string>();
   state.dataStore.forEach((w: Word) => {
     if (w.type === state.currentType) {
-      const t = w.topic_ru || w.topic_kr;
+      const t = w.topic || w.topic_ru || w.topic_kr;
       if (t) topics.add(t);
     }
   });
@@ -424,9 +424,9 @@ function populateQuizCategories() {
   const categories = new Set<string>();
   state.dataStore.forEach((w: Word) => {
     if (w.type !== state.currentType) return;
-    const t = w.topic_ru || w.topic_kr;
+    const t = w.topic || w.topic_ru || w.topic_kr;
     if (quizTopic !== "all" && t !== quizTopic) return;
-    const c = w.category_ru || w.category_kr;
+    const c = w.category || w.category_ru || w.category_kr;
     if (c) categories.add(c);
   });
   cSelect.innerHTML = '<option value="all">Все категории</option>';
@@ -1296,9 +1296,9 @@ export function updateQuizCount() {
   if (!countEl) return;
   const filterFn = (w: Word) => {
     if (w.type !== state.currentType) return false;
-    const wTopic = w.topic_ru || w.topic_kr;
+    const wTopic = w.topic || w.topic_ru || w.topic_kr;
     const matchTopic = quizTopic === "all" || wTopic === quizTopic;
-    const wCat = w.category_ru || w.category_kr;
+    const wCat = w.category || w.category_ru || w.category_kr;
     const matchCat = quizCategory === "all" || wCat === quizCategory;
     const matchStar = quizStar === "all" || w.level === quizStar;
     const matchSearch =
@@ -1320,9 +1320,9 @@ function updateQuizModesAvailability() {
   const buttons = selector.querySelectorAll(".quiz-mode-btn");
   const filterFn = (w: Word) => {
     if (w.type !== state.currentType) return false;
-    const wTopic = w.topic_ru || w.topic_kr;
+    const wTopic = w.topic || w.topic_ru || w.topic_kr;
     const matchTopic = quizTopic === "all" || wTopic === quizTopic;
-    const wCat = w.category_ru || w.category_kr;
+    const wCat = w.category || w.category_ru || w.category_kr;
     const matchCat = quizCategory === "all" || wCat === quizCategory;
     const matchStar = quizStar === "all" || w.level === quizStar;
     const matchSearch =

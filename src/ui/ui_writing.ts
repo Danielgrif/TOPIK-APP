@@ -89,7 +89,13 @@ async function checkEssay() {
       body: { taskType: currentTask, question, answer },
     });
 
-    if (error) throw error;
+    if (error) {
+      // Пробрасываем ошибку с сервера, если она есть в теле ответа
+      if (data && data.error) {
+        throw new Error(data.error);
+      }
+      throw error;
+    }
 
     if (resultDiv && contentDiv && scoreEl) {
       resultDiv.style.display = "block";

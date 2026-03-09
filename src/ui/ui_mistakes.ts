@@ -60,8 +60,8 @@ function renderMistakesContent() {
   const byPart: Record<string, number> = Object.create(null);
 
   words.forEach((w) => {
-    const topic = w.topic_ru || w.topic_kr || "Other";
-    const part = w.category_ru || w.category_kr || "Other";
+    const topic = w.topic || w.topic_ru || w.topic_kr || "Other";
+    const part = w.category || w.category_ru || w.category_kr || "Other";
 
     byTopic[topic] = (byTopic[topic] || 0) + 1;
     byPart[part] = (byPart[part] || 0) + 1;

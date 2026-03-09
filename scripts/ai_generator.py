@@ -14,16 +14,16 @@ class AIContentGenerator:
         
         # Списки для валидации (используются в промпте)
         self.valid_topics = [
-            "Daily Life (Повседневная жизнь)", "Food (Еда)", "Travel (Путешествия)", 
-            "Education (Образование)", "Work (Работа)", "Health (Здоровье)", 
-            "Nature (Природа)", "Relationships (Отношения)", "Shopping (Покупки)", 
-            "Culture (Культура)", "Politics/Economy (Политика/Экономика)", "Other (Другое)"
+            "일상생활 (Повседневная жизнь)", "음식 (Еда)", "여행 (Путешествия)", 
+            "교육 (Образование)", "직장 (Работа)", "건강 (Здоровье)", 
+            "자연 (Природа)", "인간관계 (Отношения)", "쇼핑 (Покупки)", 
+            "문화 (Культура)", "정치/경제 (Политика/Экономика)", "기타 (Другое)"
         ]
         
         self.valid_categories = [
-            "Nouns (Существительные)", "Verbs (Глаголы)", "Adjectives (Прилагательные)", 
-            "Adverbs (Наречия)", "Particles (Частицы)", "Idioms (Идиомы)", 
-            "Phrases (Фразы)", "Grammar (Грамматика)"
+            "명사 (Существительные)", "동사 (Глаголы)", "형용사 (Прилагательные)", 
+            "부사 (Наречия)", "조사 (Частицы)", "관용구 (Идиомы)", 
+            "문구 (Фразы)", "문법 (Грамматика)"
         ]
 
     def _build_prompt(self, word_kr):
@@ -50,8 +50,8 @@ Each object must have:
 - "topik_level": string ("TOPIK I", "TOPIK II level 3", "TOPIK II level 4", "TOPIK II level 5", "TOPIK II level 6")
 - "tone": string (Describe the tone/register. Options: Formal, Informal, Poetic, Technical, Slang. Be consistent with example sentences.)
 - "word_hanja": string (Hanja characters ONLY if applicable. Empty string if native Korean)
-- "topic": string (One from: {', '.join(self.valid_topics)})
-- "category": string (One from: {', '.join(self.valid_categories)})
+- "topic": string (One from: {', '.join(self.valid_topics)}. If unsure, use "기타 (Другое)")
+- "category": string (One from: {', '.join(self.valid_categories)}. If unsure, use "기타 (Другое)")
 - "level": string (One of: "★★★" (Beginner), "★★☆" (Intermediate), "★☆☆" (Advanced))
 - "example_kr": string (A simple, natural Korean sentence using the word in **polite informal style (해요체)**)
 - "example_ru": string (Russian translation of the example)
@@ -62,7 +62,7 @@ Each object must have:
 - "type": string ("word" or "grammar")
 
 ### 4. Constraints
-- Topic/Category MUST be exactly from the provided lists. If unsure, use "Other (Другое)".
+- Topic/Category MUST be exactly from the provided lists. If unsure, use "기타 (Другое)".
 - Examples should be suitable for the word's difficulty level AND maintain consistent tone (formal, informal, etc.).
 - Return ONLY a valid JSON string. No explanations or extra text.
 

@@ -1,7 +1,13 @@
 // supabase/functions/generate-word-data/index.ts
 import { serve } from "https://deno.land/std@0.223.0/http/server.ts"
 // ✅ НОВАЯ БИБЛИОТЕКА google-genai (замена @google/generative-ai)
-import { GoogleGenerativeAI } from "npm:@google/genai@0.1.0"
+import { GoogleGenerativeAI, SchemaType } from "https://esm.sh/@google/generative-ai@0.21.0"
+
+declare const Deno: {
+  env: {
+    get(key: string): string | undefined;
+  };
+};
 
 declare global {
   interface ImportMeta {
@@ -22,6 +28,39 @@ interface AvailableModel {
   description: string
   supportedGenerationMethods: string[]
 }
+
+interface WordData {
+  word_kr?: string
+  translation?: string
+  frequency?: string
+  topik_level?: string
+  tone?: string
+  word_hanja?: string
+  topic?: string
+  category?: string
+  level?: string
+  example_kr?: string
+  example_ru?: string
+  synonyms?: string
+  antonyms?: string
+  collocations?: string
+  grammar_info?: string
+  type?: string
+  [key: string]: string | undefined
+}
+
+const VALID_TOPICS = [
+  "일상생활 (Повседневная жизнь)", "음식 (Еда)", "여행 (Путешествия)", 
+  "교육 (Образование)", "직장 (Работа)", "건강 (Здоровье)", 
+  "자연 (Природа)", "인간관계 (Отношения)", "쇼핑 (Покупки)", 
+  "문화 (Культура)", "정치/경제 (Политика/Экономика)", "기타 (Другое)"
+];
+
+const VALID_CATEGORIES = [
+  "명사 (Существительные)", "동사 (Глаголы)", "형용사 (Прилагательные)", 
+  "부사 (Наречия)", "조사 (Частицы)", "관용구 (Идиомы)", 
+  "문구 (Фразы)", "문법 (Грамматика)"
+];
 
 async function getAvailableModels(genai: GoogleGenerativeAI): Promise<AvailableModel[]> {
   try {
@@ -63,14 +102,13 @@ async function getAvailableModels(genai: GoogleGenerativeAI): Promise<AvailableM
 async function selectBestModel(genai: GoogleGenerativeAI): Promise<string> {
   // Приоритетный список моделей (от лучшей к базовой)
   const preferredModels = [
+    "gemini-2.5-flash",
+    "gemini-2.0-flash",
     "gemini-1.5-pro-latest",
-    "gemini-1.5-pro",
-    "gemini-2.0-flash-exp", 
-    "gemini-pro",
-    "gemini-1.5-flash-latest"
+    "gemini-1.5-flash-latest",
+    "gemini-pro-latest"
   ];
   
-  const fallbackModels = ["gemini-pro", "gemini-1.0-pro"];
   
   try {
     const availableModels = await getAvailableModels(genai);
@@ -93,12 +131,12 @@ async function selectBestModel(genai: GoogleGenerativeAI): Promise<string> {
     }
     
     // Последний резерв
-    console.log("⚠️ Используем gemini-pro (гарантированно доступна)");
-    return "gemini-pro";
+    console.log("⚠️ Используем gemini-2.0-flash (гарантированно доступна)");
+    return "gemini-2.0-flash";
     
   } catch (error) {
-    console.error("❌ Ошибка выбора модели, используем gemini-pro:", error);
-    return "gemini-pro";
+    console.error("❌ Ошибка выбора модели, используем gemini-2.0-flash:", error);
+    return "gemini-2.0-flash";
   }
 }
 
@@ -125,12 +163,18 @@ serve(async (req: Request) => {
     }
 
     // 1. Parse Request Body
-    const body = await req.json().catch((e) => {
+    const rawBody = await req.text();
+    console.log("📦 Raw request body:", rawBody);
+
+    let body: Record<string, unknown>;
+    try {
+      body = JSON.parse(rawBody);
+    } catch (e) {
       console.error("❌ JSON parse error:", e);
-      return {};
-    });
+      body = {};
+    }
     
-    const word = (body as any).word as string | undefined;
+    const word = typeof body === 'object' && body !== null && 'word' in body ? (body as Record<string, unknown>).word as string | undefined : undefined;
     if (!word || typeof word !== "string" || word.trim().length === 0) {
       return new Response(
         JSON.stringify({ 
@@ -180,7 +224,33 @@ serve(async (req: Request) => {
         temperature: 0.3,
         topK: 32,
         topP: 0.95,
-        maxOutputTokens: 1024,
+        maxOutputTokens: 8192,
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: SchemaType.ARRAY,
+          items: {
+            type: SchemaType.OBJECT,
+            properties: {
+              word_kr: { type: SchemaType.STRING },
+              translation: { type: SchemaType.STRING },
+              frequency: { type: SchemaType.STRING },
+              topik_level: { type: SchemaType.STRING },
+              tone: { type: SchemaType.STRING },
+              word_hanja: { type: SchemaType.STRING },
+              topic: { type: SchemaType.STRING },
+              category: { type: SchemaType.STRING },
+              level: { type: SchemaType.STRING },
+              example_kr: { type: SchemaType.STRING },
+              example_ru: { type: SchemaType.STRING },
+              synonyms: { type: SchemaType.STRING },
+              antonyms: { type: SchemaType.STRING },
+              collocations: { type: SchemaType.STRING },
+              grammar_info: { type: SchemaType.STRING },
+              type: { type: SchemaType.STRING }
+            },
+            required: ["word_kr", "translation", "level", "type"]
+          }
+        }
       }
     });
 
@@ -210,8 +280,8 @@ Each object must have:
 - "topik_level": string ("TOPIK I", "TOPIK II level 3", "TOPIK II level 4", "TOPIK II level 5", "TOPIK II level 6")
 - "tone": string (Describe the tone/register. Options: Formal, Informal, Poetic, Technical, Slang. Be consistent with example sentences.)
 - "word_hanja": string (Hanja characters ONLY if applicable. Empty string if native Korean)
-- "topic": string (One from: Daily Life (Повседневная жизнь), Food (Еда), Travel (Путешествия), Education (Образование), Work (Работа), Health (Здоровье), Nature (Природа), Relationships (Отношения), Shopping (Покупки), Culture (Культура), Politics/Economy (Политика/Экономика), Other (Другое))
-- "category": string (One from: Nouns (Существительные), Verbs (Глаголы), Adjectives (Прилагательные), Adverbs (Наречия), Particles (Частицы), Idioms (Идиомы), Phrases (Фразы), Grammar (Грамматика))
+- "topic": string (One from: ${VALID_TOPICS.join(', ')}. If unsure, use "기타 (Другое)")
+- "category": string (One from: ${VALID_CATEGORIES.join(', ')}. If unsure, use "기타 (Другое)")
 - "level": string (One of: "★★★" (Beginner), "★★☆" (Intermediate), "★☆☆" (Advanced))
 - "example_kr": string (A simple, natural Korean sentence using the word in **polite informal style (해요체)**)
 - "example_ru": string (Russian translation of the example)
@@ -222,7 +292,7 @@ Each object must have:
 - "type": string ("word" or "grammar")
 
 ### 5. Constraints
-- Topic/Category MUST be exactly from the provided lists. If unsure, use "Other (Другое)".
+- Topic/Category MUST be exactly from the provided lists. If unsure, use "기타 (Другое)".
 - Examples should be suitable for the word's difficulty level AND maintain consistent tone (formal, informal, etc.).
 - Return ONLY a valid JSON string. No explanations or extra text.
 
@@ -236,12 +306,15 @@ Input: '${trimmedWord}'`;
     let text = await response.text();
 
     console.log("📄 Получен ответ от AI (длина:", text.length, ")");
-
-    // 8. Parse JSON (с расширенной очисткой)
-    if (text.includes("```json")) {
-      text = text.split("```json")[1]?.split("```")?.trim() || text;
-    } else if (text.includes("```")) {
-      text = text.split("```")[2]?.split("```")[0]?.trim() || text;
+    
+    // 8. Parse JSON (с расширенной очисткой, хотя responseSchema должна вернуть чистый JSON)
+    // Но на всякий случай оставим базовую очистку от markdown, если модель решит добавить его
+    if (text.trim().startsWith("```")) {
+      if (text.includes("```json")) {
+        text = text.split("```json")[1]?.split("```")[0]?.trim() || text;
+      } else {
+        text = text.split("```")[1]?.split("```")[0]?.trim() || text;
+      }
     }
 
     // Удаляем висящие запятые и лишние символы
@@ -252,11 +325,11 @@ Input: '${trimmedWord}'`;
       .replace(/[\n\r]+\s*$/, "")
       .trim();
 
-    let data: any;
+    let data: unknown;
     try {
       data = JSON.parse(text);
       console.log("✅ JSON успешно распарсен");
-    } catch (parseError) {
+    } catch (_parseError) {
       console.error("❌ JSON Parse Error. Raw response (500 chars):", text.substring(0, 500));
       
       // Fallback: возвращаем сырой текст для отладки
@@ -277,12 +350,38 @@ Input: '${trimmedWord}'`;
     // 9. Normalize to array
     const items = Array.isArray(data) ? data : [data];
     
+    // Validate items
+    const validItems = items.filter((item: WordData) => {
+      return item && typeof item === 'object' && item.word_kr && item.translation;
+    });
+
+    if (validItems.length === 0) {
+       throw new Error("AI returned invalid data structure (missing word_kr or translation)");
+    }
+
+    // Use validated items
+    const finalItems = validItems;
+
+    // Validate Topic/Category against allowed lists
+    finalItems.forEach((item: WordData) => {
+      if (item.topic && !VALID_TOPICS.includes(item.topic)) {
+        item.topic = "기타 (Дру그)";
+      }
+      if (item.category && !VALID_CATEGORIES.includes(item.category)) {
+        item.category = "기타 (Другое)"; // Fallback or keep as is if strict validation isn't critical
+      }
+      
+      // Дублируем в поля _ru для совместимости с новой схемой БД
+      item.topic_ru = item.topic;
+      item.category_ru = item.category;
+    });
+
     console.log("✅ Успешно обработано слово:", trimmedWord, "| Найдено значений:", items.length);
 
     return new Response(
       JSON.stringify({ 
         success: true, 
-        data: items,
+        data: finalItems,
         modelUsed: selectedModel,
         word: trimmedWord,
         timestamp: new Date().toISOString()
@@ -292,14 +391,15 @@ Input: '${trimmedWord}'`;
       }
     );
 
-  } catch (error: any) {
-    console.error("💥 Function Error:", error.message || error);
+  } catch (error: Error | unknown) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    console.error("💥 Function Error:", errorMessage);
     console.error("💥 Full error:", error);
     
     return new Response(
       JSON.stringify({ 
         success: false, 
-        error: error.message || "Unknown server error",
+        error: errorMessage || "Unknown server error",
         timestamp: new Date().toISOString()
       }),
       { 

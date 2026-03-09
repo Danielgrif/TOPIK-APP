@@ -12,8 +12,8 @@ function populateSuggestions() {
   const categories = new Set<string>();
 
   state.dataStore.forEach((word) => {
-    const topic = word.topic_ru; // Предлагаем русские названия
-    const category = word.category_ru;
+    const topic = word.topic || word.topic_ru; // Поддержка обоих вариантов
+    const category = word.category || word.category_ru;
     if (topic) topics.add(topic);
     if (category) categories.add(category);
   });
@@ -61,8 +61,8 @@ export function openEditWordModal(id: string | number, onUpdate?: () => void) {
   if (krInput) krInput.value = word.word_kr || "";
   if (ruInput) ruInput.value = word.translation || "";
 
-  if (topicInputRu) topicInputRu.value = word.topic_ru || "";
-  if (catInputRu) catInputRu.value = word.category_ru || "";
+  if (topicInputRu) topicInputRu.value = word.topic || word.topic_ru || "";
+  if (catInputRu) catInputRu.value = word.category || word.category_ru || "";
 
   // TODO: В идеале нужно добавить инпуты для topic_kr и category_kr в HTML шаблон
   // Но пока сохраним совместимость, используя только RU поля для редактирования
@@ -184,10 +184,8 @@ export async function saveWordChanges() {
   const updates: Partial<Word> = {
     word_kr: krInput.value.trim(),
     translation: ruInput.value.trim(),
-    topic_ru: topicInputRu.value.trim(),
-    // topic_kr: ... // Пока не редактируем KR
-    category_ru: catInputRu.value.trim(),
-    // category_kr: ...
+    topic: topicInputRu.value.trim(),
+    category: catInputRu.value.trim(),
     level: levelSelect ? levelSelect.value : "★☆☆",
     grammar_info: grammarInput ? grammarInput.value.trim() : undefined,
   };

@@ -5,7 +5,7 @@ import { VitePWA } from "vite-plugin-pwa";
 export default defineConfig(({ mode }) => ({
   plugins: [
     // Базовый путь для GitHub Pages (название репозитория)
-    // base: '/TOPIK-APP/', 
+    // base: '/TOPIK-APP/',
     VitePWA({
       strategies: "injectManifest",
       srcDir: "src",

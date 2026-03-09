@@ -67,7 +67,7 @@ function getTopicsForCurrentType(): string[] {
   for (let i = 0; i < data.length; i++) {
     const w = data[i];
     if (w.type !== state.currentType) continue;
-    const t = w.topic_ru || w.topic_kr;
+    const t = w.topic || w.topic_ru || w.topic_kr;
     if (t) topics.add(t);
   }
   return Array.from(topics).sort();
@@ -310,10 +310,10 @@ function populateCategoryFilter() {
       for (let i = 0; i < data.length; i++) {
         const w = data[i];
         if (w.type !== currentType) continue;
-        const t = w.topic_ru || w.topic_kr;
+        const t = w.topic || w.topic_ru || w.topic_kr;
         if (!t || (!isAllTopics && !currentTopic.includes(t))) continue;
 
-        const c = w.category_ru || w.category_kr;
+        const c = w.category || w.category_ru || w.category_kr;
         if (c) categories.add(c);
       }
       return Array.from(categories).sort();

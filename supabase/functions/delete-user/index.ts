@@ -1,8 +1,12 @@
 // supabase/functions/delete-user/index.ts
-/// <reference types="https://deno.land/x/deno/cli/types/dts/index.d.ts" />
-
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient, SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
+
+declare const Deno: {
+  env: {
+    get(key: string): string | undefined;
+  };
+};
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -18,13 +22,14 @@ serve(async (req: Request) => {
   try {
     // 1. Create a Supabase client with the user's JWT to verify their identity
     const authHeader = req.headers.get("Authorization");
+
     if (!authHeader) {
-        throw new Error("Missing Authorization header");
+      throw new Error("Missing Authorization header");
     }
 
     const userSupabaseClient: SupabaseClient = createClient(
-      Deno.env.get("SUPABASE_URL") ?? "",
-      Deno.env.get("SUPABASE_ANON_KEY") ?? "",
+      Deno.env.get("SUPABASE_URL") || "",
+      Deno.env.get("SUPABASE_ANON_KEY") || "",
       { global: { headers: { Authorization: authHeader } } }
     );
 
@@ -32,8 +37,10 @@ serve(async (req: Request) => {
     const { data: { user }, error: userError } = await userSupabaseClient.auth.getUser();
 
     if (userError) {
-      console.error("User auth error:", userError.message);
-      return new Response(JSON.stringify({ error: "Authentication failed: " + userError.message }), {
+      const message = `Authentication failed: ${userError.message}`;
+      console.error("User auth error:", message);
+
+      return new Response(JSON.stringify({ error: message }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
         status: 401,
       });
@@ -46,18 +53,38 @@ serve(async (req: Request) => {
       });
     }
 
-    const userIdToDelete = user.id;
+    const userIdToDelete = user.id
 
     // 3. Create a Supabase client with the SERVICE_ROLE key to perform admin actions
     const adminSupabaseClient: SupabaseClient = createClient(
-      Deno.env.get("SUPABASE_URL") ?? "",
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
+      Deno.env.get("SUPABASE_URL") || "",
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || ""
     );
 
-    // 4. Delete the user from auth.users
-    const { error: deleteError } = await adminSupabaseClient.auth.admin.deleteUser(userIdToDelete);
+    // Log the deletion attempt
+    console.log(`Attempting to delete user with ID: ${userIdToDelete}`);
 
+    // 4. Perform any data cleanup required (example: deleting related data)
+    // const { error: dataError } = await adminSupabaseClient
+    //   .from('your_table')
+    //   .delete()
+    //   .eq('user_id', userIdToDelete);
+    // if (dataError) {
+    //   console.error("Error deleting related data:", dataError.message);
+    //   throw new Error("Failed to delete related data: " + dataError.message);
+    // }
+
+    // 5. Delete the user from auth.users
+    const { error: deleteError } = await adminSupabaseClient.auth.admin.deleteUser(
+      userIdToDelete
+    );
     if (deleteError) throw deleteError;
+
+    // 6. Audit log
+    console.log(`User with ID: ${userIdToDelete} was successfully deleted.`);
+
+    // 7. Respond to the client
+    console.log(`Responding to the client with success message.`);
 
     return new Response(JSON.stringify({ message: "User deleted successfully" }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -70,5 +97,5 @@ serve(async (req: Request) => {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
       status: 500,
     });
-  }
+  };
 });

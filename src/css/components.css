@@ -1419,10 +1419,11 @@ body.dark-mode .list-action-btn {
 }
 
 .setting-item {
+    position: relative;
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 16px 20px;
+    padding: 18px 22px;
     border-bottom: 1px solid var(--border-color);
     transition: background-color 0.2s;
     color: var(--text-main);
@@ -1484,7 +1485,6 @@ input[type=range] {
     appearance: none;
     width: 100%;
     background: transparent;
-    height: 24px;
     cursor: pointer;
 }
 input[type=range]:focus { outline: none; }
@@ -1976,6 +1976,15 @@ button[data-action="submit-word-request"]:active {
     0% { box-shadow: 0 0 0 0 rgba(108, 92, 231, 0.7); }
     70% { box-shadow: 0 0 0 10px rgba(108, 92, 231, 0); }
     100% { box-shadow: 0 0 0 0 rgba(108, 92, 231, 0); }
+}
+
+#main-content {
+    padding-bottom: 75px !important; /* Make sure the content won't hide behind the bottom nav */
+}
+
+
+#main-content {
+    padding-bottom: 75px !important; /* Make sure the content won't hide behind the bottom nav */
 }
 
 @keyframes popIn {

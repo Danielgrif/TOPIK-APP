@@ -1,7 +1,15 @@
 // supabase/functions/check-essay/index.ts
 import { serve } from "https://deno.land/std@0.223.0/http/server.ts"
+
+declare const Deno: {
+  serve(arg0: (req: Request) => Promise<Response>): unknown;
+  env: {
+    get(key: string): string | undefined;
+  };
+};
+
 // ✅ НОВАЯ БИБЛИОТЕКА google-genai (замена @google/generative-ai)
-import { GoogleGenerativeAI } from "npm:@google/genai@0.1.0"
+import { GoogleGenerativeAI } from "https://esm.sh/@google/generative-ai@0.21.0"
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -55,14 +63,13 @@ async function getAvailableModels(genai: GoogleGenerativeAI): Promise<AvailableM
 async function selectBestModelForEssay(genai: GoogleGenerativeAI): Promise<string> {
   // Приоритет для эссе: модели с хорошим пониманием грамматики и структуры
   const preferredModels = [
+    "gemini-2.5-pro",
+    "gemini-2.5-flash",
+    "gemini-2.0-flash",
     "gemini-1.5-pro-latest",
-    "gemini-1.5-pro", 
-    "gemini-2.0-flash-exp",
-    "gemini-pro",
-    "gemini-1.5-flash-latest"
+    "gemini-pro-latest"
   ];
   
-  const fallbackModels = ["gemini-pro", "gemini-1.0-pro"];
   
   try {
     const availableModels = await getAvailableModels(genai);
@@ -85,16 +92,16 @@ async function selectBestModelForEssay(genai: GoogleGenerativeAI): Promise<strin
     }
     
     // Последний резерв
-    console.log("⚠️ Используем gemini-pro (гарантированно доступна)");
-    return "gemini-pro";
+    console.log("⚠️ Используем gemini-2.0-flash (гарантированно доступна)");
+    return "gemini-2.0-flash";
     
   } catch (error) {
-    console.error("❌ Ошибка выбора модели для эссе, используем gemini-pro:", error);
-    return "gemini-pro";
+    console.error("❌ Ошибка выбора модели для эссе, используем gemini-2.0-flash:", error);
+    return "gemini-2.0-flash";
   }
 }
 
-Deno.serve(async (req: Request) => {
+serve(async (req: Request): Promise<Response> => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
   }
@@ -116,14 +123,26 @@ Deno.serve(async (req: Request) => {
     }
 
     // Parse Request Body с улучшенной обработкой
-    const body = await req.json().catch((e) => {
-      console.error("❌ JSON parse error:", e);
-      return {};
-    });
+    const rawBody = await req.text();
+    console.log("📦 Raw request body:", rawBody);
+
+    interface RequestBody {
+      taskType?: string;
+      question?: string;
+      answer?: string;
+    }
     
-    const taskType = (body as any).taskType as string | undefined;
-    const question = (body as any).question as string | undefined;
-    const answer = (body as any).answer as string | undefined;
+    let body: RequestBody;
+    try {
+      body = JSON.parse(rawBody);
+    } catch (e) {
+      console.error("❌ JSON parse error:", e);
+      body = {};
+    }
+    
+    const taskType = body.taskType as string | undefined;
+    const question = body.question as string | undefined;
+    const answer = body.answer as string | undefined;
     
     if (!taskType || !question || !answer) {
       return new Response(
@@ -160,7 +179,7 @@ Deno.serve(async (req: Request) => {
         temperature: 0.1,  // Низкая креативность для объективной оценки
         topK: 40,
         topP: 0.8,
-        maxOutputTokens: 1500,  // Больше токенов для детального анализа
+        maxOutputTokens: 4096,  // Больше токенов для детального анализа
       }
     });
 
@@ -262,12 +281,22 @@ Deno.serve(async (req: Request) => {
     let text = await result.response.text();
 
     console.log("📄 Получен ответ от AI (длина:", text.length, "символов)");
-
+    interface EssayResult {
+      score: string;
+      feedback: string;
+      corrections: { original: string; corrected: string; reason: string; }[];
+      improved_version: string;
+    }
+    
     // Расширенная очистка JSON
     if (text.includes("```json")) {
-      text = text.split("```json")[1]?.split("```")?.trim() || text;
+      const parts = text.split("```json");
+      if (parts[1]) {
+        text = parts[1].split("```")[0].trim();
+      }
     } else if (text.includes("```")) {
-      text = text.split("```")[10]?.split("```")[0]?.trim() || text;
+      const parts = text.split("```");
+      if (parts[1]) text = parts[1].trim();
     }
 
     // Удаляем висящие запятые и лишние символы
@@ -278,13 +307,18 @@ Deno.serve(async (req: Request) => {
       .replace(/[\n\r]+\s*$/, "")
       .trim();
 
-    let data: any;
+    let data: EssayResult;
     try {
       data = JSON.parse(text);
-      console.log("✅ JSON успешно распарсен для задания:", taskType);
-    } catch (parseError) {
+            console.log("✅ JSON успешно распарсен для задания:", taskType);
+
+      // Validate essential fields
+      if (!data.score || !data.feedback) {
+          throw new Error("Missing required fields (score or feedback) in AI response");
+      }
+    } catch (_parseError) {
       console.error("❌ JSON Parse Error. Raw response (500 chars):", text.substring(0, 500));
-      
+
       return new Response(
         JSON.stringify({ 
           success: false,
@@ -315,14 +349,15 @@ Deno.serve(async (req: Request) => {
       }
     );
 
-  } catch (error: any) {
-    console.error("💥 ERROR в check-essay:", error.message || error);
+  } catch (error: Error | unknown) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    console.error("💥 ERROR в check-essay:", errorMessage);
     console.error("💥 Full error:", error);
     
     return new Response(
       JSON.stringify({ 
         success: false, 
-        error: error.message || "Unknown server error",
+        error: errorMessage || "Unknown server error",
         timestamp: new Date().toISOString()
       }),
       { 
@@ -330,5 +365,5 @@ Deno.serve(async (req: Request) => {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       }
     );
-  }
+  };
 });

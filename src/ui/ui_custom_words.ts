@@ -17,12 +17,6 @@ import {
   RealtimeChannel,
 } from "@supabase/supabase-js";
 
-interface CancellationToken {
-  isCancelled: boolean;
-}
-
-let cancellationToken: CancellationToken | null = null;
-
 // New state for tracking progress of each word
 const requestProgress = new Map<
   string | number,
@@ -57,148 +51,6 @@ function ensureLevelSelector(categoryInput: HTMLInputElement) {
   }
 }
 
-function showWordPreviewModal(
-  wordData: Record<string, unknown>,
-  onConfirm: (data: Record<string, unknown>) => Promise<boolean>,
-  onCancel: () => void,
-  index?: number,
-  total?: number,
-) {
-  const modalId = "word-preview-modal";
-  let modal = document.getElementById(modalId);
-
-  if (!modal) {
-    modal = document.createElement("div");
-    modal.id = modalId;
-    modal.className = "modal";
-    modal.setAttribute("data-close-modal", modalId);
-    document.body.appendChild(modal);
-  }
-
-  const word = wordData;
-
-  const title =
-    index !== undefined && total !== undefined && total > 1
-      ? `👀 Предпросмотр (${index + 1}/${total})`
-      : "👀 Предпросмотр";
-
-  modal.innerHTML = `
-    <div class="modal-content">
-      <div class="modal-header">
-        <h3>${title}</h3>
-        <button class="btn-icon close-modal-btn" id="preview-close-btn">✕</button>
-      </div>
-      <div class="modal-body">
-        <div class="input-group">
-          <label class="form-label">Слово (KR)</label>
-          <input type="text" id="preview-word-kr" class="auth-input" value="${escapeHtml(String(word.word_kr || ""))}">
-        </div>
-        <div class="input-group">
-          <label class="form-label">Перевод (RU)</label>
-          <input type="text" id="preview-translation" class="auth-input" value="${escapeHtml(String(word.translation || ""))}">
-        </div>
-        <div class="input-group">
-          <label class="form-label">Пример (KR)</label>
-          <textarea id="preview-example-kr" class="auth-input" rows="2">${escapeHtml(String(word.example_kr || ""))}</textarea>
-        </div>
-        <div class="input-group">
-          <label class="form-label">Пример (RU)</label>
-          <textarea id="preview-example-ru" class="auth-input" rows="2">${escapeHtml(String(word.example_ru || ""))}</textarea>
-        </div>
-         <div class="input-group">
-          <label class="form-label">Hanja</label>
-          <input type="text" id="preview-hanja" class="auth-input" value="${escapeHtml(String(word.word_hanja || ""))}">
-        </div>
-        
-        <div style="display: flex; gap: 10px; margin-top: 20px;">
-          <button class="btn" id="preview-cancel-btn" style="flex: 1;">Отмена</button>
-          <button class="btn btn-primary" id="preview-confirm-btn" style="flex: 1;">Сохранить</button>
-        </div>
-      </div>
-    </div>
-  `;
-
-  const closeBtn = modal.querySelector("#preview-close-btn") as HTMLElement;
-  const cancelBtn = modal.querySelector("#preview-cancel-btn") as HTMLElement;
-  const confirmBtn = modal.querySelector(
-    "#preview-confirm-btn",
-  ) as HTMLButtonElement;
-
-  // Используем флаг, чтобы избежать двойного вызова колбэков
-  let isResolved = false;
-
-  const close = () => {
-    if (isResolved) return;
-    isResolved = true;
-    modal?.classList.remove("active");
-    onCancel();
-  };
-
-  // Наблюдатель за закрытием окна извне (например, по Esc)
-  const observer = new MutationObserver(() => {
-    if (!modal?.classList.contains("active") && !isResolved) {
-      isResolved = true;
-      onCancel();
-      observer.disconnect();
-    }
-  });
-  if (modal) {
-    observer.observe(modal, { attributes: true, attributeFilter: ["class"] });
-  }
-
-  closeBtn.onclick = close;
-  cancelBtn.onclick = close;
-
-  confirmBtn.onclick = async () => {
-    const updatedData = { ...wordData };
-    const krInput = document.getElementById(
-      "preview-word-kr",
-    ) as HTMLInputElement;
-    const trInput = document.getElementById(
-      "preview-translation",
-    ) as HTMLInputElement;
-    const exKrInput = document.getElementById(
-      "preview-example-kr",
-    ) as HTMLTextAreaElement;
-    const exRuInput = document.getElementById(
-      "preview-example-ru",
-    ) as HTMLTextAreaElement;
-    const hanjaInput = document.getElementById(
-      "preview-hanja",
-    ) as HTMLInputElement;
-
-    if (krInput) updatedData.word_kr = krInput.value.trim();
-    if (trInput) updatedData.translation = trInput.value.trim();
-    if (exKrInput) updatedData.example_kr = exKrInput.value.trim();
-    if (exRuInput) updatedData.example_ru = exRuInput.value.trim();
-    if (hanjaInput) updatedData.word_hanja = hanjaInput.value.trim();
-
-    const originalText = confirmBtn.textContent;
-    confirmBtn.disabled = true;
-    confirmBtn.innerHTML = '<div class="spinner-tiny"></div>';
-
-    const success = await onConfirm(updatedData);
-
-    confirmBtn.disabled = false;
-    confirmBtn.textContent = originalText;
-
-    if (success) {
-      isResolved = true;
-      observer.disconnect();
-      modal?.classList.remove("active");
-    }
-  };
-
-  // Allow saving with Enter key if focus is not on textarea
-  modal.onkeydown = (e) => {
-    if (e.key === "Enter" && (e.target as HTMLElement).tagName !== "TEXTAREA") {
-      confirmBtn.click();
-    }
-  };
-
-  modal.classList.add("active");
-}
-
 export async function submitWordRequest() {
   const input = document.getElementById(
     "new-word-input",
@@ -216,9 +68,6 @@ export async function submitWordRequest() {
     "new-word-level",
   ) as HTMLSelectElement;
 
-  // --- Cancellation Setup ---
-  cancellationToken = { isCancelled: false };
-  const currentToken = cancellationToken;
   // UI: Сразу блокируем кнопку для мгновенного отклика
   const btn = document.querySelector(
     '[data-action="submit-word-request"]',
@@ -228,34 +77,7 @@ export async function submitWordRequest() {
     originalContent = btn.innerHTML;
     btn.disabled = true;
     btn.innerHTML = '<div class="spinner-tiny"></div> Проверка...';
-  } else {
-    console.warn("⚠️ Submit button not found in DOM");
   }
-
-  const updateButtonText = (text: string, showCancel: boolean = true) => {
-    if (btn) {
-      const cancelHtml = showCancel
-        ? `<button id="submission-cancel-btn" class="btn-icon-tiny-cancel" title="Отменить" aria-label="Отменить">✕</button>`
-        : "";
-      btn.innerHTML = `<div class="spinner-tiny"></div> ${text} ${cancelHtml}`;
-      if (showCancel) {
-        const cancelBtn = document.getElementById("submission-cancel-btn");
-        if (cancelBtn) {
-          cancelBtn.onclick = (e) => {
-            e.stopPropagation();
-            if (currentToken) currentToken.isCancelled = true;
-          };
-        }
-      }
-    }
-  };
-
-  const keepButtonDisabled = false; // Флаг для передачи управления кнопкой в trackProgress
-  const validWords: string[] = [];
-
-  let targetListId: string | null = null;
-  let customTopic: string | null = null;
-  let customCategory: string | null = null;
 
   try {
     if (!input) {
@@ -269,13 +91,10 @@ export async function submitWordRequest() {
       return;
     }
 
-    if (currentToken.isCancelled) throw new Error("Cancelled by user");
-
     let user = state.currentUser;
 
     // Если пользователя нет в стейте, пробуем получить его с таймаутом
     if (!user) {
-      updateButtonText("Авторизация...", true);
       const { data, error: authError } = await promiseWithTimeout<{
         data: { session: { user: import("../types/index.ts").User } | null };
         error: unknown;
@@ -289,15 +108,12 @@ export async function submitWordRequest() {
       user = data?.session?.user || null;
     }
 
-    if (currentToken.isCancelled) throw new Error("Cancelled by user");
-
     if (!user) {
       showToast("Войдите в профиль, чтобы предлагать слова");
       // Не возвращаем, а кидаем ошибку, чтобы finally сработал
       throw new Error("User not authenticated");
     }
 
-    updateButtonText("Анализ слов...", true);
     // Split by comma or newline
     const rawWords = rawText
       .split(/[,;\n]+/)
@@ -305,6 +121,7 @@ export async function submitWordRequest() {
       .filter((w) => w.length > 0);
 
     if (rawWords.length === 0) return;
+    const validWords: string[] = [];
 
     // --- Валидация и Авто-исправление ---
     const corrections: { original: string; corrected: string }[] = [];
@@ -352,8 +169,6 @@ export async function submitWordRequest() {
         });
       });
 
-      if (currentToken.isCancelled) throw new Error("Cancelled by user");
-
       if (!confirmed) {
         return; // finally восстановит кнопку
       }
@@ -361,15 +176,43 @@ export async function submitWordRequest() {
 
     // --- Проверка на дубликаты (с учетом омонимов) ---
     const duplicates: { word: string; translations: string[] }[] = [];
+    if (validWords.length > 0) {
+      if (btn)
+        btn.innerHTML =
+          '<div class="spinner-tiny"></div> Проверка дубликатов...';
+      const { data: existingWords, error } = await client
+        .from(DB_TABLES.VOCABULARY)
+        .select("word_kr, translation")
+        .in("word_kr", validWords)
+        .is("deleted_at", null); // Искать только среди активных слов
 
-    for (const w of validWords) {
-      // Ищем точное совпадение по написанию в текущем словаре
-      const existing = state.dataStore.filter((item) => item.word_kr === w);
-      if (existing.length > 0) {
-        duplicates.push({
-          word: w,
-          translations: existing.map((e) => e.translation).filter((t) => !!t),
-        });
+      if (error) {
+        console.error("Duplicate check error:", error);
+        showToast("⚠️ Ошибка проверки дубликатов в БД, проверяем локально...");
+        // Fallback to local check
+        for (const w of validWords) {
+          const existing = state.dataStore.filter((item) => item.word_kr === w);
+          if (existing.length > 0) {
+            duplicates.push({
+              word: w,
+              translations: existing
+                .map((e) => e.translation)
+                .filter((t) => !!t),
+            });
+          }
+        }
+      } else if (existingWords && existingWords.length > 0) {
+        const existingMap = new Map<string, string[]>();
+        for (const w of existingWords) {
+          if (!existingMap.has(w.word_kr)) existingMap.set(w.word_kr, []);
+          if (w.translation) existingMap.get(w.word_kr)!.push(w.translation);
+        }
+
+        for (const word of validWords) {
+          if (existingMap.has(word)) {
+            duplicates.push({ word, translations: existingMap.get(word)! });
+          }
+        }
       }
     }
 
@@ -396,8 +239,6 @@ export async function submitWordRequest() {
           );
         });
       });
-
-      if (currentToken.isCancelled) throw new Error("Cancelled by user");
 
       if (!confirmed) {
         return; // finally восстановит кнопку
@@ -432,7 +273,7 @@ export async function submitWordRequest() {
       return;
     }
 
-    targetListId = listSelect ? listSelect.value : null;
+    const targetListId = listSelect ? listSelect.value : null;
 
     if (!targetListId) {
       showToast("⚠️ Выберите список (обязательно)");
@@ -444,164 +285,52 @@ export async function submitWordRequest() {
       return;
     }
 
-    // FIX: Если тема не указана, ставим "Мои слова", чтобы не смешивать с общим словарем
-    customTopic =
-      topicInput && topicInput.value.trim()
-        ? topicInput.value.trim()
-        : "Мои слова (My Words)";
-    customCategory = categoryInput ? categoryInput.value.trim() : null;
+    // --- Create Requests ---
+    const requestsToInsert = validWords.map((word) => ({
+      word_kr: word,
+      user_id: user!.id,
+      status: "pending",
+      target_list_id: targetListId,
+      topic: topicInput?.value.trim() || "Мои слова",
+      category: categoryInput?.value.trim() || null,
+      level: levelSelect ? levelSelect.value : "★★★",
+    }));
 
-    updateButtonText("Сохранение...", false); // Отключаем отмену на последнем шаге
+    const { data: insertedRequests, error } = await client
+      .from(DB_TABLES.WORD_REQUESTS)
+      .insert(requestsToInsert)
+      .select();
 
-    // 1. Вызываем Edge Function для каждого слова
-    // TODO: В будущем можно сделать batch-обработку в самой функции
-    let savedCount = 0;
+    if (error) throw new Error(`Не удалось создать заявку: ${error.message}`);
 
-    let currentWordIndex = 0;
-    for (const word of validWords) {
-      try {
-        updateButtonText(`Обработка: ${word}...`, false);
+    if (insertedRequests && insertedRequests.length > 0) {
+      showToast(`✅ Заявка на ${insertedRequests.length} слов отправлена!`);
 
-        const { data: aiData, error: aiError } = await client.functions.invoke(
-          "generate-word-data",
-          {
-            body: { word },
-          },
+      const formView = document.getElementById("add-word-form-view");
+      const progressView = document.getElementById("add-word-progress-view");
+
+      if (formView && progressView) {
+        formView.style.display = "none";
+        progressView.style.display = "block";
+        trackProgress(
+          insertedRequests,
+          input,
+          listSelect,
+          topicInput,
+          categoryInput,
+          formView,
+          progressView,
+          btn,
+          originalContent,
         );
-
-        if (aiError) throw aiError;
-        if (!aiData || !aiData.data || !Array.isArray(aiData.data))
-          throw new Error("Invalid AI response");
-
-        // Обрабатываем полученные данные через предпросмотр
-        for (const item of aiData.data) {
-          await new Promise<boolean>((resolve) => {
-            showWordPreviewModal(
-              item,
-              async (confirmedData) => {
-                try {
-                  const wordData = {
-                    ...confirmedData,
-                    user_id: user!.id, // Для совместимости, если нужно
-                    created_by: user!.id,
-                    is_public: false,
-                    topic_ru: customTopic, // Приоритет пользовательской темы
-                    category_ru: customCategory,
-                    level: levelSelect
-                      ? levelSelect.value
-                      : confirmedData.level || "★★★",
-                    // Очищаем поля, которые могли прийти из AI, но мы хотим свои
-                    topic: undefined,
-                    category: undefined,
-                  };
-
-                  // Вставка в vocabulary (сразу, без word_requests)
-                  const { data: insertedWord, error: dbError } = await client
-                    .from(DB_TABLES.VOCABULARY)
-                    .insert(wordData)
-                    .select()
-                    .single();
-
-                  if (dbError) throw dbError;
-
-                  if (insertedWord) {
-                    // Добавляем в список
-                    if (targetListId) {
-                      await client
-                        .from(DB_TABLES.LIST_ITEMS)
-                        .upsert(
-                          { list_id: targetListId, word_id: insertedWord.id },
-                          { onConflict: "list_id,word_id" },
-                        );
-                    }
-
-                    // Добавляем в локальный стейт
-                    state.dataStore.unshift(insertedWord);
-
-                    // Обновляем кэш списка, если он загружен
-                    if (targetListId) {
-                      const { collectionsState } =
-                        await import("../core/collections_data.ts");
-                      if (!collectionsState.listItems[targetListId]) {
-                        collectionsState.listItems[targetListId] = new Set();
-                      }
-                      collectionsState.listItems[targetListId].add(
-                        insertedWord.id,
-                      );
-                    }
-                  }
-                  savedCount++;
-                  resolve(true); // Теперь это валидно, так как Promise<boolean>
-                  return true;
-                } catch (e) {
-                  console.error("Error saving word:", e);
-                  showToast("Ошибка сохранения слова");
-                  // Не резолвим промис модалки как успех, чтобы пользователь мог повторить
-                  resolve(false); // Резолвим как false при ошибке
-                  return false;
-                }
-              },
-              () => {
-                // Cancelled by user closing the modal without saving
-                resolve(false);
-              },
-              currentWordIndex,
-              validWords.length,
-            );
-          });
-        }
-      } catch (err) {
-        console.error(`Failed to process word ${word}:`, err);
-        const msg = (err as Error).message;
-
-        // Check for specific Supabase function errors or network issues
-        const isNetworkError =
-          msg.includes("Failed to send a request") ||
-          msg.includes("Failed to fetch");
-        const displayMsg = isNetworkError
-          ? "Ошибка соединения с AI сервером"
-          : msg;
-
-        showToast(`Ошибка с словом "${word}": ${displayMsg}`);
-
-        // Если ошибка связана с недоступностью функции (сеть/сервер), прерываем цикл
-        if (isNetworkError) {
-          showToast("⚠️ Остановка: Сервер AI недоступен.");
-          break;
-        }
       }
-      currentWordIndex++;
-    }
-
-    if (savedCount > 0) {
-      showToast(`✅ Успешно добавлено слов: ${savedCount}`);
-      input.value = "";
-      if (listSelect) listSelect.value = "";
-      if (topicInput) topicInput.value = "";
-      if (categoryInput) categoryInput.value = "";
-
-      // Обновляем UI
-      document.dispatchEvent(new CustomEvent("state-changed"));
-      if (window.updateSearchIndex) window.updateSearchIndex();
-
-      closeModal("add-word-modal");
     }
   } catch (e: unknown) {
     const err = e as Error;
-    const isOffline = !navigator.onLine;
-
-    if (err.message === "Cancelled by user") {
-      showToast("🚫 Отменено");
-    } else if (isOffline) {
-      showToast("⚠️ Вы оффлайн. Функция требует интернета.");
-    } else {
-      console.error("❌ Error in submitWordRequest:", err);
-      showToast("Ошибка: " + (err.message || "Не удалось обработать"));
-    }
+    console.error("❌ Error in submitWordRequest:", err);
+    showToast("Ошибка: " + (err.message || "Не удалось обработать"));
   } finally {
-    // Восстанавливаем кнопку, если мы НЕ перешли в режим прогресса (там своя логика восстановления)
-    cancellationToken = null;
-    if (!keepButtonDisabled && btn) {
+    if (btn) {
       btn.disabled = false;
       btn.innerHTML = originalContent || "Отправить заявку";
     }
@@ -797,7 +526,7 @@ function renderPreview(container: HTMLElement, word: string, level: string) {
   if (wordContainer) {
     if (isSkeleton) {
       if (!wordContainer.querySelector(".skeleton-pulse")) {
-        wordContainer.innerHTML = `<div class="skeleton-pulse" style="height: 32px; width: 60%; border-radius: 8px; margin: 0 auto;"></div>`;
+        wordContainer.innerHTML = `<div class="skeleton-pulse" style="height: 32px; width: 60%; margin: 0 auto; border-radius: 8px; margin: 0 auto;"></div>`;
       }
     } else {
       const wordEl = wordContainer.querySelector(".word");
@@ -1104,13 +833,40 @@ function trackProgress(
 
           const ids = errorEntries.map(([id]) => id);
 
-          const { error } = await client
-            .from(DB_TABLES.WORD_REQUESTS)
-            .update({ status: WORD_REQUEST_STATUS.PENDING, my_notes: null })
-            .in("id", ids);
+          // Вызываем новую функцию для каждой сбойной заявки
+          const promises = ids.map((id) =>
+            client.functions.invoke("retry-word-request", {
+              body: { request_id: id },
+            }),
+          );
 
-          if (error) {
-            showToast("Ошибка: " + error.message);
+          const results = await Promise.allSettled(promises);
+          const hasErrors = results.some(
+            (res) =>
+              res.status === "rejected" ||
+              (res.status === "fulfilled" && res.value.error),
+          );
+
+          if (hasErrors) {
+            let errorMsg = "Unknown error";
+            const firstError = results.find(
+              (res) =>
+                res.status === "rejected" ||
+                (res.status === "fulfilled" && res.value.error),
+            );
+            if (firstError) {
+              if (firstError.status === "rejected") {
+                errorMsg =
+                  firstError.reason?.message || String(firstError.reason);
+              } else if (
+                firstError.status === "fulfilled" &&
+                firstError.value.error
+              ) {
+                errorMsg = firstError.value.error.message;
+              }
+            }
+
+            showToast("Ошибка: " + errorMsg);
             if (btn) {
               btn.disabled = false;
               btn.innerHTML = `↻ Повторить сбойные (${errorEntries.length})`;
@@ -1176,7 +932,7 @@ function trackProgress(
   // Set initial stage to 'ai' to start the progress
   requestProgress.forEach((item) => {
     if (item.status === "pending") {
-      item.status = WORD_REQUEST_STATUS.AI as "ai";
+      item.status = "ai";
     }
   });
   updateUIWithStages();
@@ -1245,13 +1001,15 @@ function trackProgress(
             if (progress) {
               let newStatus = progress.status;
               // Маппинг статусов из БД в UI
-              if (row.status === WORD_REQUEST_STATUS.PROCESSED)
+              if (row.status === WORD_REQUEST_STATUS.PROCESSED) {
                 newStatus = "done";
-              else if (row.status === WORD_REQUEST_STATUS.ERROR)
+              } else if (row.status === WORD_REQUEST_STATUS.ERROR) {
                 newStatus = "error";
-              else if (row.status === WORD_REQUEST_STATUS.AI) newStatus = "ai";
-              else if (row.status === WORD_REQUEST_STATUS.AUDIO)
+              } else if (row.my_notes === "ai_processing") {
+                newStatus = "ai";
+              } else if (row.my_notes === "audio_generation") {
                 newStatus = "audio";
+              }
 
               if (newStatus !== progress.status) {
                 progress.status = newStatus as
@@ -1295,7 +1053,7 @@ function trackProgress(
     // Find the request that matches the newly inserted word
     for (const progress of requestProgress.values()) {
       if (progress.word === newWord.word_kr && progress.status !== "done") {
-        progress.status = WORD_REQUEST_STATUS.AUDIO as "audio";
+        progress.status = "audio";
         updateUIWithStages();
         break; // Assume one request per word_kr for now
       }
@@ -1335,21 +1093,25 @@ function trackProgress(
         const updated = payload.new;
         if (!updated || !("id" in updated)) return;
         const progress = requestProgress.get(updated.id);
-        if (
-          progress &&
-          progress.status !== "done" &&
-          progress.status !== "error"
-        ) {
+        if (progress && progress.status !== "done") {
+          let changed = false;
           if (updated.status === WORD_REQUEST_STATUS.PROCESSED) {
             progress.status = "done";
             progress.justFinished = true;
-            updateUIWithStages();
+            changed = true;
           } else if (updated.status === WORD_REQUEST_STATUS.ERROR) {
             errorCount++;
             progress.status = "error";
             progress.error = updated.my_notes || "Неизвестная ошибка";
-            updateUIWithStages();
+            changed = true;
+          } else if (updated.my_notes === "ai_processing") {
+            progress.status = "ai";
+            changed = true;
+          } else if (updated.my_notes === "audio_generation") {
+            progress.status = "audio";
+            changed = true;
           }
+          if (changed) updateUIWithStages();
         }
       },
     )
