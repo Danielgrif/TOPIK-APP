@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { createClient } from "@supabase/supabase-js";
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_KEY;
 
@@ -98,18 +99,9 @@ const fetchWithRetries = async (
   throw new Error("Fetch with retries failed unexpectedly.");
 };
 
-type SupabaseCreateClient = (
-  url: string,
-  key: string,
-  options?: object,
-) => SupabaseClient;
-
 export const client: SupabaseClient =
-  SUPABASE_URL &&
-  SUPABASE_KEY &&
-  window.supabase &&
-  window.supabase.createClient
-    ? (window.supabase.createClient as SupabaseCreateClient)(
+  SUPABASE_URL && SUPABASE_KEY
+    ? createClient(
         SUPABASE_URL,
         SUPABASE_KEY,
         {
@@ -118,7 +110,7 @@ export const client: SupabaseClient =
           },
           realtime: {
             worker: true,
-            heartbeatIntervalMs: 15000, // Проверка соединения каждые 15 сек (по умолчанию 30)
+            heartbeatIntervalMs: 15000,
           },
         },
       )
