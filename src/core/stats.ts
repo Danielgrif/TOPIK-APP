@@ -504,13 +504,18 @@ export function checkAchievements(showAlert = true) {
       if (showAlert) {
         showToast(`🎉 Новое достижение: ${ach.emoji} ${ach.title}`);
         playTone("achievement-unlock");
-        if (typeof window.confetti === "function") {
-          window.confetti({
-            particleCount: 150,
-            spread: 70,
-            origin: { y: 0.6 },
-            zIndex: 20005,
-          });
+        if (typeof window.confetti !== "function") {
+          // Ленивая загрузка confetti только при разблокировке достижения
+          const s = document.createElement("script");
+          s.src = "https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js";
+          s.onload = () => {
+            if (typeof window.confetti === "function") {
+              window.confetti({ particleCount: 150, spread: 70, origin: { y: 0.6 }, zIndex: 20005 });
+            }
+          };
+          document.head.appendChild(s);
+        } else {
+          window.confetti({ particleCount: 150, spread: 70, origin: { y: 0.6 }, zIndex: 20005 });
         }
       }
     }
@@ -688,7 +693,7 @@ function getLast7DaysActivity() {
   return days;
 }
 
-export function renderDetailedStats() {
+export async function renderDetailedStats() {
   const container = document.getElementById("stats-details");
   if (!container) return;
 
@@ -698,7 +703,22 @@ export function renderDetailedStats() {
     scrollParent.scrollTop = 0;
   }
 
-  // Проверяем наличие Chart.js
+  // Ленивая загрузка Chart.js только при открытии статистики
+  if (typeof window.Chart === "undefined") {
+    await new Promise<void>((resolve, reject) => {
+      if (document.getElementById("chartjs-cdn")) { resolve(); return; }
+      const s = document.createElement("script");
+      s.id = "chartjs-cdn";
+      s.src = "https://cdn.jsdelivr.net/npm/chart.js";
+      s.onload = () => resolve();
+      s.onerror = () => reject(new Error("Chart.js load failed"));
+      document.head.appendChild(s);
+    }).catch(() => {
+      container.innerHTML = `<div style="padding: 20px; text-align: center; color: var(--text-sub);">Графики недоступны (Chart.js не загружен)</div>`;
+      return;
+    });
+  }
+
   if (typeof window.Chart === "undefined") {
     container.innerHTML = `<div style="padding: 20px; text-align: center; color: var(--text-sub);">Графики недоступны (Chart.js не загружен)</div>`;
     return;
