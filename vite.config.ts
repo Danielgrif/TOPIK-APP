@@ -37,7 +37,7 @@ export default defineConfig(({ mode }) => ({
       },
     }),
   ],
-  base: mode === "production" ? "/TOPIK-APP/" : "/",
+  base: "/",
   build: {
     target: "esnext",
   },
