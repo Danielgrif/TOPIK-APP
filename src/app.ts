@@ -1645,8 +1645,8 @@ async function init() {
 
   if ("serviceWorker" in navigator && !import.meta.env.DEV) {
     navigator.serviceWorker
-      .register("./sw.js", {
-        type: import.meta.env.DEV ? "module" : "classic",
+      .register("/sw.js", {
+        scope: "/",
       })
       .then((reg) => {
         if (!navigator.serviceWorker.controller) {
