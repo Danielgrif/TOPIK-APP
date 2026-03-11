@@ -261,8 +261,8 @@ function renderLeaderboard(
       <div class="leaderboard-item ${isMe ? "is-me" : ""} ${rankClass}">
           <div class="lb-rank">${rankDisplay}</div>
           <div class="lb-avatar">
-              ${avatar ? `<img src="${escapeHtml(avatar)}" alt="Avatar" loading="lazy">` : `<div class="lb-avatar-placeholder">${name.charAt(0).toUpperCase()}</div>`}
-              ${avatar ? `<img src="${escapeHtml(avatar)}" alt="Avatar" loading="lazy" width="40" height="40">` : `<div class="lb-avatar-placeholder">${name.charAt(0).toUpperCase()}</div>`}
+              <img src="${escapeHtml(avatar || '')}" alt="Avatar" loading="lazy" width="40" height="40" style="display: ${avatar ? 'block' : 'none'};" onerror="this.style.display='none'; if (this.nextElementSibling) this.nextElementSibling.style.display='block';">
+              <div class="lb-avatar-placeholder" style="display: ${avatar ? 'none' : 'block'};">${name.charAt(0).toUpperCase()}</div>
           </div>
           <div class="lb-info">
               <div class="lb-name">${escapeHtml(name)} ${isMe ? "(Вы)" : ""}</div>

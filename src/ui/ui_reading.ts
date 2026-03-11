@@ -50,7 +50,7 @@ function renderArticleList(articles: Article[]) {
         "https://via.placeholder.com/300x150?text=TOPIK+Reading";
       return `
       <div class="article-card" data-id="${article.id}">
-        <img src="${escapeHtml(image)}" class="article-card-img" alt="Cover" loading="lazy">
+        <img src="${escapeHtml(image)}" class="article-card-img" alt="Cover" loading="lazy" onerror="this.onerror=null; this.src='https://via.placeholder.com/300x150?text=TOPIK+Reading';">
         <div class="article-card-body">
           <div class="article-card-title">${escapeHtml(article.title)}</div>
           <div class="article-card-meta">

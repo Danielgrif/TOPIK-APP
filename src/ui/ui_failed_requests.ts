@@ -51,7 +51,7 @@ async function loadFailedRequests() {
   const { data: allData, error } = await query;
 
   if (error) {
-    console.error("Error loading trash:", error);
+    console.error("Error loading failed requests:", error);
     container.innerHTML = `<div style="text-align:center; color:var(--danger); padding:20px;">Ошибка загрузки</div>`;
     return;
   }
