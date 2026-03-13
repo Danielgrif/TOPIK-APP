@@ -1,18 +1,13 @@
 import { state } from "../core/state.ts";
 import { scheduleSaveState, recordAttempt } from "../core/db.ts";
-import {
-  updateSRSBadge,
-  updateStats,
-  addXP,
-  checkAchievements,
-} from "../core/stats.ts";
+import { addXP, checkAchievements } from "../core/stats.ts";
 import { Word } from "../types/index.ts";
 import { collectionsState } from "../core/collections_data.ts";
 import { createCardElement, createListItem } from "../core/renderer.ts"; // Now this import is valid
 import { client } from "../core/supabaseClient.ts";
 import { showToast, promiseWithTimeout } from "../utils/utils.ts";
 import { openModal, closeModal } from "./ui_modal.ts";
-import { ensureSessionStarted } from "./ui.ts";
+import { ensureSessionStarted, saveAndRender } from "./ui.ts";
 import { DB_BUCKETS } from "../core/constants.ts";
 
 // --- Virtual Scroll Constants (for List View) ---
@@ -45,13 +40,6 @@ export function restoreScroll() {
   if (grid && saved) {
     grid.scrollTop = Number(saved);
   }
-}
-
-function saveAndRender() {
-  scheduleSaveState();
-  updateSRSBadge();
-  updateStats();
-  render();
 }
 
 export function renderSkeletons() {
@@ -351,17 +339,15 @@ function renderVisibleGridItems(params: {
   const topOffset = startRow * (ITEM_HEIGHT_GRID + gap);
   (content as HTMLElement).style.transform = `translateY(${topOffset}px)`;
 
-  content.innerHTML = "";
-
   const visibleData = sourceData.slice(startIndex, endIndex);
-  const fragment = document.createDocumentFragment();
+  const newNodes: HTMLElement[] = [];
 
   visibleData.forEach((item: Word, i: number) => {
     const absoluteIndex = startIndex + i;
-    fragment.appendChild(createCardElement(item, absoluteIndex));
+    newNodes.push(createCardElement(item, absoluteIndex));
   });
 
-  content.appendChild(fragment);
+  content.replaceChildren(...newNodes);
 
   prefetchNextImages(endIndex, 4);
   prefetchNextAudio(endIndex, 2);
@@ -424,18 +410,15 @@ function renderVisibleListItems(params: {
 
   const topOffset = startIndex * ITEM_HEIGHT_LIST;
   (content as HTMLElement).style.transform = `translateY(${topOffset}px)`;
-  content.innerHTML = "";
 
   const visibleData = sourceData.slice(startIndex, endIndex);
-  const fragment = document.createDocumentFragment();
+  const newNodes: HTMLElement[] = [];
 
   visibleData.forEach((item: Word, index: number) => {
     const absoluteIndex = startIndex + index;
-    const el = createListItem(item, absoluteIndex);
-    fragment.appendChild(el);
+    newNodes.push(createListItem(item, absoluteIndex));
   });
-
-  content.appendChild(fragment);
+  content.replaceChildren(...newNodes);
 
   prefetchNextImages(endIndex, 4);
   prefetchNextAudio(endIndex, 2);

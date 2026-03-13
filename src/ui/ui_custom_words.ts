@@ -17,6 +17,8 @@ import {
   RealtimeChannel,
 } from "@supabase/supabase-js";
 
+let observer: MutationObserver | null = null;
+
 // New state for tracking progress of each word
 const requestProgress = new Map<
   string | number,
@@ -561,7 +563,6 @@ function trackProgress(
 
   let requestChannel: RealtimeChannel | null = null;
   let safetyTimeout: number | null = null;
-  let observer: MutationObserver | null = null;
   let workerWarningTimeout: number | null = null;
   let pollingTimeout: number | null = null;
   let isTracking = true;
@@ -913,6 +914,9 @@ function trackProgress(
   // Detect if modal is closed externally (e.g. by user clicking X or overlay)
   const modal = document.getElementById("add-word-modal");
   if (modal) {
+    if (observer) {
+      observer.disconnect();
+    }
     observer = new MutationObserver((mutations) => {
       for (const mutation of mutations) {
         if (

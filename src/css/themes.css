@@ -43,7 +43,6 @@ body.focus-mode .virtual-scroll-container {
 }
 body.focus-mode { background: #000000; }
 body.focus-mode #main-header,
-body.focus-mode .content-toolbar,
 body.focus-mode #toolbar,
 body.focus-mode .install-banner,
 body.focus-mode #bottom-nav { display: none; }

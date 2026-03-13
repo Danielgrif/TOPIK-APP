@@ -1,51 +1,14 @@
-import { serve } from "https://deno.land/std@0.223.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { serve } from "std/http/server.ts";
+import { corsHeaders, DB_TABLES, PROCESSING_STEPS, WORD_REQUEST_STATUS } from "shared/constants.ts";
+import { createAudioFile } from "shared/audio.ts";
+import { getSupabaseAdmin } from "shared/clients.ts";
+import { createErrorResponse } from "shared/utils.ts";
 
 declare const Deno: {
   env: {
     get(key: string): string | undefined;
   };
 };
-
-interface Word {
-  id: string;
-  word_kr: string;
-}
-
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-};
-
-// Эта функция является копией из `process-word-request`.
-// Поддерживайте их в синхронизированном состоянии.
-async function generateAndUploadAudio(supabaseAdmin: SupabaseClient, word: Word) {
-  try {
-    const { data: audioBlob, error: audioError } = await supabaseAdmin.functions.invoke(
-      "generate-audio",
-      { 
-        body: { text: word.word_kr, voice: "female" }
-      }
-    );
-
-    if (audioError) throw audioError;
-    if (!audioBlob) throw new Error("No audio data received");
-
-    const fileName = `${word.id}.mp3`;
-    const { error: uploadError } = await supabaseAdmin.storage.from("audio-files").upload(fileName, audioBlob, { contentType: 'audio/mpeg', upsert: true });
-    if (uploadError) throw uploadError;
-
-    const { data: urlData } = supabaseAdmin.storage.from("audio-files").getPublicUrl(fileName);
-    const publicUrl = urlData.publicUrl;
-    await supabaseAdmin.from("vocabulary").update({ audio_url: publicUrl }).eq("id", word.id);
-  } catch (e: unknown) {
-    const errMsg = e instanceof Error ? e.message : String(e);
-    console.error(`Audio retry failed for word ${word.id}:`, errMsg);
-    // Перебрасываем ошибку, чтобы главный обработчик мог ее поймать и снова пометить заявку как ошибочную.
-    throw new Error(`Audio generation failed during retry: ${errMsg}`);
-  }
-}
 
 serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
@@ -58,14 +21,11 @@ serve(async (req: Request) => {
       throw new Error("Missing 'request_id' in request body");
     }
 
-    const supabaseAdmin = createClient(
-      Deno.env.get("SUPABASE_URL") ?? "",
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
-    );
+    const supabaseAdmin = getSupabaseAdmin();
 
     // 1. Получаем сбойную заявку
     const { data: request, error: requestError } = await supabaseAdmin
-      .from("word_requests")
+      .from(DB_TABLES.WORD_REQUESTS)
       .select("*")
       .eq("id", request_id)
       .single();
@@ -76,16 +36,16 @@ serve(async (req: Request) => {
     console.log(`♻️ Retrying request for "${request.word_kr}", failed at: ${request.failed_step}`);
 
     // 2. Выбираем стратегию повтора
-    if (request.failed_step === 'audio_generation') {
-      // Слово уже должно быть в базе. Находим его.
+    if (request.failed_step === PROCESSING_STEPS.AUDIO_GENERATION) {
+      // Слово уже должно быть в базе. Находим его, чтобы получить ID.
       const { data: word, error: wordError } = await supabaseAdmin
-        .from("vocabulary")
+        .from(DB_TABLES.VOCABULARY)
         .select("*")
         .eq("word_kr", request.word_kr)
         .order('created_at', { ascending: false })
         .limit(1)
         .single();
-      
+
       if (wordError || !word) {
         // Если слово не найдено, что-то пошло не так. Безопаснее перезапустить весь процесс.
         throw new Error(`Word "${request.word_kr}" not found in vocabulary for audio retry. Resetting...`);
@@ -94,12 +54,22 @@ serve(async (req: Request) => {
       console.log(`🔊 Retrying only audio generation for word ID: ${word.id}`);
       
       // Обновляем статус, чтобы UI показал, что идет работа
-      await supabaseAdmin.from("word_requests").update({ status: 'pending', my_notes: 'audio_retry' }).eq('id', request_id);
+      await supabaseAdmin.from(DB_TABLES.WORD_REQUESTS).update({ status: WORD_REQUEST_STATUS.PENDING, my_notes: WORD_REQUEST_STATUS.AUDIO_RETRY }).eq('id', request_id);
 
-      await generateAndUploadAudio(supabaseAdmin, word);
+      // Повторяем генерацию обоих голосов
+      const [femaleUrl, maleUrl] = await Promise.all([
+        createAudioFile(supabaseAdmin, word.word_kr, 'female', `female/${word.id}.mp3`),
+        createAudioFile(supabaseAdmin, word.word_kr, 'male', `male/${word.id}.mp3`),
+      ]);
+
+      // Обновляем запись в vocabulary
+      await supabaseAdmin.from(DB_TABLES.VOCABULARY).update({
+        audio_url: femaleUrl,
+        audio_male: maleUrl,
+      }).eq("id", word.id);
 
       // Если все прошло успешно, помечаем заявку как выполненную
-      await supabaseAdmin.from("word_requests").update({ status: 'processed', my_notes: null, failed_step: null }).eq('id', request_id);
+      await supabaseAdmin.from(DB_TABLES.WORD_REQUESTS).update({ status: WORD_REQUEST_STATUS.PROCESSED, my_notes: null, failed_step: null }).eq('id', request_id);
       
       console.log(`✅ Audio retry successful for "${request.word_kr}"`);
 
@@ -107,8 +77,8 @@ serve(async (req: Request) => {
       // Для более ранних сбоев (ai_processing, db_insert) безопаснее просто поставить заявку в очередь заново.
       console.log(`🔄 Re-queueing full request for "${request.word_kr}"`);
       await supabaseAdmin
-        .from("word_requests")
-        .update({ status: "pending", my_notes: null, failed_step: null })
+        .from(DB_TABLES.WORD_REQUESTS)
+        .update({ status: WORD_REQUEST_STATUS.PENDING, my_notes: null, failed_step: null })
         .eq("id", request_id);
     }
 
@@ -117,17 +87,12 @@ serve(async (req: Request) => {
     });
 
   } catch (error: unknown) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    console.error("❌ Error in retry-word-request:", errorMessage);
+    console.error("❌ Error in retry-word-request:", (error as Error).message);
     // Если даже повтор не удался, снова помечаем заявку как ошибочную
     const { request_id } = await req.clone().json().catch(() => ({}));
     if (request_id) {
-        const supabaseAdmin = createClient(Deno.env.get("SUPABASE_URL") ?? "", Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "");
-        await supabaseAdmin.from("word_requests").update({ status: "error", my_notes: `Retry failed: ${errorMessage}` }).eq("id", request_id);
+        await getSupabaseAdmin().from(DB_TABLES.WORD_REQUESTS).update({ status: WORD_REQUEST_STATUS.ERROR, my_notes: `Retry failed: ${(error as Error).message}` }).eq("id", request_id);
     }
-    return new Response(JSON.stringify({ error: errorMessage }), {
-      status: 500,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    return createErrorResponse(error);
   }
 });

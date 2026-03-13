@@ -1,105 +1,15 @@
 // supabase/functions/check-essay/index.ts
-import { serve } from "https://deno.land/std@0.223.0/http/server.ts"
+import { serve } from "std/http/server.ts";
+import { corsHeaders, GEMINI_MODELS } from "shared/constants.ts";
+import { selectBestModel } from "shared/gemini.ts";
+import { getGeminiClient } from "shared/clients.ts";
+import { createErrorResponse } from "shared/utils.ts";
 
 declare const Deno: {
-  serve(arg0: (req: Request) => Promise<Response>): unknown;
   env: {
     get(key: string): string | undefined;
   };
 };
-
-// ✅ НОВАЯ БИБЛИОТЕКА google-genai (замена @google/generative-ai)
-import { GoogleGenerativeAI } from "https://esm.sh/@google/generative-ai@0.21.0"
-
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-};
-
-interface AvailableModel {
-  name: string
-  displayName: string
-  description: string
-  supportedGenerationMethods: string[]
-}
-
-async function getAvailableModels(genai: GoogleGenerativeAI): Promise<AvailableModel[]> {
-  try {
-    console.log("🔍 Получение списка доступных моделей для проверки эссе...");
-    
-    // Пробуем получить список моделей через genai API
-    const modelsResponse = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models?key=${genai.apiKey}`,
-      { method: "GET" }
-    );
-    
-    if (!modelsResponse.ok) {
-      console.error("❌ Не удалось получить список моделей:", modelsResponse.statusText);
-      return [];
-    }
-    
-    const modelsData = await modelsResponse.json();
-    const models: AvailableModel[] = [];
-    
-    if (modelsData.models) {
-      for (const model of modelsData.models) {
-        models.push({
-          name: model.name,
-          displayName: model.displayName || model.name,
-          description: model.description || "No description",
-          supportedGenerationMethods: model.supportedGenerationMethods || ["generateContent"]
-        });
-      }
-    }
-    
-    console.log("✅ Доступные модели для эссе:", models.map(m => m.name));
-    return models;
-  } catch (error) {
-    console.error("❌ Ошибка при получении моделей:", error);
-    return [];
-  }
-}
-
-async function selectBestModelForEssay(genai: GoogleGenerativeAI): Promise<string> {
-  // Приоритет для эссе: модели с хорошим пониманием грамматики и структуры
-  const preferredModels = [
-    "gemini-2.5-pro",
-    "gemini-2.5-flash",
-    "gemini-2.0-flash",
-    "gemini-1.5-pro-latest",
-    "gemini-pro-latest"
-  ];
-  
-  
-  try {
-    const availableModels = await getAvailableModels(genai);
-    console.log("📋 Всего доступно моделей:", availableModels.length);
-    
-    // Ищем лучшую доступную модель для эссе
-    for (const modelName of preferredModels) {
-      const found = availableModels.find(m => m.name.includes(modelName));
-      if (found) {
-        console.log("✅ Выбрана модель для эссе:", modelName);
-        return modelName;
-      }
-    }
-    
-    // Fallback на первую доступную
-    if (availableModels.length > 0) {
-      const fallback = availableModels[0].name;
-      console.log("🔄 Fallback модель для эссе:", fallback);
-      return fallback;
-    }
-    
-    // Последний резерв
-    console.log("⚠️ Используем gemini-2.0-flash (гарантированно доступна)");
-    return "gemini-2.0-flash";
-    
-  } catch (error) {
-    console.error("❌ Ошибка выбора модели для эссе, используем gemini-2.0-flash:", error);
-    return "gemini-2.0-flash";
-  }
-}
 
 serve(async (req: Request): Promise<Response> => {
   if (req.method === "OPTIONS") {
@@ -107,19 +17,10 @@ serve(async (req: Request): Promise<Response> => {
   }
 
   try {
-    console.log("📥 Request:", req.method, req.url);
+    console.log("📥 Request:", req.method, new URL(req.url).pathname);
 
     if (req.method !== "POST") {
-      return new Response(
-        JSON.stringify({ 
-          success: false,
-          error: "Use POST with {taskType, question, answer}" 
-        }),
-        { 
-          status: 405, 
-          headers: { ...corsHeaders, "Content-Type": "application/json" } 
-        }
-      );
+      return createErrorResponse("Method Not Allowed. Use POST.", 405);
     }
 
     // Parse Request Body с улучшенной обработкой
@@ -145,31 +46,16 @@ serve(async (req: Request): Promise<Response> => {
     const answer = body.answer as string | undefined;
     
     if (!taskType || !question || !answer) {
-      return new Response(
-        JSON.stringify({ 
-          success: false,
-          error: "Missing: taskType (51-54), question, answer",
-          received: { taskType, question: question?.substring(0, 50), answer: answer?.substring(0, 50) }
-        }),
-        { 
-          status: 400, 
-          headers: { ...corsHeaders, "Content-Type": "application/json" } 
-        }
-      );
-    }
-
-    const apiKey = Deno.env.get("GEMINI_API_KEY");
-    console.log("🔑 API key loaded:", !!apiKey);
-    if (!apiKey) {
-      throw new Error("GEMINI_API_KEY missing in Supabase secrets");
+      return createErrorResponse("Missing required fields: taskType, question, answer", 400);
     }
 
     // Инициализация новой google-genai библиотеки
     console.log("🤖 Инициализация GoogleGenAI для проверки эссе...");
-    const genai = new GoogleGenerativeAI(apiKey);
+    const genai = getGeminiClient();
     
     // Проверка доступных моделей и выбор лучшей для эссе
-    const selectedModel = await selectBestModelForEssay(genai);
+    const preferredModels = [GEMINI_MODELS.PRO_1_5, GEMINI_MODELS.FLASH, GEMINI_MODELS.PRO];
+    const selectedModel = await selectBestModel(genai, preferredModels, GEMINI_MODELS.FLASH);
     console.log("🎯 Используем модель для эссе:", selectedModel);
 
     // Создание модели с оптимальными настройками для проверки эссе
@@ -288,49 +174,24 @@ serve(async (req: Request): Promise<Response> => {
       improved_version: string;
     }
     
-    // Расширенная очистка JSON
-    if (text.includes("```json")) {
-      const parts = text.split("```json");
-      if (parts[1]) {
-        text = parts[1].split("```")[0].trim();
-      }
-    } else if (text.includes("```")) {
-      const parts = text.split("```");
-      if (parts[1]) text = parts[1].trim();
+    // Улучшенная очистка JSON
+    const jsonMatch = text.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
+    if (jsonMatch && jsonMatch[1]) {
+      text = jsonMatch[1];
     }
 
-    // Удаляем висящие запятые и лишние символы
-    text = text
-      .replace(/,\s*}/g, "}")
-      .replace(/,\s*]/g, "]")
-      .replace(/^\s*[\n\r]+/, "")
-      .replace(/[\n\r]+\s*$/, "")
-      .trim();
+    // Удаляем висящие запятые
+    text = text.replace(/,\s*([}\]])/g, "$1").trim();
 
     let data: EssayResult;
     try {
       data = JSON.parse(text);
             console.log("✅ JSON успешно распарсен для задания:", taskType);
-
-      // Validate essential fields
-      if (!data.score || !data.feedback) {
-          throw new Error("Missing required fields (score or feedback) in AI response");
-      }
     } catch (_parseError) {
       console.error("❌ JSON Parse Error. Raw response (500 chars):", text.substring(0, 500));
 
-      return new Response(
-        JSON.stringify({ 
-          success: false,
-          error: "AI response is not valid JSON",
-          rawResponse: text.substring(0, 1000),
-          taskType,
-          modelUsed: selectedModel
-        }),
-        { 
-          status: 502, 
-          headers: { ...corsHeaders, "Content-Type": "application/json" } 
-        }
+      return createErrorResponse(
+        { message: "AI response is not valid JSON", rawResponse: text.substring(0, 1000) }, 502
       );
     }
 
@@ -350,20 +211,6 @@ serve(async (req: Request): Promise<Response> => {
     );
 
   } catch (error: Error | unknown) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    console.error("💥 ERROR в check-essay:", errorMessage);
-    console.error("💥 Full error:", error);
-    
-    return new Response(
-      JSON.stringify({ 
-        success: false, 
-        error: errorMessage || "Unknown server error",
-        timestamp: new Date().toISOString()
-      }),
-      { 
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      }
-    );
-  };
+    return createErrorResponse(error);
+  }
 });

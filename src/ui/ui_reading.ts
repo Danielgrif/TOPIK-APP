@@ -49,7 +49,7 @@ function renderArticleList(articles: Article[]) {
         article.image_url ||
         "https://via.placeholder.com/300x150?text=TOPIK+Reading";
       return `
-      <div class="article-card" data-id="${article.id}">
+      <div class="article-card" data-id="${article.id}" role="button" tabindex="0" aria-label="Открыть статью: ${escapeHtml(article.title)}">
         <img src="${escapeHtml(image)}" class="article-card-img" alt="Cover" loading="lazy" onerror="this.onerror=null; this.src='https://via.placeholder.com/300x150?text=TOPIK+Reading';">
         <div class="article-card-body">
           <div class="article-card-title">${escapeHtml(article.title)}</div>
@@ -65,10 +65,20 @@ function renderArticleList(articles: Article[]) {
 
   // Add click listeners
   container.querySelectorAll(".article-card").forEach((card) => {
-    card.addEventListener("click", () => {
+    const open = () => {
       const id = (card as HTMLElement).dataset.id;
       const article = articles.find((a) => a.id === id);
       if (article) openArticle(article);
+    };
+
+    card.addEventListener("click", open);
+    card.addEventListener("keydown", (e) => {
+      if (
+        (e as KeyboardEvent).key === "Enter" ||
+        (e as KeyboardEvent).key === " "
+      ) {
+        open();
+      }
     });
   });
 }

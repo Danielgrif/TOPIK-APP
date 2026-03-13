@@ -68,6 +68,11 @@ const fetchWithRetries = async (
 
       clearTimeout(id);
 
+      // НЕ повторять попытку при ошибках клиента (4xx), так как они обычно не временные (например, 401 Unauthorized)
+      if (!response.ok && response.status >= 400 && response.status < 500) {
+        return response; // Сразу возвращаем ошибочный ответ
+      }
+
       // Повторяем попытку при серверных ошибках (5xx), которые могут быть временными
       if (!response.ok && response.status >= 500) {
         throw new Error(`Server error: ${response.status}`);
@@ -101,19 +106,15 @@ const fetchWithRetries = async (
 
 export const client: SupabaseClient =
   SUPABASE_URL && SUPABASE_KEY
-    ? createClient(
-        SUPABASE_URL,
-        SUPABASE_KEY,
-        {
-          global: {
-            fetch: fetchWithRetries,
-          },
-          realtime: {
-            worker: true,
-            heartbeatIntervalMs: 15000,
-          },
+    ? createClient(SUPABASE_URL, SUPABASE_KEY, {
+        global: {
+          fetch: fetchWithRetries,
         },
-      )
+        realtime: {
+          worker: true,
+          heartbeatIntervalMs: 15000,
+        },
+      })
     : ({
         from: () => ({
           select: () => Promise.resolve({ data: [], error: null }),

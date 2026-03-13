@@ -402,7 +402,7 @@ try {
   if (state.streak.lastDate === undefined) state.streak.lastDate = null;
   state.sessions = load(LS_KEYS.SESSIONS, state.sessions);
   state.achievements = load(LS_KEYS.ACHIEVEMENTS, state.achievements);
-  state.dailyChallenge = load("daily_challenge_v1", {
+  state.dailyChallenge = load(LS_KEYS.DAILY_CHALLENGE, {
     lastDate: null,
     completed: false,
     streak: 0,

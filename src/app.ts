@@ -23,6 +23,7 @@ import {
   updatePingIndicator,
   sortByLevel,
   sortByDate,
+  playAndSpeak,
 } from "./ui/ui.ts";
 import {
   showUpdateNotification,
@@ -56,6 +57,10 @@ import {
   openConfirm,
   closeConfirm,
 } from "./ui/ui_modal.ts";
+const getUiCollections = () => import("./ui/ui_collections.ts");
+const getUiHanja = () => import("./ui/ui_hanja.ts");
+const getUiGrammar = () => import("./ui/ui_grammar.ts");
+const getUiQuotes = () => import("./ui/ui_quotes.ts");
 import {
   toggleHanjaMode,
   setVoice,
@@ -96,6 +101,7 @@ import {
   signInWithGoogle,
   updateAuthUI,
   openLoginModal,
+  toggleAuthMode,
   cleanAuthUrl,
 } from "./core/auth.ts";
 import { AuthService } from "./core/auth_service.ts";
@@ -172,6 +178,23 @@ import {
 import { startMistakeQuiz, openMistakesModal } from "./ui/ui_mistakes.ts";
 import { showRequestError } from "./ui/ui_custom_words.ts";
 
+/**
+ * Updates the visual sync state in the UI.
+ * @param status The current synchronization status.
+ */
+const setSyncState = (status: "syncing" | "synced" | "error" | "offline") => {
+  const el = document.getElementById("sync-status");
+  if (!el) return;
+  el.className = `sync-status ${status}`;
+  const icons: Record<string, string> = {
+    syncing: "⏳",
+    synced: "✅",
+    error: "❌",
+    offline: "📡",
+  };
+  el.textContent = icons[status] || "";
+};
+
 let currentQuote: Quote | null = null;
 let welcomeAudioTimeout: number | null = null;
 
@@ -204,6 +227,41 @@ function performWelcomeClose() {
       checkAndShowOnboarding();
     }, 500);
   }
+}
+
+/**
+ * Asynchronously loads private words for the current user if they are not already in the data store.
+ * @returns {Promise<boolean>} A promise that resolves to true if new words were loaded, false otherwise.
+ */
+async function loadPrivateWords(): Promise<boolean> {
+  if (!state.dataStore) return false;
+
+  const {
+    data: { user },
+  } = await client.auth.getUser();
+  if (!user) return false;
+
+  const { data } = await client
+    .from(DB_TABLES.VOCABULARY)
+    .select("*")
+    .eq("created_by", user.id)
+    .eq("is_public", false);
+
+  if (data) {
+    const currentIds = new Set(state.dataStore.map((w) => w.id));
+    const toAdd = data.filter((w) => !currentIds.has(w.id));
+    if (toAdd.length > 0) {
+      state.dataStore.push(...toAdd);
+      if (searchWorker) {
+        searchWorker.postMessage({
+          type: "SET_DATA",
+          data: state.dataStore,
+        });
+      }
+      return true;
+    }
+  }
+  return false;
 }
 
 // Используем Vite-совместимый импорт воркера
@@ -320,9 +378,9 @@ function injectDynamicStyles() {
         justify-content: center;
         background: none;
         border: none;
-        padding: 6px 0;
+        padding: 6px 0; /* Запасной цвет #6b7280 имеет достаточный контраст (AA) */
         cursor: pointer;
-        color: var(--text-sub, #888);
+        color: var(--text-sub, #6b7280);
         transition: all 0.2s ease;
         -webkit-tap-highlight-color: transparent;
     }
@@ -356,6 +414,9 @@ function setupGlobalListeners() {
       if (modalId) {
         openModal(modalId);
         updateBottomNav(modalId);
+        if (modalId === "quotes-modal") {
+          getUiQuotes().then((m) => m.renderFavoriteQuotes());
+        }
         // FIX: Render stats when modal opens
         if (modalId === "stats-modal") {
           renderDetailedStats();
@@ -396,6 +457,51 @@ function setupGlobalListeners() {
       const value = actionTrigger.getAttribute("data-value");
 
       switch (action) {
+        case "toggle-favorite":
+          if (value) {
+            // Lazy load the module that contains toggleFavorite logic
+            import("./ui/ui_card.ts").then((m) =>
+              m.toggleFavorite(value, actionTrigger as HTMLElement),
+            );
+          }
+          break;
+        case "toggle-auth-mode":
+          if (value === "login" || value === "signup") {
+            toggleAuthMode(value);
+          }
+          break;
+        case "speak-word":
+          if (value) {
+            const word = state.dataStore.find((w) => String(w.id) === value);
+            if (word) {
+              const btn = actionTrigger as HTMLElement;
+              btn.classList.add("playing");
+              playAndSpeak(word).then(() => {
+                btn.classList.remove("playing");
+              });
+            }
+          }
+          break;
+        case "copy-word":
+          if (value) {
+            navigator.clipboard.writeText(value);
+            showToast("📋 Скопировано!");
+          }
+          break;
+        case "add-to-list":
+          if (value) {
+            getUiCollections().then((m) => m.openAddToListModal(Number(value)));
+          }
+          break;
+        case "open-hanja-modal":
+          if (value) getUiHanja().then((m) => m.openHanjaModal(value));
+          break;
+        case "open-grammar-modal":
+          if (value) {
+            const word = state.dataStore.find((w) => String(w.id) === value);
+            if (word) getUiGrammar().then((m) => m.openGrammarModal(word));
+          }
+          break;
         case "nav-home":
           document.querySelectorAll(".modal.active").forEach((m) => {
             closeModal(m.id);
@@ -524,21 +630,38 @@ function setupGlobalListeners() {
           break;
         case "save-quote":
           if (currentQuote) {
-            const idx = state.favoriteQuotes.findIndex(
-              (q) => q.id === currentQuote!.id,
-            );
-            if (idx >= 0) {
-              state.favoriteQuotes.splice(idx, 1);
-              actionTrigger.textContent = "🤍";
-              actionTrigger.classList.remove("active");
-              showToast("Цитата удалена из избранного");
-            } else {
-              state.favoriteQuotes.push(currentQuote);
-              actionTrigger.textContent = "❤️";
-              actionTrigger.classList.add("active");
-              showToast("Цитата сохранена в избранное!");
-            }
-            immediateSaveState();
+            client.auth.getUser().then(async ({ data: { user } }) => {
+              if (!user) {
+                showToast("Войдите, чтобы сохранять цитаты");
+                openLoginModal();
+                return;
+              }
+
+              const quoteId = currentQuote!.id;
+              const isFav = state.favoriteQuotes.some((q) => q.id === quoteId);
+
+              if (isFav) {
+                state.favoriteQuotes = state.favoriteQuotes.filter(
+                  (q) => q.id !== quoteId,
+                );
+                actionTrigger.textContent = "🤍";
+                actionTrigger.classList.remove("active");
+                showToast("Цитата удалена из избранного");
+                await client
+                  .from(DB_TABLES.USER_FAVORITE_QUOTES)
+                  .delete()
+                  .match({ user_id: user.id, quote_id: quoteId });
+              } else {
+                state.favoriteQuotes.push(currentQuote!);
+                actionTrigger.textContent = "❤️";
+                actionTrigger.classList.add("active");
+                showToast("Цитата сохранена в избранное!");
+                await client
+                  .from(DB_TABLES.USER_FAVORITE_QUOTES)
+                  .insert({ user_id: user.id, quote_id: quoteId });
+              }
+              immediateSaveState(); // Сохраняем локально для оффлайн-доступа
+            });
           }
           break;
         case "toggle-password":
@@ -551,7 +674,7 @@ function setupGlobalListeners() {
           signInWithGoogle();
           break;
         case "toggle-reset-mode":
-          toggleResetMode(value === "true");
+          toggleAuthMode(value === "true" ? "reset" : "login");
           break;
         case "set-voice":
           if (value) setVoice(value);
@@ -665,30 +788,9 @@ function setupGlobalListeners() {
         case "set-collection-filter":
           // FIX: Если пользователь открывает список, подгружаем его личные слова,
           // так как мы скрыли их на главном экране при загрузке.
-          if (value && state.dataStore) {
-            client.auth.getUser().then(async ({ data: { user } }) => {
-              if (user) {
-                const { data } = await client
-                  .from(DB_TABLES.VOCABULARY)
-                  .select("*")
-                  .eq("created_by", user.id)
-                  .eq("is_public", false);
-
-                if (data) {
-                  const currentIds = new Set(state.dataStore.map((w) => w.id));
-                  const toAdd = data.filter((w) => !currentIds.has(w.id));
-                  if (toAdd.length > 0) {
-                    state.dataStore.push(...toAdd);
-                    if (searchWorker)
-                      searchWorker.postMessage({
-                        type: "SET_DATA",
-                        data: state.dataStore,
-                      });
-                    // ADDED: Принудительно обновляем сетку, чтобы показать подгруженные слова
-                    render();
-                  }
-                }
-              }
+          if (value) {
+            loadPrivateWords().then((wordsAdded) => {
+              if (wordsAdded) render(); // Re-render only if new words were added
             });
           }
           setCollectionFilter(value, e);
@@ -702,6 +804,11 @@ function setupGlobalListeners() {
         case "delete-word-permanent":
           if (value)
             permanentlyDeleteWord(Number(value), actionTrigger as HTMLElement);
+          break;
+        case "remove-from-list":
+          if (value) {
+            getUiCollections().then((m) => m.removeWordFromCurrentList(value));
+          }
           break;
         case "bulk-add-to-list-item":
           if (value) handleBulkAddToList(value);
@@ -742,23 +849,8 @@ function setupGlobalListeners() {
           break;
         case "manage-my-words":
           // FIX: Подгружаем слова и для менеджера слов
-          client.auth.getUser().then(async ({ data: { user } }) => {
-            if (user) {
-              const { data } = await client
-                .from(DB_TABLES.VOCABULARY)
-                .select("*")
-                .eq("created_by", user.id)
-                .eq("is_public", false);
-
-              if (data) {
-                const currentIds = new Set(state.dataStore.map((w) => w.id));
-                const toAdd = data.filter((w) => !currentIds.has(w.id));
-                if (toAdd.length > 0) {
-                  state.dataStore.push(...toAdd);
-                }
-              }
-            }
-          });
+          // Fire and forget, no need to re-render here as manageMyWords will handle it.
+          loadPrivateWords();
           manageMyWords(e);
           break;
         case "clear-collection-filter":
@@ -1124,12 +1216,14 @@ function setupNetworkListeners() {
   window.addEventListener("online", () => {
     updateStatus();
     showToast("🌐 Соединение восстановлено");
+    setSyncState("syncing"); // Показываем, что пытаемся синхронизироваться
     // Принудительно восстанавливаем Realtime соединение при появлении сети
     client.realtime.connect();
     updateDbStatus("waking");
     isDatabaseActive(5000).then((active) =>
       updateDbStatus(active ? "active" : "error"),
     );
+    import("./core/sync.ts").then((m) => m.syncGlobalStats());
     // Запускаем синхронизацию сохраненных заявок
     import("./ui/ui_retry.ts").then((m) => m.syncOfflineRequests());
   });
@@ -1137,6 +1231,7 @@ function setupNetworkListeners() {
     updateStatus();
     showToast("📡 Вы перешли в офлайн режим");
     updateDbStatus("error");
+    setSyncState("offline");
   });
 
   // Слушаем изменения качества соединения (Network Information API)
@@ -1517,7 +1612,23 @@ async function init() {
   if (session) {
     updateAuthUI(session.user as unknown as User);
     cleanAuthUrl();
-    await loadFromSupabase(session.user as unknown as User);
+    try {
+      await promiseWithTimeout(
+        loadFromSupabase(session.user as unknown as User),
+        7000, // 7-секундный таймаут на загрузку прогресса
+        new Error(
+          "Загрузка прогресса пользователя заняла слишком много времени",
+        ),
+      );
+    } catch (e) {
+      console.error(
+        "Не удалось загрузить прогресс пользователя при инициализации:",
+        e,
+      );
+      showToast(
+        "⚠️ Не удалось загрузить ваш прогресс. Проверьте интернет или войдите заново.",
+      );
+    }
     import("./ui/ui_collections.ts").then((m) => m.loadCollections());
     showWelcomeScreen(session.user as unknown as User);
   } else {
@@ -1648,9 +1759,34 @@ async function init() {
       .register("/sw.js", {
         scope: "/",
       })
-      .then((reg) => {
+      .then(async (reg) => {
         if (!navigator.serviceWorker.controller) {
           showToast("✅ Приложение готово к работе офлайн!");
+        }
+
+        // Register for Periodic Background Sync
+        const registration = reg as ServiceWorkerRegistration & {
+          periodicSync?: {
+            register: (
+              tag: string,
+              options: { minInterval: number },
+            ) => Promise<void>;
+          };
+        };
+        if (registration.periodicSync) {
+          try {
+            await registration.periodicSync.register(SW_MESSAGES.CONTENT_SYNC, {
+              // An interval of 12 hours. The browser will decide the exact frequency.
+              minInterval: 12 * 60 * 60 * 1000,
+            });
+            console.log("✅ Periodic Sync registered for tag: content-sync");
+          } catch (err) {
+            console.error("❌ Periodic Sync registration failed:", err);
+          }
+        } else {
+          console.warn(
+            "Periodic Background Sync is not supported by this browser.",
+          );
         }
 
         const handleUpdate = (worker: ServiceWorker) => {

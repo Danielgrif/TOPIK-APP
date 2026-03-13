@@ -100,27 +100,6 @@ body.dark-mode .btn-icon {
 }
 .btn-text:hover { background: var(--surface-3); }
 
-.fab-btn {
-    position: fixed;
-    bottom: 80px;
-    right: 20px;
-    width: 56px;
-    height: 56px;
-    border-radius: 28px;
-    background: var(--primary);
-    color: var(--text-inverse);
-    border: none;
-    font-size: 28px;
-    box-shadow: var(--shadow-lg);
-    cursor: pointer;
-    z-index: 90;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    transition: transform 0.2s, background-color 0.4s ease;
-}
-.fab-btn:hover { transform: scale(1.1); }
-
 /* --- Cards (3D Flip) --- */
 .card {
     background: transparent;
@@ -399,6 +378,7 @@ body.dark-mode .tag-pill.category {
 .rel-chips { display: flex; flex-wrap: wrap; gap: 6px; }
 .rel-chip { font-size: 13px; color: var(--text-main); background: var(--surface-2); padding: 2px 8px; border-radius: 6px; }
 .rel-chip.ant { color: var(--danger); background: rgba(239, 68, 68, 0.1); }
+.rel-chip.syn { color: var(--success); background: rgba(16, 185, 129, 0.1); }
 
 /* Info Items */
 .info-item { 
@@ -423,55 +403,6 @@ body.dark-mode .tag-pill.category {
     border-radius: 16px;
     border: 1px solid var(--border-color);
     box-shadow: 0 4px 20px rgba(0,0,0,0.03);
-}
-
-/* --- Onboarding --- */
-.onboarding-overlay {
-    position: fixed;
-    top: 0; left: 0; width: 100%; height: 100%;
-    background: transparent; /* Фон теперь управляется через box-shadow */
-    z-index: 4000;
-    align-items: center;
-    justify-content: center;
-    opacity: 0;
-    transition: opacity 0.3s ease;
-    /* display: none; is handled in index.html and toggled by .active */
-}
-.onboarding-overlay.spotlight {
-    /* Создаем "дыру" с помощью тени */
-    box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.7);
-    pointer-events: none; /* Пропускаем клики сквозь оверлей */
-}
-
-.onboarding-card {
-    background: var(--surface-1);
-    width: 90%;
-    max-width: 400px;
-    border-radius: var(--radius-lg);
-    padding: 25px;
-    text-align: center;
-    box-shadow: var(--shadow-lg);
-    pointer-events: auto; /* Карточка должна быть кликабельной */
-    animation: zoomIn 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-}
-
-.onboarding-image { font-size: 64px; display: block; margin-bottom: 20px; }
-.onboarding-title { font-size: 22px; font-weight: 800; margin-bottom: 10px; color: var(--text-main); }
-.onboarding-text { font-size: 15px; line-height: 1.6; color: var(--text-sub); }
-.onboarding-dots { display: flex; justify-content: center; gap: 8px; margin: 25px 0; }
-.onboarding-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--surface-3); transition: all 0.3s ease; }
-.onboarding-dot.active { background: var(--primary); transform: scale(1.3); }
-.onboarding-actions { display: flex; gap: 10px; }
-
-/* Highlighted element during onboarding */
-.onboarding-target {
-    position: relative;
-    z-index: 21005 !important; /* FIX: Выше оверлея (21000) */
-    box-shadow: 0 0 0 4px var(--primary), 0 0 15px rgba(0,0,0,0.5) !important;
-    background-color: var(--surface-1); /* Ensure opacity */
-    transition: all 0.3s ease, box-shadow 0.3s ease;
-    pointer-events: auto;
-    cursor: pointer;
 }
 
 .card-image-regenerate-btn {
@@ -977,38 +908,6 @@ body.dark-mode .list-action-btn {
 .list-action-btn:hover { background: var(--primary); color: white; transform: scale(1.1); }
 .list-action-btn.active { color: #ff4757; background: rgba(255, 71, 87, 0.1); border-color: transparent; }
 
-/* List Details (Accordion) */
-.list-item-details {
-    max-height: 0;
-    overflow: hidden;
-    transition: max-height 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-    background: var(--surface-1);
-    border-top: 1px solid var(--border-color);
-}
-
-.list-details-inner { padding: 16px 20px; display: flex; flex-direction: column; gap: 12px; }
-.list-detail-section {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-    padding: 12px 12px 12px 16px;
-    border-radius: 8px;
-    border-left: 3px solid;
-}
-.list-detail-label { font-size: 10px; text-transform: uppercase; color: var(--text-tertiary); font-weight: 800; letter-spacing: 0.5px; }
-.list-detail-text { font-size: 14px; color: var(--text-main); line-height: 1.5; }
-.list-detail-text.kr { font-weight: 600; color: var(--primary); }
-.list-detail-text.ru { color: var(--text-sub); }
-.list-detail-text .highlight { 
-    color: var(--primary); 
-    background: rgba(99, 102, 241, 0.1); 
-    padding: 0 2px; 
-    border-radius: 4px; 
-    font-weight: 600;
-}
-.list-detail-row { display: flex; gap: 16px; }
-.list-detail-empty { font-size: 13px; color: var(--text-tertiary); font-style: italic; text-align: center; }
-
 /* --- Level Up Overlay --- */
 .level-up-overlay {
     position: fixed;
@@ -1073,6 +972,18 @@ body.dark-mode .list-action-btn {
     background: var(--surface-1);
     box-shadow: 0 0 0 4px rgba(108, 92, 231, 0.1);
     outline: none;
+}
+.auth-input.error {
+    border-color: var(--danger);
+    animation: shake 0.4s cubic-bezier(.36,.07,.19,.97) both;
+}
+.input-error-msg {
+    color: var(--danger);
+    font-size: 12px;
+    font-weight: 500;
+    text-align: left;
+    margin-top: 6px;
+    min-height: 16px; /* Reserve space to prevent layout shift */
 }
 
 .input-group { position: relative; }
@@ -1893,6 +1804,60 @@ button[data-action="submit-word-request"]:hover {
     box-shadow: 0 8px 20px rgba(124, 58, 237, 0.4);
 }
 
+/* --- Favorite Quotes Modal --- */
+#favorite-quotes-list {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+    max-height: 60vh;
+    overflow-y: auto;
+    padding: 5px;
+}
+
+.quote-item {
+    background: var(--surface-2);
+    padding: 15px;
+    border-radius: 12px;
+    border-left: 4px solid var(--primary);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.quote-content {
+    flex: 1;
+}
+
+.quote-kr {
+    font-weight: 600;
+    font-size: 16px;
+    margin-bottom: 8px;
+    color: var(--text-main);
+}
+
+.quote-ru {
+    font-size: 14px;
+    color: var(--text-sub);
+    line-height: 1.5;
+}
+
+.quote-actions {
+    display: flex;
+    gap: 8px;
+}
+
+.quote-actions .btn-icon {
+    width: 40px;
+    height: 40px;
+    font-size: 18px;
+    background: var(--surface-1);
+}
+
+.quote-actions .delete-quote-btn:hover {
+    background: var(--danger-light);
+    color: var(--danger);
+}
+
 button[data-action="submit-word-request"]:active {
     transform: scale(0.98);
 }
@@ -1982,11 +1947,6 @@ button[data-action="submit-word-request"]:active {
     padding-bottom: 75px !important; /* Make sure the content won't hide behind the bottom nav */
 }
 
-
-#main-content {
-    padding-bottom: 75px !important; /* Make sure the content won't hide behind the bottom nav */
-}
-
 @keyframes popIn {
     0% { opacity: 0; transform: scale(0.5); }
     100% { opacity: 1; transform: scale(1); }
@@ -2011,12 +1971,6 @@ button[data-action="submit-word-request"]:active {
     animation: skeleton-pulse 1.5s ease-in-out infinite;
     background: var(--surface-3);
 }
-
-.profile-name {
-    font-size: 14px; font-weight: 600; color: var(--text-main);
-    display: none;
-}
-@media (min-width: 600px) { .profile-name { display: block; } }
 
 .view-toggle {
     display: flex; background: var(--surface-1);
@@ -2143,25 +2097,4 @@ button[data-action="submit-word-request"]:active {
 #update-notification.show {
     transform: translateY(0);
     opacity: 1;
-}
-
-/* --- Offline Indicator --- */
-#offline-indicator {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    background: var(--danger);
-    color: white;
-    text-align: center;
-    padding: 4px;
-    font-size: 12px;
-    font-weight: 700;
-    z-index: 10001;
-    transform: translateY(-100%);
-    transition: transform 0.3s ease;
-}
-
-#offline-indicator.visible {
-    transform: translateY(0);
 }

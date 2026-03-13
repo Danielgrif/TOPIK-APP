@@ -13,7 +13,7 @@
 
   <div class="header-right">
     <!-- XP Widget (Ring) -->
-    <div id="xp-level-widget" class="header-stat-item" data-modal-target="stats-modal" title="Статистика">
+    <button id="xp-level-widget" class="header-stat-item" data-modal-target="stats-modal" title="Статистика" aria-label="Открыть статистику">
         <div class="xp-ring-wrapper">
             <svg class="xp-circular-chart" viewBox="0 0 36 36">
                 <path class="xp-circle-bg" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
@@ -25,14 +25,14 @@
             <span class="xp-label">LVL</span>
             <span id="xp-text" class="xp-val-text">0 XP</span>
         </div>
-    </div>
+    </button>
 
     <button class="coin-pill" data-action="open-shop" title="Магазин">
       <span class="coin-icon">💰</span>
       <span id="coins-count-header">0</span>
     </button>
     
-    <button id="profile-button" class="profile-btn-icon" data-action="open-profile">
+    <button id="profile-button" class="profile-btn-icon" data-action="open-profile" aria-label="Открыть профиль и настройки">
       <div id="profile-avatar" class="profile-avatar">👤</div>
     </button>
   </div>

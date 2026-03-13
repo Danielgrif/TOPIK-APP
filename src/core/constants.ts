@@ -24,6 +24,7 @@ export const LS_KEYS = {
   WORD_REQUESTS: "word_requests_state_v1",
   STUDY_GOAL: "study_goal_v1",
   ONBOARDING: "onboarding_completed_v1",
+  DAILY_CHALLENGE: "daily_challenge_v1",
   PWA_BANNER_DISMISSED: "pwa_banner_dismissed_v1",
   // Настройки
   HANJA_MODE: "hanja_mode_v1",
@@ -58,6 +59,7 @@ export const DB_TABLES = {
   LIST_ITEMS: "list_items",
   USER_VOCABULARY: "user_vocabulary",
   ARTICLES: "articles",
+  USER_FAVORITE_QUOTES: "user_favorite_quotes",
 };
 
 // Имена бакетов Supabase Storage
@@ -80,5 +82,6 @@ export const WORD_REQUEST_STATUS = {
 export const SW_MESSAGES = {
   SKIP_WAITING: "SKIP_WAITING",
   PROCESS_DOWNLOAD_QUEUE: "PROCESS_DOWNLOAD_QUEUE",
+  CONTENT_SYNC: "content-sync",
   DOWNLOAD_QUEUE_COMPLETED: "DOWNLOAD_QUEUE_COMPLETED",
 };

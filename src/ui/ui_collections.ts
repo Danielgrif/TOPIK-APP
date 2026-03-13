@@ -323,7 +323,7 @@ export function updateCollectionUI() {
       // 1. My Custom Words (Virtual List)
       if (myCustomWordsCount > 0) {
         html += `
-        <div class="collection-item-card special">
+        <div class="collection-item-card special" role="group">
             <div class="collection-word-count">${myCustomWordsCount} слов</div>
             <div class="collection-info" data-action="set-collection-filter" data-value="my-custom" title="Показать мои слова">
                 <div class="collection-icon" style="background: var(--surface-1); color: var(--primary);">✍️</div>
@@ -361,9 +361,9 @@ export function updateCollectionUI() {
               .replace(/"/g, "&quot;");
 
             return `
-                <div class="collection-item-card" draggable="true" data-list-id="${list.id}" style="animation: fadeInUpList 0.3s ease-out ${index * 0.05}s backwards">
+                <div class="collection-item-card" draggable="true" data-list-id="${list.id}" style="animation: fadeInUpList 0.3s ease-out ${index * 0.05}s backwards" role="group">
                     <div class="collection-word-count">${collectionsState.listItems[list.id]?.size || 0} слов</div>
-                    <div class="collection-info" data-action="set-collection-filter" data-value="${list.id}" title="Открыть список">
+                    <div class="collection-info" data-action="set-collection-filter" data-value="${list.id}" title="Открыть список" role="button" tabindex="0">
                         <div class="collection-icon">${escapeHtml(list.icon || "📁")}</div>
                         <div class="collection-text">
                             <div class="collection-title">${escapeHtml(list.title)}</div>
@@ -371,10 +371,10 @@ export function updateCollectionUI() {
                         </div>
                     </div>
                     <div class="collection-actions">
-                        <button class="btn-collection-action" data-action="share-list" data-value="${list.id}" title="Поделиться ссылкой">🔗</button>
-                        <button class="btn-collection-action" data-action="edit-list" data-value="${list.id}" data-title="${safeTitle}" data-icon="${safeIcon}" title="Редактировать">✏️</button>
-                        <button class="btn-collection-action" data-action="open-add-word-modal" data-value="${list.id}" title="Добавить слово">➕</button>
-                        <button class="btn-collection-action delete" data-action="delete-list" data-value="${list.id}" title="Удалить">🗑️</button>
+                        <button class="btn-collection-action" data-action="share-list" data-value="${list.id}" title="Поделиться ссылкой" aria-label="Поделиться ссылкой">🔗</button>
+                        <button class="btn-collection-action" data-action="edit-list" data-value="${list.id}" data-title="${safeTitle}" data-icon="${safeIcon}" title="Редактировать" aria-label="Редактировать список">✏️</button>
+                        <button class="btn-collection-action" data-action="open-add-word-modal" data-value="${list.id}" title="Добавить слово" aria-label="Добавить слово в список">➕</button>
+                        <button class="btn-collection-action delete" data-action="delete-list" data-value="${list.id}" title="Удалить" aria-label="Удалить список">🗑️</button>
                     </div>
                 </div>
                 `;
@@ -390,9 +390,9 @@ export function updateCollectionUI() {
           .map((list: UserList, index: number) => {
             // For public lists, we might not allow editing/deleting, just viewing
             return `
-                <div class="collection-item-card" style="animation: fadeInUpList 0.3s ease-out ${index * 0.05}s backwards">
+                <div class="collection-item-card" style="animation: fadeInUpList 0.3s ease-out ${index * 0.05}s backwards" role="group">
                     <div class="collection-word-count">${collectionsState.listItems[list.id]?.size || 0} слов</div>
-                    <div class="collection-info" data-action="set-collection-filter" data-value="${list.id}">
+                    <div class="collection-info" data-action="set-collection-filter" data-value="${list.id}" role="button" tabindex="0">
                         <div class="collection-icon">${escapeHtml(list.icon || "📁")}</div>
                         <div class="collection-text">
                             <div class="collection-title">${escapeHtml(list.title)}</div>
@@ -400,7 +400,7 @@ export function updateCollectionUI() {
                         </div>
                     </div>
                     <div class="collection-actions">
-                        <button class="btn-collection-action" data-action="share-list" data-value="${list.id}" title="Поделиться ссылкой">🔗</button>
+                        <button class="btn-collection-action" data-action="share-list" data-value="${list.id}" title="Поделиться ссылкой" aria-label="Поделиться ссылкой">🔗</button>
                     </div>
                 </div>
                 `;
@@ -409,6 +409,24 @@ export function updateCollectionUI() {
       }
 
       container.innerHTML = html;
+
+      // Add keyboard accessibility for collection items
+      if (!container.dataset.keyboardListener) {
+        container.addEventListener("keydown", (e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            const target = e.target as HTMLElement;
+            if (
+              target.matches(
+                '.collection-info[data-action="set-collection-filter"]',
+              )
+            ) {
+              e.preventDefault();
+              target.click(); // Simulate a click to trigger the global listener
+            }
+          }
+        });
+        container.dataset.keyboardListener = "true";
+      }
       setupCollectionDragAndDrop(container);
     });
   }
@@ -699,6 +717,30 @@ function handleDragEnd(e: Event) {
     el.classList.remove("drag-over");
   });
   draggedItem = null;
+}
+
+export function removeWordFromCurrentList(wordId: string | number) {
+  const listId = collectionsState.currentCollectionFilter;
+  if (!listId || listId === "uncategorized" || listId === "my-custom") return;
+
+  collectionsState.listItems[listId]?.delete(Number(wordId));
+
+  showUndoToast(
+    "Убрано из списка",
+    () => {
+      // Undo action
+      collectionsState.listItems[listId]?.add(Number(wordId));
+      document.dispatchEvent(new CustomEvent("state-changed"));
+    },
+    async () => {
+      // Commit action
+      await client
+        .from(DB_TABLES.LIST_ITEMS)
+        .delete()
+        .match({ list_id: listId, word_id: wordId });
+    },
+  );
+  document.dispatchEvent(new CustomEvent("state-changed"));
 }
 
 export async function openAddToListModal(wordId: number) {

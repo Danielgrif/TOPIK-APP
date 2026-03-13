@@ -3,6 +3,22 @@ import { state } from "./state.ts";
 import { showToast } from "../utils/utils.ts";
 import { DB_TABLES, LS_KEYS } from "./constants.ts";
 
+/**
+ * Updates the visual sync state in the UI.
+ */
+const setSyncState = (status: "syncing" | "success" | "error" | "offline") => {
+  const el = document.getElementById("sync-status");
+  if (!el) return;
+  el.className = `sync-status ${status}`;
+  const icons: Record<string, string> = {
+    syncing: "⏳",
+    success: "✅",
+    error: "❌",
+    offline: "📡",
+  };
+  el.textContent = icons[status] || "";
+};
+
 export async function syncGlobalStats() {
   if (state.isSyncing) return;
 
@@ -15,147 +31,120 @@ export async function syncGlobalStats() {
     return;
   }
 
-  const user = data.session.user;
+  if (!navigator.onLine) {
+    setSyncState("offline");
+    return;
+  }
 
   state.isSyncing = true;
-  const syncBtn = document.getElementById("sync-btn");
-  if (syncBtn) {
-    syncBtn.classList.add("rotating", "syncing");
-    syncBtn.classList.remove("success", "error");
-    syncBtn.title = "Синхронизация...";
-  }
+  setSyncState("syncing");
+  const user = data.session.user;
 
-  const maxRetries = 3;
-  let attempt = 0;
+  try {
+    // 1. Sync Global Stats
+    const settings = {
+      darkMode: state.darkMode,
+      hanjaMode: state.hanjaMode,
+      audioSpeed: state.audioSpeed,
+      currentVoice: state.currentVoice,
+      autoUpdate: state.autoUpdate,
+      autoTheme: state.autoTheme,
+      autoThemeStart: state.autoThemeStart,
+      autoThemeEnd: state.autoThemeEnd,
+      studyGoal: state.studyGoal,
+      lastDailyReward: state.userStats.lastDailyReward,
+      themeColor: state.themeColor,
+      backgroundMusicEnabled: state.backgroundMusicEnabled,
+      backgroundMusicVolume: state.backgroundMusicVolume,
+      ttsVolume: state.ttsVolume,
+      streakLastDate: state.streak.lastDate,
+      survivalHealth: state.userStats.survivalHealth,
+      lastFreezeDate: state.userStats.lastFreezeDate,
+      settingsUpdatedAt: state.settingsUpdatedAt,
+    };
 
-  while (attempt < maxRetries) {
-    try {
-      // 1. Sync Global Stats
-      const settings = {
-        darkMode: state.darkMode,
-        hanjaMode: state.hanjaMode,
-        audioSpeed: state.audioSpeed,
-        currentVoice: state.currentVoice,
-        autoUpdate: state.autoUpdate,
-        autoTheme: state.autoTheme,
-        autoThemeStart: state.autoThemeStart,
-        autoThemeEnd: state.autoThemeEnd,
-        studyGoal: state.studyGoal,
-        lastDailyReward: state.userStats.lastDailyReward,
-        themeColor: state.themeColor,
-        backgroundMusicEnabled: state.backgroundMusicEnabled,
-        backgroundMusicVolume: state.backgroundMusicVolume,
-        ttsVolume: state.ttsVolume,
-        streakLastDate: state.streak.lastDate,
-        survivalHealth: state.userStats.survivalHealth,
-        lastFreezeDate: state.userStats.lastFreezeDate,
-        settingsUpdatedAt: state.settingsUpdatedAt,
-      };
+    const globalUpdates = {
+      user_id: user.id,
+      xp: state.userStats.xp,
+      level: state.userStats.level,
+      weekly_xp: state.userStats.weeklyXp,
+      league: state.userStats.league,
+      sprint_record: state.userStats.sprintRecord,
+      survival_record: state.userStats.survivalRecord,
+      coins: state.userStats.coins,
+      streak_freeze: state.userStats.streakFreeze,
+      achievements: state.achievements,
+      sessions: state.sessions,
+      settings: settings,
+      updated_at: new Date().toISOString(),
+      avatar_url: user.user_metadata?.avatar_url || null,
+      full_name: user.user_metadata?.full_name || null,
+    };
 
-      const globalUpdates = {
-        user_id: user.id,
-        xp: state.userStats.xp,
-        level: state.userStats.level,
-        weekly_xp: state.userStats.weeklyXp,
-        league: state.userStats.league,
-        sprint_record: state.userStats.sprintRecord,
-        survival_record: state.userStats.survivalRecord,
-        coins: state.userStats.coins,
-        streak_freeze: state.userStats.streakFreeze,
-        achievements: state.achievements,
-        sessions: state.sessions,
-        settings: settings,
-        updated_at: new Date().toISOString(),
-        avatar_url: user.user_metadata?.avatar_url || null,
-        full_name: user.user_metadata?.full_name || null,
-      };
+    const { error: globalError } = await client
+      .from(DB_TABLES.USER_GLOBAL_STATS)
+      .upsert(globalUpdates, { onConflict: "user_id" });
 
-      const { error: globalError } = await client
-        .from(DB_TABLES.USER_GLOBAL_STATS)
-        .upsert(globalUpdates, { onConflict: "user_id" });
+    if (globalError) throw globalError;
 
-      if (globalError) throw globalError;
+    // 2. Sync Word Progress (Dirty words only)
+    if (state.dirtyWordIds.size > 0) {
+      const updates = [];
+      for (const id of state.dirtyWordIds) {
+        const h = state.wordHistory[id];
+        if (!h) continue;
 
-      // 2. Sync Word Progress (Dirty words only)
-      if (state.dirtyWordIds.size > 0) {
-        const updates = [];
-        for (const id of state.dirtyWordIds) {
-          const h = state.wordHistory[id];
-          if (!h) continue;
-
-          updates.push({
-            user_id: user.id,
-            word_id: id,
-            is_learned: state.learned.has(id),
-            is_mistake: state.mistakes.has(id),
-            is_favorite: state.favorites.has(id),
-            attempts: h.attempts,
-            correct: h.correct,
-            last_review: h.lastReview,
-            sm2_interval: h.sm2?.interval || 0,
-            sm2_repetitions: h.sm2?.repetitions || 0,
-            sm2_ef: h.sm2?.ef || 2.5,
-            sm2_next_review: h.sm2?.nextReview || null,
-            learned_date: h.learnedDate || null,
-            updated_at: new Date().toISOString(),
-          });
-        }
-
-        if (updates.length > 0) {
-          const { error: progressError } = await client
-            .from(DB_TABLES.USER_PROGRESS)
-            .upsert(updates, { onConflict: "user_id,word_id" });
-
-          if (progressError) throw progressError;
-        }
-
-        state.dirtyWordIds.clear();
-        localStorage.setItem(LS_KEYS.DIRTY_IDS, "[]");
+        updates.push({
+          user_id: user.id,
+          word_id: id,
+          is_learned: state.learned.has(id),
+          is_mistake: state.mistakes.has(id),
+          is_favorite: state.favorites.has(id),
+          attempts: h.attempts,
+          correct: h.correct,
+          last_review: h.lastReview,
+          sm2_interval: h.sm2?.interval || 0,
+          sm2_repetitions: h.sm2?.repetitions || 0,
+          sm2_ef: h.sm2?.ef || 2.5,
+          sm2_next_review: h.sm2?.nextReview || null,
+          learned_date: h.learnedDate || null,
+          updated_at: new Date().toISOString(),
+        });
       }
 
-      // Success! Break the loop
-      if (syncBtn) {
-        syncBtn.classList.add("success");
-        syncBtn.title = "Синхронизировано";
-        setTimeout(() => syncBtn.classList.remove("success"), 2000);
-      }
-      break;
-    } catch (error: unknown) {
-      attempt++;
-      const e = error as { message?: string; code?: string };
-      console.error(`Sync attempt ${attempt} failed:`, e?.message || e);
+      if (updates.length > 0) {
+        const { error: progressError } = await client
+          .from(DB_TABLES.USER_PROGRESS)
+          .upsert(updates, { onConflict: "user_id,word_id" });
 
-      if (
-        e?.message?.includes("Could not find the") &&
-        e?.message?.includes("column")
-      ) {
-        console.warn(
-          "💡 Hint: You might need to run the SQL migration to add missing columns (e.g., 'league', 'weekly_xp').",
-        );
+        if (progressError) throw progressError;
       }
 
-      if (attempt >= maxRetries) {
-        if (e?.message?.includes("JWT") || e?.code === "PGRST301") {
-          // Токен мог истечь во время выполнения запроса
-          showToast("⚠️ Ошибка синхронизации: требуется повторный вход");
-          // Здесь можно вызвать logout или открыть модалку входа, если это критично
-        }
-        // Final failure after retries
-        if (syncBtn) {
-          syncBtn.classList.add("error");
-          syncBtn.title = "Ошибка синхронизации";
-          setTimeout(() => syncBtn.classList.remove("error"), 3000);
-        }
-        break;
-      }
-
-      // Wait before retrying (exponential backoff: 1s, 2s, 4s...)
-      await new Promise((resolve) =>
-        setTimeout(resolve, 1000 * Math.pow(2, attempt - 1)),
-      );
+      state.dirtyWordIds.clear();
+      localStorage.setItem(LS_KEYS.DIRTY_IDS, "[]");
     }
-  }
 
-  state.isSyncing = false;
-  if (syncBtn) syncBtn.classList.remove("rotating", "syncing");
+    setSyncState("success");
+  } catch (error: unknown) {
+    const e = error as { message?: string; code?: string };
+    console.error(`Sync failed:`, e?.message || e);
+
+    const isNetworkError = e?.message
+      ?.toLowerCase()
+      .includes("failed to fetch");
+    if (isNetworkError) {
+      showToast(
+        "🌐 Нет связи с сервером. Изменения сохранятся при восстановлении сети.",
+      );
+      setSyncState("offline");
+    } else if (e?.message?.includes("JWT") || e?.code === "PGRST301") {
+      showToast("⚠️ Ошибка синхронизации: требуется повторный вход");
+      setSyncState("error");
+    } else {
+      showToast("❌ Ошибка синхронизации. Попробуйте позже.");
+      setSyncState("error");
+    }
+  } finally {
+    state.isSyncing = false;
+  }
 }

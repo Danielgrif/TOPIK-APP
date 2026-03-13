@@ -9,8 +9,10 @@
       <!-- Create New List -->
       <div class="collection-create-card">
         <div class="section-title-sm" style="margin-bottom: 15px;">✨ Новый список</div>
-        <div style="display: flex; gap: 12px; margin-bottom: 15px;">
+        <div style="display: flex; gap: 12px; margin-bottom: 15px; flex-wrap: wrap;">
+          <label for="new-list-icon" class="visually-hidden">Иконка списка</label>
           <input type="text" id="new-list-icon" placeholder="Emoji" maxlength="2">
+          <label for="new-list-title" class="visually-hidden">Название списка</label>
           <input type="text" id="new-list-title" placeholder="Название списка">
         </div>
         <div class="collection-options">
@@ -42,8 +44,10 @@
     </div>
     <div class="modal-body">
       <input type="hidden" id="edit-list-id">
-      <div style="display: flex; gap: 10px; margin-bottom: 20px;">
+      <div style="display: flex; gap: 10px; margin-bottom: 20px; flex-wrap: wrap;">
+        <label for="edit-list-icon" class="visually-hidden">Иконка списка</label>
         <input type="text" id="edit-list-icon" class="input" placeholder="Emoji" style="width: 60px; text-align: center;" maxlength="2">
+        <label for="edit-list-title" class="visually-hidden">Название списка</label>
         <input type="text" id="edit-list-title" class="input" placeholder="Название списка" style="flex: 1;">
       </div>
       <button class="btn btn-primary" style="width: 100%;" data-action="save-list-changes">Сохранить</button>

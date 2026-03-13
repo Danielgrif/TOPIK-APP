@@ -1,149 +1,133 @@
-import { serve } from "https://deno.land/std@0.223.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { serve } from "std/http/server.ts";
+import { corsHeaders, DB_TABLES, FUNCTION_NAMES, PROCESSING_STEPS, WORD_REQUEST_STATUS } from "shared/constants.ts";
+import { createAudioFile } from "shared/audio.ts";
+import { getSupabaseAdmin } from "shared/clients.ts";
+import { createErrorResponse } from "shared/utils.ts";
 
-declare const Deno: {
-    
-  args: string[];
-  cwd: () => string;
-  exit: (code?: number) => never;
-  readFile: (filename: string) => Promise<Uint8Array>;
-
-  env: {
-    get(key: string): string | undefined;
-  };
-};
-
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-};
-
-interface WordRequest {
-  id: string | number;
-  word_kr: string;
-  user_id: string;
-  status: string;
-  target_list_id?: string | null;
-  topic?: string | null;
-  category?: string | null;
-  level?: string | null;
-}
-
-interface Vocabulary {
-  id: string | number;
-  word_kr: string;
-  audio_url?: string | null;
-}
-
-// Эта функция является копией из `process-word-request`.
-// Поддерживайте их в синхронизированном состоянии
-async function generateAndUploadAudio(supabaseAdmin: SupabaseClient, word: Vocabulary) {
-  try {
-    const { data: audioBlob, error: audioError } = await supabaseAdmin.functions.invoke(
-      "generate-audio",
-      { 
-        body: { text: word.word_kr, voice: "female" }
-      }
-    );
-
-    if (audioError) throw audioError;
-
-    const fileName = `${word.id}.mp3`;
-    const { error: uploadError } = await supabaseAdmin.storage.from("audio-files").upload(fileName, audioBlob, { contentType: 'audio/mpeg', upsert: true });
-    if (uploadError) throw uploadError;
-
-    const { data: urlData } = supabaseAdmin.storage.from("audio-files").getPublicUrl(fileName);
-    await supabaseAdmin.from("vocabulary").update({ audio_url: urlData.publicUrl }).eq("id", word.id);
-  } catch (e: unknown) {
-    const errMsg = e instanceof Error ? e.message : String(e);
-    console.error(`Audio retry failed for word ${word.id}:`, errMsg);
-    // Перебрасываем ошибку, чтобы главный обработчик мог ее поймать и снова пометить заявку как ошибочную.
-    throw new Error(`Audio generation failed during retry: ${errMsg}`);
-  }
-}
+let currentStep = PROCESSING_STEPS.AI_PROCESSING;
 
 serve(async (req: Request) => {
+  // Обработка CORS
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
   }
 
+  let requestId: string | number | null = null;
   try {
-    const { request_id } = await req.json();
-    if (!request_id) {
-      throw new Error("Missing 'request_id' in request body");
+    const { record } = await req.json();
+
+    if (!record || !record.word_kr) {
+      throw new Error("Missing 'record' or 'word_kr' in request body");
     }
 
-    const supabaseAdmin = createClient(
-      Deno.env.get("SUPABASE_URL") ?? "",
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
+    requestId = record.id;
+    console.log(`🚀 Processing request for: ${record.word_kr} (ID: ${record.id})`);
+
+    const supabaseAdmin = getSupabaseAdmin();
+
+    // 1. Генерация данных о слове (AI)
+    console.log("🤖 Calling generate-word-data...");
+    currentStep = PROCESSING_STEPS.AI_PROCESSING;
+    const { data: aiData, error: aiError } = await supabaseAdmin.functions.invoke(
+      FUNCTION_NAMES.GENERATE_WORD_DATA,
+      { body: { word: record.word_kr } }
     );
 
-    // 1. Получаем сбойную заявку
-    const { data: request, error: requestError } = await supabaseAdmin
-      .from("word_requests")
-      .select("*")
-      .eq("id", request_id)
-      .single();
-
-    if (requestError) throw new Error(`Failed to fetch request: ${requestError.message}`);
-    if (!request) throw new Error("Request not found.");
-
-    console.log(`♻️ Retrying request for "${request.word_kr}", failed at: ${request.failed_step}`);
-
-    // 2. Выбираем стратегию повтора
-    if (request.failed_step === 'audio_generation') {
-      // Слово уже должно быть в базе. Находим его.
-      const { data: word, error: wordError } = await supabaseAdmin
-        .from("vocabulary")
-        .select("*")
-        .eq("word_kr", request.word_kr)
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .single();
-      
-      if (wordError || !word) {
-        // Если слово не найдено, что-то пошло не так. Безопаснее перезапустить весь процесс.
-        throw new Error(`Word "${request.word_kr}" not found in vocabulary for audio retry. Resetting...`);
-      }
-
-      console.log(`🔊 Retrying only audio generation for word ID: ${word.id}`);
-      
-      // Обновляем статус, чтобы UI показал, что идет работа
-      await supabaseAdmin.from("word_requests").update({ status: 'pending', my_notes: 'audio_retry' }).eq('id', request_id);
-
-      await generateAndUploadAudio(supabaseAdmin, word);
-
-      // Если все прошло успешно, помечаем заявку как выполненную
-      await supabaseAdmin.from("word_requests").update({ status: 'processed', my_notes: null, failed_step: null }).eq('id', request_id);
-      
-      console.log(`✅ Audio retry successful for "${request.word_kr}"`);
-
-    } else {
-      // Для более ранних сбоев (ai_processing, db_insert) безопаснее просто поставить заявку в очередь заново.
-      console.log(`🔄 Re-queueing full request for "${request.word_kr}"`);
-      await supabaseAdmin
-        .from("word_requests")
-        .update({ status: "pending", my_notes: null, failed_step: null })
-        .eq("id", request_id);
+    if (aiError) throw new Error(`AI data generation failed: ${aiError.message}`);
+    if (!aiData || !aiData.data || aiData.data.length === 0) {
+        throw new Error("AI returned no data.");
     }
 
-    return new Response(JSON.stringify({ success: true, message: "Retry initiated." }), {
+    const wordItem = aiData.data[0]; // Берем первый (наиболее вероятный) вариант
+
+    // 2. Подготовка данных для вставки
+    // Приоритет отдаем данным из заявки (если пользователь указал тему/категорию), иначе берем от AI
+    const finalData = {
+      ...wordItem,
+      topic: record.topic || wordItem.topic,
+      category: record.category || wordItem.category,
+      level: record.level || wordItem.level,
+      created_by: record.user_id,
+      is_public: false, // Пользовательские слова по умолчанию приватные
+    };
+
+    // 3. Вставка в основную таблицу vocabulary
+    console.log("💾 Inserting into vocabulary...");
+    currentStep = PROCESSING_STEPS.DB_INSERT;
+    const { data: insertedWord, error: insertError } = await supabaseAdmin
+      .from(DB_TABLES.VOCABULARY)
+      .insert(finalData)
+      .select()
+      .single();
+
+    if (insertError) {
+        throw new Error(`DB insert failed: ${insertError.message}`);
+    }
+
+    const insertedWordId = insertedWord.id;
+
+    // 4. Генерация аудио (TTS)
+    console.log("🔊 Generating audio...");
+    currentStep = PROCESSING_STEPS.AUDIO_GENERATION;
+
+    const audioPromises = [
+      createAudioFile(supabaseAdmin, insertedWord.word_kr, 'female', `female/${insertedWordId}.mp3`),
+      createAudioFile(supabaseAdmin, insertedWord.word_kr, 'male', `male/${insertedWordId}.mp3`),
+    ];
+
+    // Также генерируем аудио для примера, если он есть
+    if (insertedWord.example_kr) {
+      audioPromises.push(
+        createAudioFile(supabaseAdmin, insertedWord.example_kr, 'female', `examples/${insertedWordId}.mp3`),
+      );
+    }
+
+    const [femaleUrl, maleUrl, exampleUrl] = await Promise.all(audioPromises);
+
+    const audioUpdates: { audio_url: string; audio_male: string; example_audio?: string } = {
+      audio_url: femaleUrl,
+      audio_male: maleUrl,
+    };
+    if (exampleUrl) {
+      audioUpdates.example_audio = exampleUrl;
+    }
+
+    const { data: updatedWord, error: updateError } = await supabaseAdmin
+      .from(DB_TABLES.VOCABULARY)
+      .update(audioUpdates)
+      .eq("id", insertedWordId)
+      .select()
+      .single();
+
+    if (updateError) {
+      throw new Error(`DB update with audio URLs failed: ${updateError.message}`);
+    }
+
+    // 5. Обновление статуса заявки
+    console.log("✅ Updating request status...");
+    await supabaseAdmin
+      .from(DB_TABLES.WORD_REQUESTS)
+      .update({ status: WORD_REQUEST_STATUS.PROCESSED })
+      .eq("id", record.id);
+
+    return new Response(JSON.stringify({ success: true, word: updatedWord }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
 
   } catch (error: unknown) {
     const errorMessage = error instanceof Error ? error.message : String(error);
-    console.error("❌ Error in retry-word-request:", errorMessage);
-    // Если даже повтор не удался, снова помечаем заявку как ошибочную
-    const { request_id } = await req.clone().json().catch(() => ({}));
-    if (request_id) {
-        const supabaseAdmin = createClient(Deno.env.get("SUPABASE_URL") ?? "", Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "");
-        await supabaseAdmin.from("word_requests").update({ status: "error", my_notes: `Retry failed: ${errorMessage}` }).eq("id", request_id);
-    }
-    return new Response(JSON.stringify({ error: errorMessage }), {
-      status: 500,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    console.error("❌ Error processing request:", errorMessage);
+    
+    // Пытаемся обновить статус заявки на 'error', если есть ID
+    try {
+        if (requestId) {
+            await getSupabaseAdmin()
+                .from(DB_TABLES.WORD_REQUESTS)
+                .update({ status: WORD_REQUEST_STATUS.ERROR, my_notes: errorMessage, failed_step: currentStep })
+                .eq("id", requestId);
+        }
+    } catch (_e: unknown) { /* ignore */ }
+
+    return createErrorResponse(error);
   }
-})
+});

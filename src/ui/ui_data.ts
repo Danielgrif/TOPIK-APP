@@ -1,4 +1,4 @@
-import { state, Session, WordRequestState } from "../core/state.ts";
+import { state, WordRequestState, Session } from "../core/state.ts";
 import { client } from "../core/supabaseClient.ts";
 import { showToast } from "../utils/utils.ts";
 import { LS_KEYS } from "../core/constants.ts";

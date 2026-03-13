@@ -84,8 +84,12 @@ export const AuthService = {
     });
   },
 
-  async signUp(email: string, password: string) {
-    return await client.auth.signUp({ email, password });
+  async signUp(
+    email: string,
+    password: string,
+    options?: { data: { [key: string]: unknown } },
+  ) {
+    return await client.auth.signUp({ email, password, options });
   },
 
   async initUserStats(userId: string) {

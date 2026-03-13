@@ -3,14 +3,15 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="description" content="TOPIK Master Pro - приложение для подготовки к экзамену TOPIK по корейскому языку. Изучайте слова, грамматику и тренируйтесь.">
     <title>TOPIK II - Master Pro 2026</title>
     <link rel="manifest" href="manifest.json" />
     <link rel="icon" href="app-logo.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="https://cdn-icons-png.flaticon.com/512/570/570973.png" />
     <meta name="theme-color" content="#6c5ce7">
     <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
-    <link rel="preload" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css" as="style" onload="this.onload=null;this.rel='stylesheet'">
-    <noscript><link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css"></noscript>
+    <link rel="preload" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard-dynamic-subset.min.css" as="style" onload="this.onload=null;this.rel='stylesheet'">
+    <noscript><link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard-dynamic-subset.min.css"></noscript>
     <audio id="music-player-a" loop preload="auto"></audio>
     <audio id="music-player-b" loop preload="auto"></audio>
     <style>
@@ -308,6 +309,27 @@
       window.onerror = function(msg, url, line, col, error) {
         console.error("Global Error (Inline):", msg, url, line, error);
       };
+
+      // Глобальный перехватчик для починки сломанных изображений (например, аватара в хедере)
+      window.addEventListener('error', function(event) {
+        var target = event.target;
+        if (target && target.tagName === 'IMG') {
+          // Если картинка в хедере сломалась (например, нет аватара), заменяем на лого
+          if (target.closest('header') || target.id === 'header-avatar' || target.classList.contains('header-logo')) {
+            if (target.dataset.fallback) return; 
+            target.dataset.fallback = 'true';
+            // Ставим логотип приложения
+            target.src = 'app-logo.svg';
+          }
+          // Если аватар в списке лидеров сломался, ставим заглушку
+          else if (target.closest('.lb-avatar')) {
+            if (target.dataset.fallback) return;
+            target.dataset.fallback = 'true';
+            event.stopPropagation(); // Отменяем inline-обработчик, который скрывает картинку
+            target.src = 'app-logo.svg';
+          }
+        }
+      }, true); // useCapture=true обязательно, так как событие error не всплывает
     </script>
 
     <!-- Preloader with Logo -->
@@ -325,7 +347,7 @@
     <button id="exit-focus-btn" class="btn" data-action="toggle-focus">✕ Выйти из фокуса</button>
 
     <!-- Toast Notifications -->
-    <div id="toast-container"></div>
+    <div id="toast-container" role="status" aria-live="polite" aria-atomic="true"></div>
 
     <!-- Offline Indicator -->
     <div id="offline-indicator" style="z-index: 21005;">

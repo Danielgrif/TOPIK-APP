@@ -9,27 +9,27 @@
 
   <div class="toolbar-actions">
     <div class="view-toggle">
-      <button class="view-btn active" data-value="grid" onclick="window.toggleViewMode('grid')" title="Плитка">
+      <button class="view-btn active" data-value="grid" onclick="window.toggleViewMode('grid')" title="Плитка" aria-label="Переключить на вид 'Плитка'">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg>
       </button>
-      <button class="view-btn" data-value="list" onclick="window.toggleViewMode('list')" title="Список">
+      <button class="view-btn" data-value="list" onclick="window.toggleViewMode('list')" title="Список" aria-label="Переключить на вид 'Список'">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line><line x1="3" y1="6" x2="3.01" y2="6"></line><line x1="3" y1="12" x2="3.01" y2="12"></line><line x1="3" y1="18" x2="3.01" y2="18"></line></svg>
       </button>
     </div>
 
-    <button id="collection-filter-btn" class="tool-btn" style="display: none; width: auto; padding: 0 12px; gap: 6px; font-size: 13px; font-weight: 600;" title="Списки">
+    <button id="collection-filter-btn" class="tool-btn" style="display: none; width: auto; padding: 0 12px; gap: 6px; font-size: 13px; font-weight: 600;" title="Списки" aria-label="Фильтр по спискам">
         <span>Все слова</span>
     </button>
 
-    <button class="tool-btn" data-action="toggle-filter-panel" onclick="window.toggleFilterPanel()" title="Фильтры">
+    <button class="tool-btn" data-action="toggle-filter-panel" onclick="window.toggleFilterPanel()" title="Фильтры" aria-label="Открыть панель фильтров">
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon></svg>
     </button>
 
-    <button id="focus-mode-btn" class="tool-btn" onclick="window.toggleFocusMode()" title="Режим фокусировки">
+    <button id="focus-mode-btn" class="tool-btn" onclick="window.toggleFocusMode()" title="Режим фокусировки" aria-label="Включить режим фокусировки">
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><circle cx="12" cy="12" r="3"></circle></svg>
     </button>
 
-    <button class="tool-btn fire-btn" onclick="window.startDailyChallenge()" title="Ежедневный вызов">
+    <button class="tool-btn fire-btn" onclick="window.startDailyChallenge()" title="Ежедневный вызов" aria-label="Начать ежедневный вызов">
       🔥
     </button>
   </div>

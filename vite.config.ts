@@ -2,7 +2,7 @@
 import { defineConfig } from "vite";
 import { VitePWA } from "vite-plugin-pwa";
 
-export default defineConfig(({ mode }) => ({
+export default defineConfig(({ mode: _mode }) => ({
   plugins: [
     // Базовый путь для GitHub Pages (название репозитория)
     // base: '/TOPIK-APP/',

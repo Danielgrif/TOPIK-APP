@@ -60,11 +60,13 @@ export function openLoginModal() {
   const passInput = document.getElementById(
     "auth-password",
   ) as HTMLInputElement | null;
-  if (!passInput) return;
+  const confirmPassInput = document.getElementById(
+    "auth-confirm-password",
+  ) as HTMLInputElement | null;
+  if (!passInput || !confirmPassInput) return;
   passInput.value = "";
   passInput.type = "password";
-  const toggleBtn = document.getElementById("toggle-password-btn");
-  if (toggleBtn) toggleBtn.textContent = "👁️";
+  confirmPassInput.value = "";
 
   const bar = document.getElementById("strength-bar");
   const strengthContainer = document.querySelector(
@@ -76,18 +78,42 @@ export function openLoginModal() {
     setupPasswordStrengthMeter(passInput, bar, strengthContainer);
   }
 
+  // Add blur listeners for real-time validation
+  const inputsToValidate = [emailInput, passInput, confirmPassInput];
+  if (document.getElementById("auth-name")) {
+    inputsToValidate.push(
+      document.getElementById("auth-name") as HTMLInputElement,
+    );
+  }
+  inputsToValidate.forEach((input) => {
+    if (input) {
+      input.addEventListener("blur", () =>
+        validateField(input as HTMLInputElement),
+      );
+      input.addEventListener("input", () =>
+        clearFieldError(input as HTMLInputElement),
+      );
+    }
+  });
+
+  // Set default mode to login
+  toggleAuthMode("login");
+
   const authError = document.getElementById("auth-error");
   if (authError) authError.style.display = "none";
   toggleResetMode(false);
 
-  passInput.onkeydown = (e) => {
+  const handleEnter = (e: KeyboardEvent) => {
     if (e.key === "Enter") {
-      const loginBtn = document.querySelector(
-        'button[data-action="auth"][data-value="login"]',
+      const submitBtn = document.getElementById(
+        "auth-submit-btn",
       ) as HTMLElement;
-      if (loginBtn) loginBtn.click();
+      if (submitBtn) submitBtn.click();
     }
   };
+
+  passInput.onkeydown = handleEnter;
+  confirmPassInput.onkeydown = handleEnter;
 }
 
 export function openProfileModal(focusPassword = false) {
@@ -291,11 +317,88 @@ export function openProfileModal(focusPassword = false) {
   }
 }
 
+export function toggleAuthMode(mode: "login" | "signup" | "reset") {
+  const form = document.querySelector("#login-modal .auth-form") as HTMLElement;
+  if (!form) return;
+
+  form.dataset.authMode = mode;
+
+  const title = document.getElementById("auth-title");
+  const desc = document.getElementById("auth-desc");
+  const submitBtn = document.getElementById("auth-submit-btn");
+  const nameContainer = document.getElementById("auth-name-container");
+  const passContainer = document.getElementById("auth-password-container");
+  const confirmPassContainer = document.getElementById(
+    "auth-confirm-password-container",
+  );
+  const strengthContainer = document.querySelector(
+    ".password-strength",
+  ) as HTMLElement;
+  const switchContainer = document.getElementById("auth-mode-switch-container");
+  const forgotLink = document.getElementById("auth-forgot-link");
+  const socialAuth = document.getElementById("auth-social");
+
+  // Hide all optional fields by default
+  if (nameContainer) nameContainer.style.display = "none";
+  if (confirmPassContainer) confirmPassContainer.style.display = "none";
+  if (strengthContainer) strengthContainer.style.display = "none";
+  if (passContainer) passContainer.style.display = "block";
+  if (socialAuth) socialAuth.style.display = "block";
+  if (forgotLink) forgotLink.style.display = "inline";
+
+  if (mode === "signup") {
+    if (title) title.textContent = "Регистрация";
+    if (desc)
+      desc.textContent =
+        "Создайте аккаунт, чтобы сохранять прогресс и соревноваться с другими.";
+    if (submitBtn) {
+      submitBtn.textContent = "Создать аккаунт";
+      submitBtn.setAttribute("data-value", "signup");
+    }
+    if (nameContainer) nameContainer.style.display = "block";
+    if (confirmPassContainer) confirmPassContainer.style.display = "block";
+    if (strengthContainer) strengthContainer.style.display = "block";
+    if (switchContainer)
+      switchContainer.innerHTML = `Уже есть аккаунт? <a href="#" data-action="toggle-auth-mode" data-value="login">Войти</a>`;
+    if (forgotLink) forgotLink.style.display = "none";
+  } else if (mode === "login") {
+    if (title) title.textContent = "Вход в профиль";
+    if (desc)
+      desc.textContent =
+        "Войдите, чтобы сохранить прогресс в облаке и синхронизировать устройства.";
+    if (submitBtn) {
+      submitBtn.textContent = "Войти";
+      submitBtn.setAttribute("data-value", "login");
+    }
+    if (switchContainer)
+      switchContainer.innerHTML = `Нет аккаунта? <a href="#" data-action="toggle-auth-mode" data-value="signup">Регистрация</a>`;
+  } else if (mode === "reset") {
+    if (title) title.textContent = "🔑 Сброс пароля";
+    if (desc)
+      desc.textContent = "Введите Email, чтобы получить ссылку для входа.";
+    if (submitBtn) {
+      submitBtn.textContent = "Отправить ссылку";
+      submitBtn.setAttribute("data-value", "reset");
+    }
+    if (passContainer) passContainer.style.display = "none";
+    if (socialAuth) socialAuth.style.display = "none";
+    if (forgotLink) forgotLink.style.display = "none";
+    if (switchContainer)
+      switchContainer.innerHTML = `<a href="#" data-action="toggle-auth-mode" data-value="login">← Назад ко входу</a>`;
+  }
+
+  // Clear error on mode switch
+  const errEl = document.getElementById("auth-error");
+  if (errEl) errEl.style.display = "none";
+}
+
 function setupPasswordStrengthMeter(
   inputEl: HTMLInputElement,
   barEl: HTMLElement,
   containerEl: HTMLElement,
 ) {
+  const textEl = containerEl.querySelector<HTMLElement>("span");
+
   inputEl.oninput = () => {
     const val = inputEl.value;
 
@@ -303,19 +406,17 @@ function setupPasswordStrengthMeter(
       containerEl.style.display = "none";
       return;
     }
-    containerEl.style.display = "block";
+    containerEl.style.display = "flex";
 
-    let score = 0;
-    if (val.length > 5) score += 20;
-    if (val.length > 8) score += 20;
-    if (/[A-Z]/.test(val)) score += 20;
-    if (/[0-9]/.test(val)) score += 20;
-    if (/[^A-Za-z0-9]/.test(val)) score += 20;
+    const { score, text, color } = getPasswordStrength(val);
 
     barEl.style.width = `${score}%`;
-    if (score < 40) barEl.style.backgroundColor = "var(--danger)";
-    else if (score < 80) barEl.style.backgroundColor = "var(--warning)";
-    else barEl.style.backgroundColor = "var(--success)";
+    barEl.style.backgroundColor = color;
+
+    if (textEl) {
+      textEl.textContent = text;
+      textEl.style.color = color;
+    }
   };
 }
 
@@ -331,26 +432,71 @@ export async function handleAuth(type: string) {
   const email = emailInput.value.trim();
   const password = passwordInput.value.trim();
 
-  const errEl = document.getElementById("auth-error");
-  if (errEl) errEl.style.display = "none";
+  clearAuthErrors();
 
-  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  if (email && !emailRegex.test(email)) {
-    showAuthError("Некорректный формат Email");
-    return;
-  }
+  let hasError = false;
 
-  if (type === "reset") {
-    await performReset(email);
+  if (type === "signup") {
+    const nameInput = document.getElementById("auth-name") as HTMLInputElement;
+    const confirmPasswordInput = document.getElementById(
+      "auth-confirm-password",
+    ) as HTMLInputElement;
+
+    if (validateField(emailInput)) hasError = true;
+    if (validateField(nameInput)) hasError = true;
+    if (validateField(passwordInput)) hasError = true;
+    if (validateField(confirmPasswordInput)) hasError = true;
+
+    if (!hasError) {
+      const { score } = getPasswordStrength(password);
+      if (score < 40) {
+        showInlineAuthError(
+          "auth-password",
+          "Пароль слишком слабый. Используйте буквы, цифры или символы.",
+        );
+        hasError = true;
+      }
+    }
+
+    if (hasError) {
+      const firstErrorInput = document.querySelector(
+        "#login-modal .auth-input.error",
+      ) as HTMLElement;
+      if (firstErrorInput) firstErrorInput.focus();
+      return;
+    }
+
+    const name = nameInput.value.trim();
+    await performSignup(email, password, name);
   } else if (type === "login") {
+    if (validateField(emailInput)) hasError = true;
+    if (validateField(passwordInput)) hasError = true;
+
+    if (hasError) {
+      const firstErrorInput = document.querySelector(
+        "#login-modal .auth-input.error",
+      ) as HTMLElement;
+      if (firstErrorInput) firstErrorInput.focus();
+      return;
+    }
+
     await performLogin(email, password);
-  } else if (type === "signup") {
-    await performSignup(email, password);
+  } else if (type === "reset") {
+    if (validateField(emailInput)) hasError = true;
+
+    if (hasError) {
+      const firstErrorInput = document.querySelector(
+        "#login-modal .auth-input.error",
+      ) as HTMLElement;
+      if (firstErrorInput) firstErrorInput.focus();
+      return;
+    }
+
+    await performReset(email);
   }
 }
 
 async function performReset(email: string) {
-  if (!email) return showAuthError("Введите Email для сброса пароля");
   showToast("⏳ Отправка письма...");
 
   // Используем тот же URL, что и для входа, чтобы избежать проблем с редиректами
@@ -372,7 +518,6 @@ async function performReset(email: string) {
 }
 
 async function performLogin(email: string, password: string) {
-  if (!email || !password) return showAuthError("Введите Email и пароль");
   showToast("⏳ Вход...");
   try {
     const { data, error } = await AuthService.signInWithPassword(
@@ -386,11 +531,16 @@ async function performLogin(email: string, password: string) {
   }
 }
 
-async function performSignup(email: string, password: string) {
-  if (!email || !password) return showAuthError("Введите Email и пароль");
+async function performSignup(
+  email: string,
+  password: string,
+  fullName?: string,
+) {
   showToast("⏳ Регистрация...");
   try {
-    const { data, error } = await AuthService.signUp(email, password);
+    const { data, error } = await AuthService.signUp(email, password, {
+      data: { full_name: fullName },
+    });
     if (error) throw error;
 
     if (data.user && !data.session) {
@@ -431,25 +581,6 @@ async function finalizeAuth(user: User) {
   closeModal("login-modal");
 }
 
-function showAuthError(msg: string) {
-  const errEl = document.getElementById("auth-error");
-  if (errEl) {
-    errEl.textContent = msg;
-    errEl.style.display = "block";
-  }
-
-  const passwordInput = document.getElementById(
-    "auth-password",
-  ) as HTMLInputElement | null;
-  // Очищаем и фокусим только если поле видимо (не в режиме сброса пароля)
-  if (passwordInput && passwordInput.offsetParent !== null) {
-    passwordInput.value = "";
-    passwordInput.focus();
-  }
-
-  shakeModal();
-}
-
 function handleAuthError(e: unknown) {
   console.error("Auth Error:", e);
   let msg = (e as Error).message || "Произошла ошибка";
@@ -479,7 +610,12 @@ function handleAuthError(e: unknown) {
     msg = "🔒 Пароль должен быть не менее 6 символов.";
   }
 
-  showAuthError(msg);
+  // For server-side errors, show a generic message at the bottom.
+  const errEl = document.getElementById("auth-error");
+  if (errEl) {
+    errEl.textContent = msg;
+    errEl.style.display = "block";
+  }
 }
 
 export async function signInWithGoogle() {
@@ -573,30 +709,23 @@ export async function handleLogout() {
         "⚠️ Ошибка выхода из аккаунта на сервере или таймаут. Очистка локальных данных.",
       );
     } finally {
-      const keysToRemove = [
-        LS_KEYS.USER_STATS,
-        LS_KEYS.LEARNED,
-        LS_KEYS.MISTAKES,
-        LS_KEYS.FAVORITES,
-        LS_KEYS.WORD_HISTORY,
-        LS_KEYS.STREAK,
-        LS_KEYS.SESSIONS,
-        LS_KEYS.ACHIEVEMENTS,
-        "daily_challenge_v1",
-        LS_KEYS.DIRTY_IDS,
-        LS_KEYS.CUSTOM_WORDS,
-        LS_KEYS.FAVORITE_QUOTES,
-        LS_KEYS.PURCHASED_ITEMS,
-        LS_KEYS.SEARCH_HISTORY,
-        LS_KEYS.WORD_REQUESTS,
-        LS_KEYS.STUDY_GOAL,
-        LS_KEYS.ONBOARDING, // Reset onboarding status on logout
-      ];
-      keysToRemove.forEach((k) => localStorage.removeItem(k));
+      // Итерация по всем известным ключам приложения и их удаление,
+      // за исключением кэша словаря для ускорения следующего входа.
+      Object.values(LS_KEYS).forEach((key) => {
+        if (key !== LS_KEYS.VOCAB_CACHE && key !== LS_KEYS.VOCAB_VERSION) {
+          localStorage.removeItem(key);
+        }
+      });
+
+      // Также удаляем ключи, которые могли быть не в LS_KEYS
+      localStorage.removeItem("settings_updated_at");
 
       // Explicitly remove common Supabase auth tokens from local storage
       localStorage.removeItem("sb-supabase-auth-token");
       localStorage.removeItem("supabase.auth.token");
+
+      // Очищаем sessionStorage на всякий случай
+      sessionStorage.clear();
 
       location.reload();
     }
@@ -706,46 +835,7 @@ export async function handleDeleteAccount() {
 }
 
 export function toggleResetMode(show: boolean) {
-  const ids = [
-    "auth-password-container",
-    "auth-buttons",
-    "auth-reset-buttons",
-    "auth-forgot-link",
-    "auth-back-link",
-    "auth-social",
-  ];
-  const els: Record<string, HTMLElement | null> = {};
-  ids.forEach((id) => (els[id] = document.getElementById(id)));
-  const title = document.getElementById("auth-title");
-  const desc = document.getElementById("auth-desc");
-  const errEl = document.getElementById("auth-error");
-  if (errEl) errEl.style.display = "none";
-
-  if (show) {
-    if (els["auth-password-container"])
-      els["auth-password-container"].style.display = "none";
-    if (els["auth-buttons"]) els["auth-buttons"].style.display = "none";
-    if (els["auth-reset-buttons"])
-      els["auth-reset-buttons"].style.display = "block";
-    if (els["auth-forgot-link"]) els["auth-forgot-link"].style.display = "none";
-    if (els["auth-back-link"]) els["auth-back-link"].style.display = "inline";
-    if (title) title.textContent = "🔑 Сброс пароля";
-    if (desc)
-      desc.textContent = "Введите Email, чтобы получить ссылку для входа.";
-    if (els["auth-social"]) els["auth-social"].style.display = "none";
-  } else {
-    if (els["auth-password-container"])
-      els["auth-password-container"].style.display = "block";
-    if (els["auth-buttons"]) els["auth-buttons"].style.display = "flex";
-    if (els["auth-reset-buttons"])
-      els["auth-reset-buttons"].style.display = "none";
-    if (els["auth-forgot-link"])
-      els["auth-forgot-link"].style.display = "inline";
-    if (els["auth-back-link"]) els["auth-back-link"].style.display = "none";
-    if (title) title.textContent = "🔐 Профиль";
-    if (desc) desc.textContent = "Войдите, чтобы сохранить прогресс в облаке.";
-    if (els["auth-social"]) els["auth-social"].style.display = "block";
-  }
+  toggleAuthMode(show ? "reset" : "login");
 }
 
 export function togglePasswordVisibility(triggerBtn?: HTMLElement) {
@@ -756,8 +846,6 @@ export function togglePasswordVisibility(triggerBtn?: HTMLElement) {
     const targetId = btn.getAttribute("data-value");
     if (targetId) {
       input = document.getElementById(targetId) as HTMLInputElement;
-    } else if (btn.id === "toggle-password-btn") {
-      input = document.getElementById("auth-password") as HTMLInputElement;
     }
   }
 
@@ -786,12 +874,47 @@ export function cleanAuthUrl() {
   }
 }
 
-function shakeModal() {
-  const content = document.querySelector(
-    "#login-modal .modal-content",
-  ) as HTMLElement | null;
-  if (!content) return;
-  content.classList.remove("shake");
-  void content.offsetWidth;
-  content.classList.add("shake");
+function getPasswordStrength(val: string): {
+  score: number;
+  text: string;
+  color: string;
+} {
+  if (!val) return { score: 0, text: "", color: "var(--danger)" };
+
+  let score = 0;
+  if (val.length > 5) score += 20;
+  if (val.length > 8) score += 20;
+  if (/[A-Z]/.test(val)) score += 20;
+  if (/[0-9]/.test(val)) score += 20;
+  if (/[^A-Za-z0-9]/.test(val)) score += 20;
+
+  let text = "Слабый";
+  let color = "var(--danger)";
+  if (score > 80) {
+    text = "Отличный";
+    color = "var(--success)";
+  } else if (score > 60) {
+    text = "Хороший";
+    color = "var(--info)";
+  } else if (score >= 40) {
+    text = "Средний";
+    color = "var(--warning)";
+  }
+
+  return { score, text, color };
+}
+function validateField(_arg0: HTMLInputElement): unknown {
+  throw new Error("Function not implemented.");
+}
+
+function clearFieldError(_arg0: HTMLInputElement): unknown {
+  throw new Error("Function not implemented.");
+}
+
+function clearAuthErrors() {
+  throw new Error("Function not implemented.");
+}
+
+function showInlineAuthError(_arg0: string, _arg1: string) {
+  throw new Error("Function not implemented.");
 }

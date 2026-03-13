@@ -1,7 +1,11 @@
 // supabase/functions/generate-word-data/index.ts
-import { serve } from "https://deno.land/std@0.223.0/http/server.ts"
-// ✅ НОВАЯ БИБЛИОТЕКА google-genai (замена @google/generative-ai)
-import { GoogleGenerativeAI, SchemaType } from "https://esm.sh/@google/generative-ai@0.21.0"
+import { serve } from "std/http/server.ts";
+import { SchemaType } from "@google/generative-ai";
+import { corsHeaders, GEMINI_MODELS } from "shared/constants.ts";
+import { selectBestModel } from "shared/gemini.ts";
+import { getGeminiClient } from "shared/clients.ts";
+import { createErrorResponse } from "shared/utils.ts";
+import type { WordData } from "shared/types.ts";
 
 declare const Deno: {
   env: {
@@ -17,38 +21,6 @@ declare global {
   }
 }
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-};
-
-interface AvailableModel {
-  name: string
-  displayName: string
-  description: string
-  supportedGenerationMethods: string[]
-}
-
-interface WordData {
-  word_kr?: string
-  translation?: string
-  frequency?: string
-  topik_level?: string
-  tone?: string
-  word_hanja?: string
-  topic?: string
-  category?: string
-  level?: string
-  example_kr?: string
-  example_ru?: string
-  synonyms?: string
-  antonyms?: string
-  collocations?: string
-  grammar_info?: string
-  type?: string
-  [key: string]: string | undefined
-}
-
 const VALID_TOPICS = [
   "일상생활 (Повседневная жизнь)", "음식 (Еда)", "여행 (Путешествия)", 
   "교육 (Образование)", "직장 (Работа)", "건강 (Здоровье)", 
@@ -62,84 +34,6 @@ const VALID_CATEGORIES = [
   "문구 (Фразы)", "문법 (Грамматика)"
 ];
 
-async function getAvailableModels(genai: GoogleGenerativeAI): Promise<AvailableModel[]> {
-  try {
-    console.log("🔍 Получение списка доступных моделей...");
-    
-    // Пробуем получить список моделей через genai API
-    const modelsResponse = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models?key=${genai.apiKey}`,
-      { method: "GET" }
-    );
-    
-    if (!modelsResponse.ok) {
-      console.error("❌ Не удалось получить список моделей:", modelsResponse.statusText);
-      return [];
-    }
-    
-    const modelsData = await modelsResponse.json();
-    const models: AvailableModel[] = [];
-    
-    if (modelsData.models) {
-      for (const model of modelsData.models) {
-        models.push({
-          name: model.name,
-          displayName: model.displayName || model.name,
-          description: model.description || "No description",
-          supportedGenerationMethods: model.supportedGenerationMethods || ["generateContent"]
-        });
-      }
-    }
-    
-    console.log("✅ Доступные модели:", models.map(m => m.name));
-    return models;
-  } catch (error) {
-    console.error("❌ Ошибка при получении моделей:", error);
-    return [];
-  }
-}
-
-async function selectBestModel(genai: GoogleGenerativeAI): Promise<string> {
-  // Приоритетный список моделей (от лучшей к базовой)
-  const preferredModels = [
-    "gemini-2.5-flash",
-    "gemini-2.0-flash",
-    "gemini-1.5-pro-latest",
-    "gemini-1.5-flash-latest",
-    "gemini-pro-latest"
-  ];
-  
-  
-  try {
-    const availableModels = await getAvailableModels(genai);
-    console.log("📋 Всего доступно моделей:", availableModels.length);
-    
-    // Ищем лучшую доступную модель
-    for (const modelName of preferredModels) {
-      const found = availableModels.find(m => m.name.includes(modelName));
-      if (found) {
-        console.log("✅ Выбрана модель:", modelName);
-        return modelName;
-      }
-    }
-    
-    // Fallback на первую доступную
-    if (availableModels.length > 0) {
-      const fallback = availableModels[0].name;
-      console.log("🔄 Fallback модель:", fallback);
-      return fallback;
-    }
-    
-    // Последний резерв
-    console.log("⚠️ Используем gemini-2.0-flash (гарантированно доступна)");
-    return "gemini-2.0-flash";
-    
-  } catch (error) {
-    console.error("❌ Ошибка выбора модели, используем gemini-2.0-flash:", error);
-    return "gemini-2.0-flash";
-  }
-}
-
 serve(async (req: Request) => {
   // Handle CORS preflight requests
   if (req.method === "OPTIONS") {
@@ -150,16 +44,7 @@ serve(async (req: Request) => {
     console.log("📥 Request method:", req.method, "URL:", new URL(req.url).pathname);
 
     if (req.method !== "POST") {
-      return new Response(
-        JSON.stringify({ 
-          success: false,
-          error: "Method not allowed. Use POST with { word: '...' } body" 
-        }),
-        { 
-          status: 405, 
-          headers: { ...corsHeaders, "Content-Type": "application/json" } 
-        }
-      );
+      return createErrorResponse("Method not allowed. Use POST.", 405);
     }
 
     // 1. Parse Request Body
@@ -176,45 +61,19 @@ serve(async (req: Request) => {
     
     const word = typeof body === 'object' && body !== null && 'word' in body ? (body as Record<string, unknown>).word as string | undefined : undefined;
     if (!word || typeof word !== "string" || word.trim().length === 0) {
-      return new Response(
-        JSON.stringify({ 
-          success: false,
-          error: "Missing or invalid 'word' in JSON body. Example: { \"word\": \"안녕\" }" 
-        }),
-        { 
-          status: 400, 
-          headers: { ...corsHeaders, "Content-Type": "application/json" } 
-        }
-      );
+      return createErrorResponse("Missing or invalid 'word' in JSON body. Example: { \"word\": \"안녕\" }", 400);
     }
 
     const trimmedWord = word.trim();
     console.log("🔤 Обрабатываем слово:", trimmedWord);
 
-    // 2. Get API Key
-    const apiKey = Deno.env.get("GEMINI_API_KEY");
-    console.log("🔑 API key loaded:", !!apiKey);
-    
-    if (!apiKey) {
-      console.error("❌ GEMINI_API_KEY is missing in environment variables");
-      return new Response(
-        JSON.stringify({ 
-          success: false,
-          error: "Server configuration error: GEMINI_API_KEY missing in Supabase secrets" 
-        }),
-        { 
-          status: 500, 
-          headers: { ...corsHeaders, "Content-Type": "application/json" } 
-        }
-      );
-    }
-
-    // 3. Initialize NEW google-genai client
+    // 2. Initialize client from shared helper
     console.log("🤖 Инициализация GoogleGenAI...");
-    const genai = new GoogleGenerativeAI(apiKey);
+    const genai = getGeminiClient();
     
     // 4. Проверка доступных моделей и выбор лучшей
-    const selectedModel = await selectBestModel(genai);
+    const preferredModels = [GEMINI_MODELS.FLASH, GEMINI_MODELS.PRO, GEMINI_MODELS.PRO_1_5];
+    const selectedModel = await selectBestModel(genai, preferredModels, GEMINI_MODELS.FLASH);
     console.log("🎯 Используем модель:", selectedModel);
 
     // 5. Initialize model с выбранной моделью
@@ -329,22 +188,13 @@ Input: '${trimmedWord}'`;
     try {
       data = JSON.parse(text);
       console.log("✅ JSON успешно распарсен");
-    } catch (_parseError) {
+    } catch (_parseError: unknown) {
       console.error("❌ JSON Parse Error. Raw response (500 chars):", text.substring(0, 500));
-      
-      // Fallback: возвращаем сырой текст для отладки
-      return new Response(
-        JSON.stringify({ 
-          success: false,
+      return createErrorResponse({
           error: "AI response is not valid JSON",
           rawResponse: text.substring(0, 1000),
           word: trimmedWord
-        }),
-        { 
-          status: 502, 
-          headers: { ...corsHeaders, "Content-Type": "application/json" } 
-        }
-      );
+      }, 502);
     }
 
     // 9. Normalize to array
@@ -365,7 +215,7 @@ Input: '${trimmedWord}'`;
     // Validate Topic/Category against allowed lists
     finalItems.forEach((item: WordData) => {
       if (item.topic && !VALID_TOPICS.includes(item.topic)) {
-        item.topic = "기타 (Дру그)";
+        item.topic = "기타 (Другое)";
       }
       if (item.category && !VALID_CATEGORIES.includes(item.category)) {
         item.category = "기타 (Другое)"; // Fallback or keep as is if strict validation isn't critical
@@ -392,20 +242,7 @@ Input: '${trimmedWord}'`;
     );
 
   } catch (error: Error | unknown) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    console.error("💥 Function Error:", errorMessage);
-    console.error("💥 Full error:", error);
-    
-    return new Response(
-      JSON.stringify({ 
-        success: false, 
-        error: errorMessage || "Unknown server error",
-        timestamp: new Date().toISOString()
-      }),
-      { 
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      }
-    );
+    // Используем наш новый хелпер для стандартизации ошибок
+    return createErrorResponse(error);
   }
 });

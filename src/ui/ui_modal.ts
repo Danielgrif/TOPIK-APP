@@ -1,5 +1,6 @@
 import { showToast } from "../utils/utils.ts";
 import { ConfirmOptions } from "../types/index.ts";
+import { quitQuiz } from "./quiz.ts";
 
 // Хранит элемент, который был в фокусе до открытия модального окна
 let lastFocusedElement: HTMLElement | null = null;
@@ -84,6 +85,18 @@ export function openModal(modalId: string) {
 export function closeModal(modalId: string) {
   const modal = document.getElementById(modalId);
   if (!modal) return;
+
+  // --- MEMORY LEAK FIX ---
+  // Если закрывается модальное окно квиза во время активной игры,
+  // принудительно завершаем квиз, чтобы остановить таймеры (setInterval).
+  // Проверяем по видимому игровому элементу, а не по state, чтобы избежать циклических зависимостей.
+  if (modalId === "quiz-modal") {
+    const quizGameEl = document.getElementById("quiz-game");
+    // `display: flex` устанавливается при старте игры
+    if (quizGameEl && quizGameEl.style.display === "flex") {
+      quitQuiz(true); // true, чтобы пропустить диалог подтверждения
+    }
+  }
 
   modal.classList.remove("active");
 

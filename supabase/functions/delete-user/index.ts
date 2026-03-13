@@ -1,16 +1,15 @@
 // supabase/functions/delete-user/index.ts
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient, SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { serve } from "std/http/server.ts";
+import { createClient } from "@supabase/supabase-js";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import { corsHeaders } from "shared/constants.ts";
+import { getSupabaseAdmin } from "shared/clients.ts";
+import { createErrorResponse } from "shared/utils.ts";
 
 declare const Deno: {
   env: {
     get(key: string): string | undefined;
   };
-};
-
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
 serve(async (req: Request) => {
@@ -39,27 +38,17 @@ serve(async (req: Request) => {
     if (userError) {
       const message = `Authentication failed: ${userError.message}`;
       console.error("User auth error:", message);
-
-      return new Response(JSON.stringify({ error: message }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-        status: 401,
-      });
+      return createErrorResponse(message, 401);
     }
     
     if (!user) {
-      return new Response(JSON.stringify({ error: "User not found" }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-        status: 401,
-      });
+      return createErrorResponse("User not found", 401);
     }
 
     const userIdToDelete = user.id
 
     // 3. Create a Supabase client with the SERVICE_ROLE key to perform admin actions
-    const adminSupabaseClient: SupabaseClient = createClient(
-      Deno.env.get("SUPABASE_URL") || "",
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || ""
-    );
+    const adminSupabaseClient = getSupabaseAdmin();
 
     // Log the deletion attempt
     console.log(`Attempting to delete user with ID: ${userIdToDelete}`);
@@ -92,10 +81,6 @@ serve(async (req: Request) => {
     });
 
   } catch (err: unknown) {
-    const error = err as Error;
-    return new Response(JSON.stringify({ error: error.message }), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-      status: 500,
-    });
-  };
+    return createErrorResponse(err);
+  }
 });

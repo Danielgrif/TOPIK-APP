@@ -606,6 +606,34 @@ export async function loadFromSupabase(user: { id: string }) {
       }
     }
 
+    // Загрузка избранных цитат
+    const { data: favQuotesData, error: favQuotesError } = await client
+      .from(DB_TABLES.USER_FAVORITE_QUOTES)
+      .select("quote_id")
+      .eq("user_id", user.id);
+
+    if (favQuotesError) {
+      console.error("Error loading favorite quotes:", favQuotesError);
+    } else if (favQuotesData) {
+      const quoteIds = favQuotesData.map((q) => q.quote_id);
+      if (quoteIds.length > 0) {
+        // Загружаем полные данные цитат по ID.
+        // Это предполагает, что у нас есть доступ к общей таблице `quotes`.
+        const { data: quotes, error: quotesError } = await client
+          .from(DB_TABLES.QUOTES)
+          .select("*")
+          .in("id", quoteIds);
+
+        if (quotesError) {
+          console.error("Error fetching full favorite quotes:", quotesError);
+        } else {
+          state.favoriteQuotes = quotes || [];
+        }
+      } else {
+        state.favoriteQuotes = [];
+      }
+    }
+
     cleanupInvalidStateIds();
     scheduleSaveState();
     showToast("✅ Профиль загружен");

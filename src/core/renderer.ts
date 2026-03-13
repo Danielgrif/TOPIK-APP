@@ -1,23 +1,12 @@
 import { state } from "./state.ts";
 import { Word } from "../types/index.ts";
-import {
-  escapeHtml,
-  speak,
-  showToast,
-  showUndoToast,
-  getIconForValue,
-} from "../utils/utils.ts";
-import { client } from "./supabaseClient.ts";
-import { DB_TABLES } from "./constants.ts";
+import { escapeHtml, getIconForValue } from "../utils/utils.ts";
 import { collectionsState } from "./collections_data.ts";
 import { openConfirm } from "../ui/ui_modal.ts";
 
 // Helper to avoid circular dependencies
 const getUiCard = () => import("../ui/ui_card.ts");
 const getUiBulk = () => import("../ui/ui_bulk.ts");
-const getUiHanja = () => import("../ui/ui_hanja.ts");
-const getUiGrammar = () => import("../ui/ui_grammar.ts");
-const getUiCollections = () => import("../ui/ui_collections.ts");
 const getUiEditWord = () => import("../ui/ui_edit_word.ts");
 const getUiCustomWords = () => import("../ui/ui_custom_words.ts");
 
@@ -142,25 +131,18 @@ function createCardFront(item: Word, _index: number): HTMLElement {
 
   const speakBtn = document.createElement("button");
   speakBtn.className = "icon-btn";
-  speakBtn.textContent = state.currentVoice === "male" ? "👨" : "👩";
-  speakBtn.onclick = (e) => {
-    e.stopPropagation();
-    speakBtn.classList.add("playing");
-    let url = item.audio_url;
-    if (state.currentVoice === "male" && item.audio_male) url = item.audio_male;
-    speak(item.word_kr || "", url || null).then(() => {
-      speakBtn.classList.remove("playing");
-    });
-  };
+  speakBtn.innerHTML = "🔊";
+  speakBtn.setAttribute("data-action", "speak-word");
+  speakBtn.setAttribute("data-value", String(item.id));
+  speakBtn.title = "Озвучить";
   topRow.appendChild(speakBtn);
 
   const addListBtn = document.createElement("button");
   addListBtn.className = "icon-btn";
-  addListBtn.textContent = "📁";
-  addListBtn.onclick = (e) => {
-    e.stopPropagation();
-    getUiCollections().then((m) => m.openAddToListModal(item.id as number));
-  };
+  addListBtn.innerHTML = "📁";
+  addListBtn.setAttribute("data-action", "add-to-list");
+  addListBtn.setAttribute("data-value", String(item.id));
+  addListBtn.title = "Добавить в список";
   topRow.appendChild(addListBtn);
 
   if (
@@ -170,44 +152,20 @@ function createCardFront(item: Word, _index: number): HTMLElement {
   ) {
     const removeListBtn = document.createElement("button");
     removeListBtn.className = "icon-btn";
-    removeListBtn.textContent = "➖";
+    removeListBtn.innerHTML = "➖";
     removeListBtn.title = "Убрать из этого списка";
     removeListBtn.style.color = "var(--danger)";
-    removeListBtn.onclick = (e) => {
-      e.stopPropagation();
-      const listId = collectionsState.currentCollectionFilter!;
-
-      // Optimistic update handled by UI layer usually, but we can do basic DOM manipulation here or reload
-      // For now, we just call the logic
-      collectionsState.listItems[listId]?.delete(item.id as number);
-      // Trigger re-render via event or callback if needed
-
-      showUndoToast(
-        "Убрано из списка",
-        () => {
-          collectionsState.listItems[listId]?.add(item.id as number);
-          document.dispatchEvent(new CustomEvent("state-changed"));
-        },
-        async () => {
-          await client
-            .from(DB_TABLES.LIST_ITEMS)
-            .delete()
-            .match({ list_id: listId, word_id: item.id });
-        },
-      );
-      document.dispatchEvent(new CustomEvent("state-changed"));
-    };
+    removeListBtn.setAttribute("data-action", "remove-from-list");
+    removeListBtn.setAttribute("data-value", String(item.id));
     topRow.appendChild(removeListBtn);
   }
 
   const favBtn = document.createElement("button");
   favBtn.className = `icon-btn fav-btn ${isFav ? "active" : ""}`;
-  favBtn.textContent = isFav ? "❤️" : "🤍";
+  favBtn.innerHTML = isFav ? "❤️" : "🤍";
   favBtn.title = isFav ? "Убрать из избранного" : "В избранное";
-  favBtn.onclick = (e) => {
-    e.stopPropagation();
-    getUiCard().then((m) => m.toggleFavorite(item.id, favBtn));
-  };
+  favBtn.setAttribute("data-action", "toggle-favorite");
+  favBtn.setAttribute("data-value", String(item.id));
   topRow.appendChild(favBtn);
 
   front.appendChild(topRow);
@@ -241,11 +199,8 @@ function createCardFront(item: Word, _index: number): HTMLElement {
   wordDiv.textContent = item.word_kr || "";
   wordDiv.title = "Нажмите, чтобы скопировать";
   wordDiv.style.cursor = "copy";
-  wordDiv.onclick = (e) => {
-    e.stopPropagation();
-    navigator.clipboard.writeText(item.word_kr);
-    showToast("📋 Скопировано!");
-  };
+  wordDiv.setAttribute("data-action", "copy-word");
+  wordDiv.setAttribute("data-value", item.word_kr);
   wordWrapper.appendChild(wordDiv);
 
   if (statusIcon) {
@@ -266,10 +221,15 @@ function createCardFront(item: Word, _index: number): HTMLElement {
     [...item.word_hanja].forEach((char) => {
       const span = document.createElement("span");
       span.className = "hanja-char";
+      span.setAttribute("role", "button");
+      span.tabIndex = 0;
       span.textContent = char;
-      span.onclick = (e) => {
-        e.stopPropagation();
-        getUiHanja().then((m) => m.openHanjaModal(char));
+      span.setAttribute("data-action", "open-hanja-modal");
+      span.setAttribute("data-value", char);
+      span.onkeydown = (e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          span.click();
+        }
       };
       hanjaContainer.appendChild(span);
     });
@@ -281,10 +241,8 @@ function createCardFront(item: Word, _index: number): HTMLElement {
     grammarBadge.className = "grammar-badge";
     grammarBadge.textContent = "📘 Грамматика";
     grammarBadge.style.cursor = "pointer";
-    grammarBadge.onclick = (e) => {
-      e.stopPropagation();
-      getUiGrammar().then((m) => m.openGrammarModal(item));
-    };
+    grammarBadge.setAttribute("data-action", "open-grammar-modal");
+    grammarBadge.setAttribute("data-value", String(item.id));
     mainContent.appendChild(grammarBadge);
   }
 
@@ -433,9 +391,9 @@ function createCardBack(item: Word): HTMLElement {
   regenBtn.innerHTML = "🔄";
   regenBtn.onclick = (e) => {
     e.stopPropagation();
-    getUiCard().then((m) =>
-      m.openImagePicker(item, e.currentTarget as HTMLButtonElement),
-    );
+    // Capture the button element before the async call
+    const buttonElement = e.currentTarget as HTMLButtonElement;
+    getUiCard().then((m) => m.openImagePicker(item, buttonElement));
   };
 
   imgContainer.appendChild(img);
@@ -474,6 +432,39 @@ function createCardBack(item: Word): HTMLElement {
         <div class="back-example-ru">${escapeHtml(item.example_ru || "")}</div>
     `;
     content.appendChild(exBox);
+  }
+
+  // Relations (Synonyms/Antonyms)
+  if (item.synonyms || item.antonyms) {
+    const relationsBox = document.createElement("div");
+    relationsBox.className = "back-section";
+    let relationsHTML = '<div class="section-label">⛓️ Связи</div>';
+
+    if (item.synonyms) {
+      const synChips = item.synonyms
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean)
+        .map((s) => `<span class="rel-chip syn">${escapeHtml(s)}</span>`)
+        .join("");
+      if (synChips) {
+        relationsHTML += `<div class="relation-row"><span class="rel-icon">↔️</span><div class="rel-chips">${synChips}</div></div>`;
+      }
+    }
+    if (item.antonyms) {
+      const antChips = item.antonyms
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean)
+        .map((s) => `<span class="rel-chip ant">${escapeHtml(s)}</span>`)
+        .join("");
+      if (antChips) {
+        relationsHTML += `<div class="relation-row"><span class="rel-icon">≠</span><div class="rel-chips">${antChips}</div></div>`;
+      }
+    }
+
+    relationsBox.innerHTML = relationsHTML;
+    content.appendChild(relationsBox);
   }
 
   // Synonyms/Antonyms/Notes/Grammar sections...
@@ -584,10 +575,8 @@ export function createListItem(item: Word, _index: number): HTMLElement {
   const favBtn = document.createElement("button");
   favBtn.className = `btn-icon list-action-btn ${isFav ? "active" : ""}`;
   favBtn.textContent = isFav ? "❤️" : "🤍";
-  favBtn.onclick = (e) => {
-    e.stopPropagation();
-    getUiCard().then((m) => m.toggleFavorite(item.id, favBtn));
-  };
+  favBtn.setAttribute("data-action", "toggle-favorite");
+  favBtn.setAttribute("data-value", String(item.id));
   actionsDiv.appendChild(favBtn);
   el.appendChild(actionsDiv);
 

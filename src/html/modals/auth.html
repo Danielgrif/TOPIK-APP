@@ -3,7 +3,7 @@
   <div class="modal-content modal-centered auth-modal-content">
     <div class="auth-container">
     <div class="modal-header no-border">
-      <h3 id="auth-title">🔐 Профиль</h3>
+      <h3 id="auth-title">Вход в профиль</h3>
       <div class="header-actions">
         <button class="btn btn-icon close-modal-btn" data-close-modal="login-modal" aria-label="Закрыть">✕</button>
       </div>
@@ -11,24 +11,41 @@
     <div id="auth-desc" class="auth-description">
       Войдите, чтобы сохранить прогресс в облаке и синхронизировать устройства.
     </div>
-    <form onsubmit="return false;" class="auth-form">
+    <form onsubmit="return false;" class="auth-form" data-auth-mode="login">
+      <div id="auth-name-container" class="input-group" style="display: none;">
+        <label for="auth-name" class="visually-hidden">Ваше имя</label>
+        <input type="text" id="auth-name" name="name" class="auth-input" placeholder="Ваше имя" autocomplete="name">
+        <div class="input-error-msg"></div>
+      </div>
       <div class="input-group">
         <label for="auth-email" class="visually-hidden">Email</label>
         <input type="email" id="auth-email" name="email" class="auth-input" placeholder="Email" autocomplete="username">
+        <div class="input-error-msg"></div>
       </div>
       
       <div id="auth-password-container" class="input-group">
           <label for="auth-password" class="visually-hidden">Пароль</label>
           <input type="password" id="auth-password" name="password" class="auth-input" placeholder="Пароль" autocomplete="current-password">
-          <button type="button" data-action="toggle-password" id="toggle-password-btn" class="password-toggle" title="Показать пароль">👁️</button>
-          <div class="password-strength"><div id="strength-bar"></div></div>
+          <button type="button" data-action="toggle-password" data-value="auth-password" id="toggle-password-btn" class="password-toggle" title="Показать пароль">👁️</button>
+          <div class="password-strength" style="display: none;">
+            <div class="strength-bar-container"><div id="strength-bar"></div></div>
+            <span id="strength-text"></span>
+          </div>
+          <div class="input-error-msg"></div>
+      </div>
+
+      <div id="auth-confirm-password-container" class="input-group" style="display: none;">
+          <label for="auth-confirm-password" class="visually-hidden">Повторите пароль</label>
+          <input type="password" id="auth-confirm-password" name="confirm-password" class="auth-input" placeholder="Повторите пароль" autocomplete="new-password">
+          <button type="button" data-action="toggle-password" data-value="auth-confirm-password" class="password-toggle" title="Показать пароль">👁️</button>
+          <div class="input-error-msg"></div>
+      </div>
+
+      <div id="auth-buttons" class="auth-actions">
+        <button id="auth-submit-btn" class="btn auth-submit-btn" data-action="auth" data-value="login">Войти</button>
       </div>
     </form>
     
-    <div id="auth-buttons" class="auth-actions">
-      <button class="btn auth-submit-btn" data-action="auth" data-value="login">Войти</button>
-      <button class="btn auth-switch-btn" data-action="auth" data-value="signup">Регистрация</button>
-    </div>
     <div id="auth-reset-buttons" style="display: none;">
         <button class="btn auth-submit-btn" data-action="auth" data-value="reset">Отправить ссылку</button>
     </div>
@@ -42,8 +59,10 @@
     </div>
 
     <div class="auth-footer">
+      <span id="auth-mode-switch-container">
+        Нет аккаунта? <a href="#" data-action="toggle-auth-mode" data-value="signup">Регистрация</a>
+      </span>
       <a href="#" id="auth-forgot-link" data-action="toggle-reset-mode" data-value="true">Забыли пароль?</a>
-      <a href="#" id="auth-back-link" data-action="toggle-reset-mode" data-value="false" style="display: none;">← Назад ко входу</a>
     </div>
     <div id="auth-error" class="auth-error-msg"></div>
     </div>
@@ -238,7 +257,10 @@
                         </div>
                         <button class="btn btn-quiz" data-action="change-password" style="padding: 8px 16px;">OK</button>
                     </form>
-                    <div class="password-strength" id="new-strength-container" style="margin-top: 0;"><div id="new-strength-bar"></div></div>
+                <div class="password-strength" id="new-strength-container" style="margin-top: 8px; display: none;">
+                    <div class="strength-bar-container"><div id="new-strength-bar"></div></div>
+                    <span id="new-strength-text"></span>
+                </div>
                 </div>
                 <div class="setting-item" data-action="clear-data" style="cursor: pointer;">
                     <div class="setting-left"><span class="setting-icon">🗑</span><span class="setting-label" style="color: var(--danger);">Сброс прогресса</span></div>
@@ -253,6 +275,21 @@
         </div>
 
         <div id="app-version" style="text-align: center; font-size: 11px; color: var(--text-sub); margin-top: 20px; opacity: 0.5;"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Favorite Quotes Modal -->
+<div id="quotes-modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="quotes-modal-title" tabindex="-1" data-close-modal="quotes-modal">
+  <div class="modal-content" style="max-width: 500px;">
+    <div class="modal-header">
+      <h3 id="quotes-modal-title">📜 Избранные цитаты</h3>
+      <button class="btn btn-icon close-modal-btn" data-close-modal="quotes-modal" aria-label="Закрыть">✕</button>
+    </div>
+    <div class="modal-body">
+      <div id="favorite-quotes-list">
+        <!-- Quotes will be rendered here by JS -->
       </div>
     </div>
   </div>

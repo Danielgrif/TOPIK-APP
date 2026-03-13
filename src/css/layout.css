@@ -149,6 +149,11 @@ body.dark-mode #main-header {
     padding: 4px 10px 4px 4px;
     border-radius: 24px;
     transition: background-color 0.2s;
+    /* Reset button styles */
+    background: transparent;
+    border: none;
+    font: inherit;
+    color: inherit;
 }
 .header-stat-item:hover {
     background-color: var(--surface-2);
@@ -1109,19 +1114,3 @@ body.focus-mode #bottom-nav {
 .sort-btn:hover { background: var(--surface-2); border-color: var(--primary); transform: translateY(-2px); box-shadow: var(--shadow-sm); }
 .sort-btn:active { transform: scale(0.98); }
 .sort-icon { font-size: 24px; margin-bottom: 4px; }
-
-/* Loading Overlay */
-#loading-overlay {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background: var(--bg);
-    z-index: 9999;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    transition: opacity 0.5s ease;
-}

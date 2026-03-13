@@ -100,8 +100,9 @@ function handleTopicSelection(value: string) {
 }
 
 function createMultiselectItem(value: string, label: string): HTMLElement {
-  const itemDiv = document.createElement("div");
+  const itemDiv = document.createElement("label");
   itemDiv.className = "multiselect-item";
+  itemDiv.style.cursor = "pointer"; // Make it obvious it's clickable
 
   const isChecked =
     state.currentTopic.includes(value) ||
@@ -109,10 +110,12 @@ function createMultiselectItem(value: string, label: string): HTMLElement {
   const icon = getIconForValue(value, "🏷️");
   itemDiv.innerHTML = `<input type="checkbox" ${isChecked ? "checked" : ""}> <span style="margin-right: 6px;">${icon}</span> <span>${escapeHtml(label)}</span>`;
 
-  itemDiv.onclick = (e) => {
+  // The click on the label will toggle the checkbox, which we can listen for.
+  // However, to keep the existing logic, we'll attach the handler to the label.
+  itemDiv.addEventListener("click", (e) => {
     e.stopPropagation();
     handleTopicSelection(value);
-  };
+  });
 
   return itemDiv;
 }
@@ -445,17 +448,18 @@ export function handleCategoryChange(val: string) {
 }
 
 function createCategoryItem(value: string, label: string): HTMLElement {
-  const itemDiv = document.createElement("div");
+  const itemDiv = document.createElement("label");
   itemDiv.className = "multiselect-item";
+  itemDiv.style.cursor = "pointer";
   const isChecked =
     state.currentCategory.includes(value) ||
     (value === "all" && state.currentCategory.includes("all"));
   const icon = getIconForValue(value, "🔹");
   itemDiv.innerHTML = `<input type="checkbox" ${isChecked ? "checked" : ""}> <span style="margin-right: 6px;">${icon}</span> <span>${escapeHtml(label)}</span>`;
-  itemDiv.onclick = (e) => {
+  itemDiv.addEventListener("click", (e) => {
     e.stopPropagation();
     handleCategoryChange(value);
-  };
+  });
   return itemDiv;
 }
 

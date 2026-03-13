@@ -1,8 +1,12 @@
 /// <reference lib="webworker" />
 
-import { precacheAndRoute, cleanupOutdatedCaches } from "workbox-precaching";
+import {
+  precacheAndRoute,
+  cleanupOutdatedCaches,
+  createHandlerBoundToURL,
+} from "workbox-precaching";
 import { clientsClaim } from "workbox-core";
-import { registerRoute } from "workbox-routing";
+import { registerRoute, NavigationRoute } from "workbox-routing";
 import {
   NetworkOnly,
   CacheFirst,
@@ -11,16 +15,13 @@ import {
 import { BackgroundSyncPlugin } from "workbox-background-sync";
 import { ExpirationPlugin } from "workbox-expiration";
 import { CacheableResponsePlugin } from "workbox-cacheable-response";
+import { SW_MESSAGES } from "./core/constants.ts";
 
 declare let self: ServiceWorkerGlobalScope;
 
-const SW_MESSAGES = {
-  SKIP_WAITING: "SKIP_WAITING",
-  PROCESS_DOWNLOAD_QUEUE: "PROCESS_DOWNLOAD_QUEUE",
-  DOWNLOAD_QUEUE_COMPLETED: "DOWNLOAD_QUEUE_COMPLETED",
-};
+declare const SUPABASE_URL: string;
+declare const SUPABASE_KEY: string;
 
-self.skipWaiting();
 clientsClaim();
 cleanupOutdatedCaches();
 
@@ -104,6 +105,34 @@ registerRoute(
   }),
 );
 
+// Кэширование для списков слов (коллекций)
+registerRoute(
+  ({ url }) =>
+    url.hostname.includes("supabase.co") &&
+    (url.pathname.includes("/user_lists") ||
+      url.pathname.includes("/list_items")),
+  new StaleWhileRevalidate({
+    cacheName: "api-collections-cache",
+    plugins: [
+      new CacheableResponsePlugin({ statuses: [0, 200] }),
+      new ExpirationPlugin({ maxAgeSeconds: 60 * 60 * 24 * 7 }), // 1 неделя
+    ],
+  }),
+);
+
+// Кэширование для цитат
+registerRoute(
+  ({ url }) =>
+    url.hostname.includes("supabase.co") && url.pathname.includes("/quotes"),
+  new StaleWhileRevalidate({
+    cacheName: "api-quotes-cache",
+    plugins: [
+      new CacheableResponsePlugin({ statuses: [0, 200] }),
+      new ExpirationPlugin({ maxAgeSeconds: 60 * 60 * 24 }), // 1 день
+    ],
+  }),
+);
+
 // Настройка Background Sync
 const bgSyncPlugin = new BackgroundSyncPlugin("supabase-queue", {
   maxRetentionTime: 24 * 60, // Повторять попытки в течение 24 часов (в минутах)
@@ -118,152 +147,72 @@ registerRoute(
   }),
 );
 
-// --- Очередь отложенных загрузок (IndexedDB) ---
-const QUEUE_DB_NAME = "offline-queue-db";
-const QUEUE_STORE = "downloads";
-
-function openQueueDB() {
-  return new Promise<IDBDatabase>((resolve, reject) => {
-    const req = indexedDB.open(QUEUE_DB_NAME, 1);
-    req.onupgradeneeded = () => {
-      if (!req.result.objectStoreNames.contains(QUEUE_STORE)) {
-        req.result.createObjectStore(QUEUE_STORE, { keyPath: "url" });
-      }
-    };
-    req.onsuccess = () => resolve(req.result);
-    req.onerror = () => reject(req.error);
-  });
-}
-
-async function addToQueue(url: string) {
-  try {
-    const db = await openQueueDB();
-    const tx = db.transaction(QUEUE_STORE, "readwrite");
-    tx.objectStore(QUEUE_STORE).put({ url, added: Date.now() });
-  } catch (e) {
-    console.error("[SW] Queue add failed", e);
-  }
-}
-
-async function processDownloadQueue() {
-  try {
-    const db = await openQueueDB();
-    const tx = db.transaction(QUEUE_STORE, "readwrite");
-    const store = tx.objectStore(QUEUE_STORE);
-    const req = store.getAll();
-
-    req.onsuccess = async () => {
-      const items = req.result as { url: string }[];
-      if (items.length === 0) return;
-
-      // Очищаем очередь перед началом, чтобы избежать зацикливания
-      const clearTx = db.transaction(QUEUE_STORE, "readwrite");
-      clearTx.objectStore(QUEUE_STORE).clear();
-
-      const cache = await caches.open(AUDIO_CACHE_NAME);
-
-      // Скачиваем файлы последовательно
-      for (const item of items) {
-        try {
-          // fetch внутри SW не проходит через fetch-слушатель SW, поэтому не будет заблокирован проверкой скорости
-          const resp = await fetch(item.url);
-          if (resp.ok) {
-            await cache.put(item.url, resp);
-          }
-        } catch (e) {
-          console.error(`[SW] Retry failed for ${item.url}`, e);
-        }
-      }
-
-      // Сообщаем клиентам, что загрузка завершена (опционально)
-      const clients = await self.clients.matchAll();
-      clients.forEach((client) =>
-        client.postMessage({
-          type: SW_MESSAGES.DOWNLOAD_QUEUE_COMPLETED,
-          count: items.length,
-        }),
-      );
-    };
-  } catch (e) {
-    console.error("[SW] Queue process failed", e);
-  }
-}
-
 self.addEventListener("message", (event) => {
-  if (event.data && event.data.type === SW_MESSAGES.SKIP_WAITING) {
+  if (event.data?.type === SW_MESSAGES.SKIP_WAITING) {
     self.skipWaiting();
   }
-  if (event.data && event.data.type === SW_MESSAGES.PROCESS_DOWNLOAD_QUEUE) {
-    processDownloadQueue();
+});
+
+// --- Periodic Background Sync ---
+
+// @ts-expect-error - PeriodicSyncEvent is not in the default lib
+self.addEventListener("periodicsync", (event: PeriodicSyncEvent) => {
+  if (event.tag === SW_MESSAGES.CONTENT_SYNC) {
+    event.waitUntil(performPeriodicSync());
   }
 });
 
-async function trimCache(cacheName: string, maxItems: number) {
-  const cache = await caches.open(cacheName);
-  const keys = await cache.keys();
-  if (keys.length > maxItems) {
-    await cache.delete(keys[0]);
-    trimCache(cacheName, maxItems);
+async function performPeriodicSync() {
+  console.info("[SW] 🔄 Performing periodic background sync...");
+  try {
+    // Эти переменные заменяются Vite во время сборки (см. vite.config.ts)
+    if (!SUPABASE_URL || !SUPABASE_URL.startsWith("http")) {
+      console.warn(
+        "[SW] Periodic sync skipped: Supabase URL not configured for Service Worker.",
+      );
+      return;
+    }
+
+    const vocabUrl = `${SUPABASE_URL}/rest/v1/vocabulary?select=*`;
+    const headers = {
+      apikey: SUPABASE_KEY,
+      Authorization: `Bearer ${SUPABASE_KEY}`,
+    };
+
+    // Делаем запрос. Существующий обработчик `registerRoute` для словаря
+    // перехватит его и обновит кэш 'api-vocabulary-cache' благодаря стратегии StaleWhileRevalidate.
+    await fetch(vocabUrl, { headers });
+
+    console.info("[SW] ✅ Periodic sync successful: Vocabulary cache updated.");
+  } catch (error) {
+    console.error("[SW] ❌ Periodic sync failed:", error);
   }
 }
 
-self.addEventListener("fetch", (e: FetchEvent) => {
-  const url = new URL(e.request.url);
+// Упрощенная и более надежная стратегия для аудио
+registerRoute(
+  ({ request }) => request.destination === "audio",
+  new CacheFirst({
+    cacheName: AUDIO_CACHE_NAME,
+    plugins: [
+      new CacheableResponsePlugin({
+        statuses: [0, 200], // Кэшируем непрозрачные ответы для CDN
+      }),
+      new ExpirationPlugin({
+        maxEntries: MAX_AUDIO_ITEMS,
+        maxAgeSeconds: 30 * 24 * 60 * 60, // 30 дней
+        purgeOnQuotaError: true, // Автоматически удаляем при нехватке места
+      }),
+    ],
+  }),
+);
 
-  if (e.request.method !== "GET" || !url.protocol.startsWith("http")) {
-    return;
-  }
-
-  // Стратегия Cache First для аудио с обновлением в фоне (Stale-While-Revalidate) для надежности,
-  // либо Cache First с fallback на сеть. Текущая реализация Cache First.
-  if (url.pathname.endsWith(".mp3") || url.href.includes("/audio-files/")) {
-    e.respondWith(
-      caches
-        .open(AUDIO_CACHE_NAME)
-        .then((cache) => {
-          return cache.match(e.request).then((response) => {
-            if (response) return response;
-
-            // 🐌 Проверка скорости сети: пропускаем загрузку тяжелых файлов на медленном интернете
-            // @ts-expect-error Navigator connection API is experimental
-            const conn = navigator.connection;
-            if (
-              conn &&
-              (conn.saveData || ["slow-2g", "2g"].includes(conn.effectiveType))
-            ) {
-              addToQueue(e.request.url); // Добавляем в очередь на будущее
-              return new Response(null, {
-                status: 503,
-                statusText: "Skipped due to slow connection",
-              });
-            }
-
-            return fetch(e.request).then((networkResponse) => {
-              if (
-                networkResponse &&
-                networkResponse.status === 200 &&
-                networkResponse.type === "basic"
-              ) {
-                cache.put(e.request, networkResponse.clone());
-                trimCache(AUDIO_CACHE_NAME, MAX_AUDIO_ITEMS);
-              }
-              return networkResponse;
-            });
-          });
-        })
-        .catch((err) => {
-          console.error("[SW] Audio Error:", err);
-          return new Response(null, {
-            status: 404,
-            statusText: "Audio Not Found",
-          });
-        }),
-    );
-    return;
-  }
-
-  // Игнорируем остальные запросы к Supabase (API, Auth и т.д.), чтобы они шли напрямую в сеть
-  if (url.hostname.includes("supabase.co")) {
-    return;
-  }
+// Offline fallback
+// Эта страница должна быть в папке public, чтобы попасть в precache-манифест
+const handler = createHandlerBoundToURL("/offline.html");
+const navigationRoute = new NavigationRoute(handler, {
+  denylist: [
+    new RegExp("/[^/?]+\\.[^/]+$"), // Игнорируем запросы к файлам с расширениями
+  ],
 });
+registerRoute(navigationRoute);
