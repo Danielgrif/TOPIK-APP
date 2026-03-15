@@ -16,6 +16,16 @@ export interface WordData {
   category_ru?: string;
   created_by?: string;
   is_public?: boolean;
+  // Fields from AI generation
+  topik_level?: string;
+  grammar_info?: string;
+  frequency?: string;
+  tone?: string;
+  word_hanja?: string;
+  synonyms?: string;
+  antonyms?: string;
+  collocations?: string;
+  type?: string;
 }
 
 export interface ImageResult {

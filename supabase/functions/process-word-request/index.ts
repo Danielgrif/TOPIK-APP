@@ -1,129 +1,181 @@
 import { serve } from "std/http/server.ts";
 import { corsHeaders, DB_TABLES, FUNCTION_NAMES, PROCESSING_STEPS, WORD_REQUEST_STATUS } from "shared/constants.ts";
-import { createAudioFile } from "shared/audio.ts";
 import { getSupabaseAdmin } from "shared/clients.ts";
 import { createErrorResponse } from "shared/utils.ts";
+import type { WordData } from "shared/types.ts";
 
-let currentStep = PROCESSING_STEPS.AI_PROCESSING;
+/**
+ * Defines the columns that are allowed to be inserted into the 'vocabulary' table.
+ * This prevents errors if the AI returns extra fields not present in the database schema.
+ */
+const VOCABULARY_ALLOWED_KEYS: Set<string> = new Set([
+  'word_kr', 'translation', 'word_hanja', 'topic', 'category', 
+  'level', 'type', 'example_kr', 'example_ru', 'synonyms', 'antonyms',
+  'collocations', 'grammar_info', 'created_by', 'is_public',
+  // These are included for compatibility with different data structures
+  'topic_ru', 'category_ru'
+]);
 
+
+/**
+ * Orchestrates the entire process of adding a new word from a user request.
+ * This function replaces the core logic of the Python worker's `ai_handler.py`.
+ */
 serve(async (req: Request) => {
   // Обработка CORS
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
-  }
+  } 
 
-  let requestId: string | number | null = null;
+  let requestId: string | number | null = null; // To update status on final error
   try {
-    const { record } = await req.json();
+    const { record: wordRequest } = await req.json();
 
-    if (!record || !record.word_kr) {
+    if (!wordRequest || !wordRequest.word_kr) {
       throw new Error("Missing 'record' or 'word_kr' in request body");
     }
 
-    requestId = record.id;
-    console.log(`🚀 Processing request for: ${record.word_kr} (ID: ${record.id})`);
+    requestId = wordRequest.id;
+    console.log(`🚀 Processing request for: ${wordRequest.word_kr} (ID: ${requestId})`);
 
     const supabaseAdmin = getSupabaseAdmin();
 
-    // 1. Генерация данных о слове (AI)
-    console.log("🤖 Calling generate-word-data...");
-    currentStep = PROCESSING_STEPS.AI_PROCESSING;
-    const { data: aiData, error: aiError } = await supabaseAdmin.functions.invoke(
+    // 1. Generate word data from AI
+    await supabaseAdmin.from(DB_TABLES.WORD_REQUESTS).update({ status: WORD_REQUEST_STATUS.AI, my_notes: PROCESSING_STEPS.AI_PROCESSING }).eq('id', requestId);
+    
+    const { data: aiResponse, error: aiError } = await supabaseAdmin.functions.invoke(
       FUNCTION_NAMES.GENERATE_WORD_DATA,
-      { body: { word: record.word_kr } }
+      { body: { word: wordRequest.word_kr } }
     );
 
-    if (aiError) throw new Error(`AI data generation failed: ${aiError.message}`);
-    if (!aiData || !aiData.data || aiData.data.length === 0) {
-        throw new Error("AI returned no data.");
+    if (aiError || !aiResponse || !aiResponse.data || aiResponse.data.length === 0) {
+        console.error("❌ AI Service invocation failed. Details:", aiError);
+        throw new Error(`AI processing failed: ${aiError?.message || 'AI returned no data.'}`);
     }
 
-    const wordItem = aiData.data[0]; // Берем первый (наиболее вероятный) вариант
+    const wordItems: WordData[] = aiResponse.data;
+    
+    // --- Optimization: Batch database operations ---
+    const progressToUpsert: { user_id: string; word_id: string | number; is_learned: boolean }[] = [];
+    const listItemsToUpsert: { list_id: string; word_id: string | number }[] = [];
+    let processedCount = 0;
 
-    // 2. Подготовка данных для вставки
-    // Приоритет отдаем данным из заявки (если пользователь указал тему/категорию), иначе берем от AI
-    const finalData = {
-      ...wordItem,
-      topic: record.topic || wordItem.topic,
-      category: record.category || wordItem.category,
-      level: record.level || wordItem.level,
-      created_by: record.user_id,
-      is_public: false, // Пользовательские слова по умолчанию приватные
-    };
+    // --- Optimization: Run duplicate checks in parallel ---
+    const duplicateCheckPromises = wordItems.map(item => 
+      supabaseAdmin
+        .from(DB_TABLES.VOCABULARY)
+        .select("id, word_kr, translation")
+        .eq("word_kr", item.word_kr)
+        .eq("translation", item.translation)
+        .maybeSingle()
+    );
+    const duplicateResults = await Promise.all(duplicateCheckPromises);
+    const existingWordsMap = new Map<string, string | number>();
+    duplicateResults.forEach(res => {
+      if (res.data) {
+        const key = `${res.data.word_kr}:${res.data.translation}`;
+        existingWordsMap.set(key, res.data.id);
+      }
+    });
 
-    // 3. Вставка в основную таблицу vocabulary
-    console.log("💾 Inserting into vocabulary...");
-    currentStep = PROCESSING_STEPS.DB_INSERT;
-    const { data: insertedWord, error: insertError } = await supabaseAdmin
-      .from(DB_TABLES.VOCABULARY)
-      .insert(finalData)
-      .select()
-      .single();
+    // 2. Process each word meaning (handles homonyms) using the pre-fetched duplicate data
+    for (const item of wordItems) {
+      if (!item.word_kr || !item.translation) continue;
 
-    if (insertError) {
-        throw new Error(`DB insert failed: ${insertError.message}`);
+      const cacheKey = `${item.word_kr}:${item.translation}`;
+      const existingWordId = existingWordsMap.get(cacheKey);
+
+      let wordId: string | number;
+
+      if (existingWordId) {
+          console.log(`ℹ️ Word "${item.word_kr}" already exists with ID ${existingWordId}. Skipping insertion.`);
+          wordId = existingWordId;
+      } else {
+          // Append TOPIK level to grammar_info if available
+          if (item.topik_level) {
+            const g_info = item.grammar_info || '';
+            item.grammar_info = g_info ? `${g_info}\n[${item.topik_level}]` : `[${item.topik_level}]`;
+          }
+
+          // Prepare data for insertion
+          const insertData = {
+              ...item,
+              topic: wordRequest.topic || item.topic,
+              category: wordRequest.category || item.category,
+              level: wordRequest.level || item.level,
+              created_by: wordRequest.user_id, 
+              is_public: false,
+          };
+          
+          // --- Optimization: Filter out keys that are not in the vocabulary table ---
+          const finalData = Object.fromEntries(
+            Object.entries(insertData).filter(([key]) => VOCABULARY_ALLOWED_KEYS.has(key as keyof WordData))
+          );
+
+          // Insert into vocabulary
+          const { data: insertedWord, error: insertError } = await supabaseAdmin
+              .from(DB_TABLES.VOCABULARY)
+              .insert(finalData)
+              .select("id, word_kr, translation, example_kr") // Select all needed data for media generation
+              .single();
+
+          if (insertError) {
+              console.error(`DB insert failed for "${item.word_kr}": ${insertError.message}`);
+              continue; // Skip to next homonym
+          }
+          wordId = insertedWord.id; // Keep wordId for progress/list items
+          console.log(`✅ Word "${item.word_kr}" inserted with ID: ${wordId}`);
+
+          // Asynchronously generate media files to avoid timeouts
+          supabaseAdmin.functions.invoke(FUNCTION_NAMES.GENERATE_MEDIA, {
+              body: { word: insertedWord }, // Pass the full word object for optimization
+          }).catch(err => console.error(`- Media generation for word ${wordId} failed to invoke:`, err));
+      }
+
+      // Collect rows for batch upsert
+      if (wordRequest.user_id) {
+          progressToUpsert.push({ user_id: wordRequest.user_id, word_id: wordId, is_learned: false });
+      }
+      if (wordRequest.target_list_id) {
+          listItemsToUpsert.push({ list_id: wordRequest.target_list_id, word_id: wordId });
+      }
+      
+      processedCount++;
     }
 
-    const insertedWordId = insertedWord.id;
-
-    // 4. Генерация аудио (TTS)
-    console.log("🔊 Generating audio...");
-    currentStep = PROCESSING_STEPS.AUDIO_GENERATION;
-
-    const audioPromises = [
-      createAudioFile(supabaseAdmin, insertedWord.word_kr, 'female', `female/${insertedWordId}.mp3`),
-      createAudioFile(supabaseAdmin, insertedWord.word_kr, 'male', `male/${insertedWordId}.mp3`),
-    ];
-
-    // Также генерируем аудио для примера, если он есть
-    if (insertedWord.example_kr) {
-      audioPromises.push(
-        createAudioFile(supabaseAdmin, insertedWord.example_kr, 'female', `examples/${insertedWordId}.mp3`),
-      );
+    // --- Optimization: Perform batch upserts after the loop ---
+    if (progressToUpsert.length > 0) {
+      const { error } = await supabaseAdmin.from(DB_TABLES.USER_PROGRESS).upsert(progressToUpsert);
+      if (error) console.error("Batch upsert to user_progress failed:", error.message);
+    }
+    if (listItemsToUpsert.length > 0) {
+      const { error } = await supabaseAdmin.from(DB_TABLES.LIST_ITEMS).upsert(listItemsToUpsert);
+      if (error) console.error("Batch upsert to list_items failed:", error.message);
     }
 
-    const [femaleUrl, maleUrl, exampleUrl] = await Promise.all(audioPromises);
-
-    const audioUpdates: { audio_url: string; audio_male: string; example_audio?: string } = {
-      audio_url: femaleUrl,
-      audio_male: maleUrl,
-    };
-    if (exampleUrl) {
-      audioUpdates.example_audio = exampleUrl;
+    if (processedCount === 0) {
+      throw new Error("All word meanings failed to process or were duplicates.");
     }
 
-    const { data: updatedWord, error: updateError } = await supabaseAdmin
-      .from(DB_TABLES.VOCABULARY)
-      .update(audioUpdates)
-      .eq("id", insertedWordId)
-      .select()
-      .single();
-
-    if (updateError) {
-      throw new Error(`DB update with audio URLs failed: ${updateError.message}`);
-    }
-
-    // 5. Обновление статуса заявки
-    console.log("✅ Updating request status...");
+    // 3. Update request status to processed
     await supabaseAdmin
       .from(DB_TABLES.WORD_REQUESTS)
-      .update({ status: WORD_REQUEST_STATUS.PROCESSED })
-      .eq("id", record.id);
+      .update({ status: WORD_REQUEST_STATUS.PROCESSED, my_notes: `Processed ${processedCount} of ${wordItems.length} meanings.` })
+      .eq("id", requestId);
 
-    return new Response(JSON.stringify({ success: true, word: updatedWord }), {
+    return new Response(JSON.stringify({ success: true, message: `Successfully processed ${processedCount} word(s).` }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
 
   } catch (error: unknown) {
     const errorMessage = error instanceof Error ? error.message : String(error);
     console.error("❌ Error processing request:", errorMessage);
-    
-    // Пытаемся обновить статус заявки на 'error', если есть ID
+
     try {
         if (requestId) {
-            await getSupabaseAdmin()
-                .from(DB_TABLES.WORD_REQUESTS)
-                .update({ status: WORD_REQUEST_STATUS.ERROR, my_notes: errorMessage, failed_step: currentStep })
+             await getSupabaseAdmin()
+                .from(DB_TABLES.WORD_REQUESTS) // double check
+                .update({ status: WORD_REQUEST_STATUS.ERROR, my_notes: errorMessage })
                 .eq("id", requestId);
         }
     } catch (_e: unknown) { /* ignore */ }

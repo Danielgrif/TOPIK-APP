@@ -335,7 +335,7 @@ export async function fetchVocabulary() {
     const { data: sessionData } = await client.auth.getSession();
     if (sessionData?.session?.user) {
       const { data: userData, error: userError } = await client
-        .from(DB_TABLES.USER_VOCABULARY)
+        .from(DB_TABLES.VOCABULARY)
         .select("*")
         .eq("user_id", sessionData.session.user.id)
         .is("deleted_at", null)
@@ -376,6 +376,7 @@ export async function fetchVocabulary() {
     if (state.dataStore.length > 0) {
       showToast("⚠️ Ошибка сети. Используются кэшированные данные.");
     } else {
+      console.error("Full db load error:", e);
       showToast("❌ Не удалось загрузить словарь.");
     }
   }

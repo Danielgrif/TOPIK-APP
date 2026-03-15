@@ -403,7 +403,7 @@ async def background_tasks_loop(initial_concurrency):
                     if res: ignore_ids.add(res)
                 
                 await asyncio.sleep(0.1) # Yield to event loop to prevent socket starvation on Windows
-            
+
             # --- Логика адаптивной конкурентности ---
             batch_size = len(words)
             if batch_size > 0:

@@ -38,6 +38,7 @@ const fetchWithRetries = async (
     timeout = 60000; // Для Edge Functions — 1 минута
   }
 
+  let id: ReturnType<typeof setTimeout> | undefined;
   for (let i = 0; i < retries; i++) {
     try {
       const controller = new AbortController();
@@ -53,33 +54,61 @@ const fetchWithRetries = async (
         }
       }
 
-      const id = setTimeout(() => {
+      id = setTimeout(() => {
         console.warn(
           `Supabase request timed out after ${timeout / 1000}s for`,
           url,
+          init,
         );
         controller.abort();
       }, timeout);
 
-      const response = await window.fetch(input, {
+      const response = await fetch(input, {
         ...init,
+        //mode: 'no-cors',
+        // Добавляем логирование перед каждым fetch запросом
+        //console.log("📤 Fetching:", url, init);
         signal: controller.signal,
       });
 
-      clearTimeout(id);
+      if (id) {
+        clearTimeout(id);
+        id = undefined;
+      }
 
       // НЕ повторять попытку при ошибках клиента (4xx), так как они обычно не временные (например, 401 Unauthorized)
       if (!response.ok && response.status >= 400 && response.status < 500) {
-        return response; // Сразу возвращаем ошибочный ответ
+        // Сначала получаем тело ответа, а потом логируем.
+        // Это предотвращает "зависание" внутри console.warn, если .text() выполняется долго.
+        const errorBody = await response
+          .text()
+          .catch(
+            () =>
+              `{"error": "Could not read error body", "code": "${response.status}"}`,
+          );
+        console.warn(`Client error ${response.status} for ${url}`, errorBody);
+        // Возвращаем новый Response, так как тело исходного уже прочитано.
+        // Это гарантирует, что последующие обработчики (внутри supabase-js) смогут снова прочитать тело.
+        const newResponse = new Response(errorBody, {
+          status: response.status,
+          headers: response.headers,
+        });
+        return newResponse;
       }
 
       // Повторяем попытку при серверных ошибках (5xx), которые могут быть временными
       if (!response.ok && response.status >= 500) {
-        throw new Error(`Server error: ${response.status}`);
+        const body = await response.text();
+        throw new Error(`Server error: ${response.status}: ${body}`);
       }
 
       return response;
     } catch (error: unknown) {
+      if (id) {
+        clearTimeout(id);
+        id = undefined;
+      }
+
       // Если запрос был отменен извне (пользователем), не делаем повторных попыток
       if (init?.signal?.aborted) {
         throw error;
@@ -90,6 +119,7 @@ const fetchWithRetries = async (
         console.warn(
           `[Retry ${i + 1}/${retries}] Request failed. Retrying in ${delay}ms...`,
           error,
+          init,
         );
         await new Promise((resolve) => setTimeout(resolve, delay));
       } else {

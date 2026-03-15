@@ -13,6 +13,7 @@ export const DB_TABLES = {
   USER_LISTS: "user_lists",
   LIST_ITEMS: "list_items",
   USER_VOCABULARY: "user_vocabulary",
+  AI_CACHE: "ai_cache",
   ARTICLES: "articles",
   USER_FAVORITE_QUOTES: "user_favorite_quotes",
 };
@@ -46,30 +47,34 @@ export const PROCESSING_STEPS = {
 export const FUNCTION_NAMES = {
   GENERATE_WORD_DATA: "generate-word-data",
   REGENERATE_IMAGE: "regenerate-image",
-  GENERATE_AUDIO: "generate-audio",
   PROCESS_WORD_REQUEST: "process-word-request",
   AI_TEACHER: "ai-teacher",
   CHECK_ESSAY: "check-essay",
+  // Новые функции
+  GENERATE_MEDIA: "generate-media-for-word",
+  RETRY_WORD_REQUEST: "retry-word-request",
+  GENERATE_QUOTE_AUDIO: "generate-quote-audio",
 };
 
 // Модели Gemini
 export const GEMINI_MODELS = {
   // Для генерации данных о слове и общих задач
-  FLASH: "gemini-1.5-flash-latest",
-  PRO: "gemini-pro",
+  FLASH: "gemini-2.5-flash",
+  PRO: "gemini-2.5-pro",
   // Для сложных задач (анализ эссе)
-  PRO_1_5: "gemini-1.5-pro-latest",
+  PRO_1_5: "gemini-3.1-pro-preview",
 };
 
-// Голоса для Google Text-to-Speech
+// Голоса для Microsoft Edge TTS (Neural)
 export const TTS_VOICES = {
-  FEMALE: "ko-KR-Wavenet-A",
-  MALE: "ko-KR-Wavenet-D",
+  FEMALE: "ko-KR-SunHiNeural",
+  MALE: "ko-KR-InJoonNeural",
 };
 
 // Базовые URL для внешних API
 export const API_URLS = {
-  GOOGLE_TTS: "https://texttospeech.googleapis.com/v1/text:synthesize",
+  // Google TTS больше не используется, заменен на Edge TTS
+  EDGE_TTS: "wss://speech.platform.bing.com/consumer/speech/synthesize/readaloud/edge/v1?TrustedClientToken=6A5AA1D4EAFF4E9FB37E23D68491D6F4",
   PIXABAY: "https://pixabay.com/api/",
   UNSPLASH: "https://api.unsplash.com/search/photos",
   PEXELS: "https://api.pexels.com/v1/search",
@@ -82,6 +87,20 @@ export const AI_TEACHER_ACTIONS = {
   GENERATE_EXAMPLES: "generate-examples",
   GENERATE_SYNONYMS: "generate-synonyms",
 };
+
+// Списки для валидации в AI промптах
+export const VALID_TOPICS = [
+  "일상생활 (Повседневная жизнь)", "음식 (Еда)", "여행 (Путешествия)",
+  "교육 (Образование)", "직장 (Работа)", "건강 (Здоровье)",
+  "자연 (Природа)", "인간관계 (Отношения)", "쇼핑 (Покупки)",
+  "문화 (Культура)", "정치/경제 (Политика/Экономика)", "기타 (Другое)",
+];
+
+export const VALID_CATEGORIES = [
+  "명사 (Существительные)", "동사 (Глаголы)", "형용사 (Прилагательные)",
+  "부사 (Наречия)", "조사 (Частицы)", "관용구 (Идиомы)",
+  "문구 (Фразы)", "문법 (Грамматика)",
+];
 
 // Константы для фоновых задач
 export const WORKER_CONSTANTS = {

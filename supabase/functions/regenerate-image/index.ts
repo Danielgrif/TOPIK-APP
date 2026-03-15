@@ -2,369 +2,223 @@ import { serve } from "std/http/server.ts";
 import { Image } from "imagescript";
 import { getSupabaseAdmin } from "shared/clients.ts";
 import { createErrorResponse } from "shared/utils.ts";
-import { API_URLS, corsHeaders, DB_BUCKETS } from "shared/constants.ts";
-import type { SupabaseClient } from "@supabase/supabase-js";
+import { API_URLS, corsHeaders, DB_BUCKETS, DB_TABLES } from "shared/constants.ts";
 
-interface ImageResult {
+// --- API Helper Functions ---
+
+interface ImageAPIResult {
   url: string;
   source: string;
 }
 
-interface UnsplashPhoto {
-  urls: {
-    regular: string;
-  };
-}
-
-interface PixabayHit {
-  largeImageURL: string;
-}
-
-interface PexelsPhoto {
-  src: {
-    large: string;
-  };
-}
-
-interface GeminiResponse {
-  predictions: {
-    bytesBase64Encoded: string;
-    mimeType: string;
-  }[];
-}
-
-// Вспомогательная функция для очистки строки запроса
-const cleanQuery = (str: string | undefined): string => (str ? str.split(/[,;(]/)[0].trim() : "");
-
-// Вспомогательная функция для поиска в Pixabay
-async function searchPixabay(
-  apiKey: string,
-  query: string,
-  lang: string = "en",
-): Promise<{ url: string; source: string }[]> {
+async function searchPixabay(query: string, key: string): Promise<ImageAPIResult[]> {
+  const url = `${API_URLS.PIXABAY}?key=${key}&q=${encodeURIComponent(query)}&image_type=photo&lang=ko&safesearch=true&per_page=10`;
   try {
-    const encodedQuery = encodeURIComponent(query);
-    // eslint-disable-next-line no-console
-    console.log(`Searching Pixabay for: "${query}" (${lang})`);
-    const res = await fetch(
-      `${API_URLS.PIXABAY}?key=${apiKey}&q=${encodedQuery}&image_type=photo&per_page=3&lang=${lang}&safesearch=true&orientation=horizontal`,
-    );
-    if (!res.ok) {
-      console.warn(`Pixabay API error: ${res.status} ${res.statusText}`);
-      return [];
-    }
+    const res = await fetch(url);
+    if (!res.ok) return [];
     const data = await res.json();
-    if (data.hits && data.hits.length > 0) {
-      // Возвращаем до 3 результатов
-      return (
-        data.hits
-          .slice(0, 3)
-          .map((hit: PixabayHit) => ({ url: hit.largeImageURL, source: "pixabay" }))
-      );
-    }
-  } catch (e) {
-    console.error("Pixabay search exception:", e);
+    return (data.hits || []).map((img: { webformatURL: string }) => ({
+      url: img.webformatURL,
+      source: "Pixabay",
+    }));
+  } catch {
+    return [];
   }
-  return [];
 }
 
-// Вспомогательная функция для поиска в Unsplash (если есть ключ)
-async function searchUnsplash(
-  accessKey: string,
-  query: string,
-): Promise<{ url: string; source: string }[]> {
+async function searchPexels(query: string, key: string): Promise<ImageAPIResult[]> {
+  const url = `${API_URLS.PEXELS}?query=${encodeURIComponent(query)}&per_page=10`;
   try {
-    const encodedQuery = encodeURIComponent(query);
-    // eslint-disable-next-line no-console
-    console.log(`Searching Unsplash for: "${query}"`);
-    const res = await fetch(
-      `${API_URLS.UNSPLASH}?query=${encodedQuery}&per_page=3&orientation=landscape`,
-      { headers: { Authorization: `Client-ID ${accessKey}` } },
-    );
-    if (!res.ok) {
-      console.warn(`Unsplash API error: ${res.status} ${res.statusText}`);
-      return [];
-    }
+    const res = await fetch(url, { headers: { Authorization: key } });
+    if (!res.ok) return [];
     const data = await res.json();
-    if (data.results && data.results.length > 0) {
-      return (
-        data.results
-          .slice(0, 3)
-          .map((hit: UnsplashPhoto) => ({ url: hit.urls.regular, source: "unsplash" }))
-      );
-    }
-  } catch (e) {
-    console.error("Unsplash search exception:", e);
+    return (data.photos || []).map((p: { src: { medium: string } }) => ({
+      url: p.src.medium,
+      source: "Pexels",
+    }));
+  } catch {
+    return [];
   }
-  return [];
 }
 
-// Вспомогательная функция для поиска в Pexels
-async function searchPexels(
-  apiKey: string,
-  query: string,
-  lang: string = "en-US",
-): Promise<{ url: string; source: string }[]> {
+async function searchUnsplash(query: string, key: string): Promise<ImageAPIResult[]> {
+  const url = `${API_URLS.UNSPLASH}?query=${encodeURIComponent(query)}&per_page=10&client_id=${key}`;
   try {
-    const encodedQuery = encodeURIComponent(query);
-    // eslint-disable-next-line no-console
-    console.log(`Searching Pexels for: "${query}" (${lang})`);
-    const res = await fetch(
-      `${API_URLS.PEXELS}?query=${encodedQuery}&per_page=3&locale=${lang}&orientation=landscape`,
-      { headers: { Authorization: apiKey } },
-    );
-    if (!res.ok) {
-      console.warn(`Pexels API error: ${res.status} ${res.statusText}`);
-      return [];
-    }
+    const res = await fetch(url);
+    if (!res.ok) return [];
     const data = await res.json();
-    if (data.photos && data.photos.length > 0) {
-      return (
-        data.photos
-          .slice(0, 3)
-          .map((hit: PexelsPhoto) => ({ url: hit.src.large, source: "pexels" }))
-      );
-    }
-  } catch (e) {
-    console.error("Pexels search exception:", e);
+    return (data.results || []).map((r: { urls: { regular: string } }) => ({
+      url: r.urls.regular,
+      source: "Unsplash",
+    }));
+  } catch {
+    return [];
   }
-  return [];
 }
 
-async function generateImageWithGemini(
-  apiKey: string,
-  prompt: string,
-): Promise<ImageResult | null> {
-  const models = [
-    "imagen-3.0-generate-001",
-    "gemini-3.1-flash-image-preview",
-    "gemini-3-pro-image-preview",
-    "gemini-2.5-flash-image",
-    "gemini-2.0-flash-exp-image-generation",
-  ];
+/**
+ * Downloads, compresses, and stores an image, then updates the database.
+ * This is a shared helper for both 'auto' and 'finalize' modes.
+ */
+async function processAndStoreImage(wordId: string, imageUrl: string, source: string) {
+  const supabaseAdmin = getSupabaseAdmin();
 
-  for (const model of models) {
+  // 1. Download the image
+  const imageResponse = await fetch(imageUrl);
+  if (!imageResponse.ok) throw new Error(`Failed to download image from ${source}`);
+  const imageBuffer = await imageResponse.arrayBuffer();
+
+  // 2. Compress and resize the image using ImageScript
+  const image = await Image.decode(imageBuffer);
+  image.resize(image.width > 1024 ? 1024 : Image.RESIZE_AUTO, Image.RESIZE_AUTO);
+  const compressedData = await image.encode(0.8); // 80% JPEG quality
+
+  // 3. Delete old image from storage to save space
+  const { data: wordData } = await supabaseAdmin.from(DB_TABLES.VOCABULARY).select('image').eq('id', wordId).single();
+  if (wordData?.image) {
     try {
-      // eslint-disable-next-line no-console
-      console.log(`Generating image with ${model} for: "${prompt}"`);
-      const res = await fetch(
-        `${API_URLS.GEMINI_IMAGE_GEN_BASE}${model}:predict?key=${apiKey}`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json; charset=utf-8" },
-          body: JSON.stringify({
-            instances: [{ prompt }],
-            parameters: { sampleCount: 1, aspectRatio: "4:3" },
-          }),
-        },
-      );
-      if (!res.ok) {
-        const err = await res.text();
-        console.warn(`${model} API error: ${res.status} ${err}`);
-        continue; // Пробуем следующую модель
-      }
-      const data: GeminiResponse = await res.json();
-      if (data.predictions && data.predictions.length > 0) {
-        const img = data.predictions[0];
-        const mimeType = img.mimeType || "image/jpeg";
-        return {
-          url: `data:${mimeType};base64,${img.bytesBase64Encoded}`,
-          source: "gemini",
-        };
+      const oldPath = new URL(wordData.image).pathname.split('/').slice(3).join('/'); // Extracts path after bucket name
+      if (oldPath) {
+        await supabaseAdmin.storage.from(DB_BUCKETS.IMAGES).remove([oldPath]);
       }
     } catch (e) {
-      console.error(`${model} generation exception:`, e);
+      console.warn("Could not parse or delete old image path:", e);
     }
   }
-  return null;
-}
 
-async function optimizeAndUpload(supabaseAdmin: SupabaseClient, imageBlob: Blob, id: string, source: string) {
-  const image = await Image.decode(await imageBlob.arrayBuffer());
-
-  // Подгоняем изображение под 1024px по большей стороне (contain), чтобы не обрезать
-  const MAX_SIZE = 1024;
-  if (image.width > MAX_SIZE || image.height > MAX_SIZE) {
-    const scale = Math.min(MAX_SIZE / image.width, MAX_SIZE / image.height);
-    image.scale(scale);
-  }
-
-  const optimizedData = await image.encodeJPEG(80);
-
-  const fileName = `${id}_${source}_${Date.now()}.jpg`;
-
+  // 4. Upload new image to Supabase Storage
+  const filePath = `images/${wordId}_${Date.now()}.jpg`;
   const { error: uploadError } = await supabaseAdmin.storage
     .from(DB_BUCKETS.IMAGES)
-    .upload(fileName, optimizedData, {
-      contentType: "image/jpeg",
-      upsert: true,
-    });
+    .upload(filePath, compressedData, { contentType: "image/jpeg", upsert: true });
 
   if (uploadError) throw uploadError;
 
-  const {
-    data: { publicUrl },
-  } = supabaseAdmin.storage.from(DB_BUCKETS.IMAGES).getPublicUrl(fileName);
+  // 5. Get public URL of the newly uploaded file
+  const { data: { publicUrl } } = supabaseAdmin.storage
+    .from(DB_BUCKETS.IMAGES)
+    .getPublicUrl(filePath);
 
-  return `${publicUrl}?t=${Date.now()}`;
+  // 6. Update the vocabulary table with the new image URL and source
+  const { error: dbError } = await supabaseAdmin
+    .from(DB_TABLES.VOCABULARY)
+    .update({ image: publicUrl, image_source: source })
+    .eq('id', wordId);
+  
+  if (dbError) throw dbError;
+
+  return { finalUrl: publicUrl, source };
 }
 
-serve(async (req: Request): Promise<Response> => {
-  // Handle CORS preflight requests
+serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
   }
 
   try {
-    const { mode, id, word, translation, selectedUrl, source } =
-       await req.json();
-    
-    const PIXABAY_API_KEY = Deno.env.get("PIXABAY_API_KEY");
-    const UNSPLASH_ACCESS_KEY = Deno.env.get("UNSPLASH_ACCESS_KEY"); // Опционально
-    const PEXELS_API_KEY = Deno.env.get("PEXELS_API_KEY"); // Опционально
-    const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY"); // Опционально
-    const supabaseAdmin = getSupabaseAdmin();
+    const { mode, id, word, translation, selectedUrl, source } = await req.json();
 
-    if (mode === "search") {
-      if (!id) throw new Error("Missing id");
-      const queryRu = cleanQuery(translation);
-      const queryKr = cleanQuery(word);
+    // --- SEARCH MODE ---
+    // User wants to pick a new image. We search all available APIs.
+    if (mode === 'search') {
+      if (!word) throw new Error("Missing 'word' for search mode.");
+      
+      const query = translation || word;
+      const supabaseAdmin = getSupabaseAdmin();
 
-      const searchPromises = [];
-      if (PIXABAY_API_KEY) {
-          searchPromises.push(searchPixabay(PIXABAY_API_KEY, queryRu, "ru"));
-        if (queryKr)
-          searchPromises.push(searchPixabay(PIXABAY_API_KEY, queryKr, "ko"));
-      }
-      if (UNSPLASH_ACCESS_KEY) {
-        if (queryRu)
-          searchPromises.push(searchUnsplash(UNSPLASH_ACCESS_KEY, queryRu));
-        if (queryKr)
-          searchPromises.push(searchUnsplash(UNSPLASH_ACCESS_KEY, queryKr));
-      }
-      if (PEXELS_API_KEY) {
-        if (queryRu)
-          searchPromises.push(searchPexels(PEXELS_API_KEY, queryRu, "ru-RU"));
-        if (queryKr)
-          searchPromises.push(searchPexels(PEXELS_API_KEY, queryKr, "ko-KR"));
-      }
+      // --- Caching Logic ---
+      const cacheKey = `image-search:${query}`;
+      try {
+        const { data: cachedData, error: cacheError } = await supabaseAdmin
+          .from(DB_TABLES.AI_CACHE)
+          .select('response_data')
+          .eq('cache_key', cacheKey)
+          .gt('expires_at', new Date().toISOString())
+          .maybeSingle();
 
-      const results = await Promise.allSettled(searchPromises);
-      const allImages = results
-        .filter((r): r is PromiseFulfilledResult<{ url: string; source: string }[]> => r.status === "fulfilled" && Array.isArray(r.value))
-        .flatMap((r) => r.value);
+        if (cacheError) throw cacheError;
 
-      // Убираем дубликаты по URL
-      const uniqueImages = Array.from(
-        new Map(allImages.map((item) => [item.url, item])).values(),
-      );
-
-      // Перемешиваем для разнообразия
-      uniqueImages.sort(() => Math.random() - 0.5);
-
-      return new Response(JSON.stringify({ images: uniqueImages }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-        status: 200,
-      });
-    } else if (mode === "finalize") {
-      if (!id || !selectedUrl || !source)
-        throw new Error("Missing parameters for finalize");
-
-      const imageRes = await fetch(selectedUrl);
-      if (!imageRes.ok) throw new Error("Failed to download image from source");
-      const imageBlob = await imageRes.blob();
-
-      const finalUrl = await optimizeAndUpload(
-        supabaseAdmin,
-        imageBlob,
-        id,
-        source,
-      );
-
-      return new Response(JSON.stringify({ finalUrl, source }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-        status: 200,
-      });
-    } else if (mode === "auto") {
-      // АВТОМАТИЧЕСКИЙ РЕЖИМ (для Python-воркера)
-      if (!id) throw new Error("Missing id");
-
-      const queryRu = cleanQuery(translation);
-      const queryKr = cleanQuery(word);
-
-      let selectedImage = null;
-
-      // 1. Pixabay
-      if (!selectedImage && PIXABAY_API_KEY) {
-        let results: ImageResult[] = [];
-        if (queryRu)
-          results = await searchPixabay(PIXABAY_API_KEY, queryRu, "ru");
-        if (results.length === 0 && queryKr)
-          results = await searchPixabay(PIXABAY_API_KEY, queryKr, "ko");
-        if (results.length > 0)
-          selectedImage = results[Math.floor(Math.random() * results.length)];
-      }
-
-      // 2. Unsplash
-      if (!selectedImage && UNSPLASH_ACCESS_KEY) {
-        let results: ImageResult[] = [];
-        if (queryRu)
-          results = await searchUnsplash(UNSPLASH_ACCESS_KEY, queryRu);
-        if (results.length === 0 && queryKr)
-          results = await searchUnsplash(UNSPLASH_ACCESS_KEY, queryKr);
-        if (results.length > 0)
-          selectedImage = results[Math.floor(Math.random() * results.length)];
-      }
-
-      // 3. Pexels
-      if (!selectedImage && PEXELS_API_KEY) {
-        let results: ImageResult[] = [];
-        if (queryRu)
-          results = await searchPexels(PEXELS_API_KEY, queryRu, "ru-RU");
-        if (results.length === 0 && queryKr)
-          results = await searchPexels(PEXELS_API_KEY, queryKr, "ko-KR");
-        if (results.length > 0)
-          selectedImage = results[Math.floor(Math.random() * results.length)];
-      }
-
-      // 4. Gemini (Fallback)
-      if (!selectedImage && GEMINI_API_KEY) {
-        const prompt = queryRu || queryKr;
-        if (prompt) {
-          const result = await generateImageWithGemini(GEMINI_API_KEY, prompt);
-          if (result) selectedImage = result;
+        if (cachedData?.response_data) {
+          console.log(`✅ Image search cache hit for: ${query}`);
+          return new Response(JSON.stringify({ success: true, images: cachedData.response_data }), {
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
         }
+      } catch (e) { console.warn("Image search cache read error:", (e as Error).message); }
+
+      const pixabayKey = Deno.env.get("PIXABAY_API_KEY");
+      const pexelsKey = Deno.env.get("PEXELS_API_KEY");
+      const unsplashKey = Deno.env.get("UNSPLASH_ACCESS_KEY");
+
+      const results = await Promise.allSettled([
+        pixabayKey ? searchPixabay(query, pixabayKey) : Promise.resolve([]),
+        pexelsKey ? searchPexels(query, pexelsKey) : Promise.resolve([]),
+        unsplashKey ? searchUnsplash(query, unsplashKey) : Promise.resolve([]),
+      ]);
+
+      const images = results
+        .filter(p => p.status === 'fulfilled')
+        .flatMap(p => (p as PromiseFulfilledResult<ImageAPIResult[]>).value);
+      
+      images.sort(() => Math.random() - 0.5); // Shuffle results for variety
+
+      // --- Store successful result in cache ---
+      if (images.length > 0) {
+        try {
+          await supabaseAdmin
+            .from(DB_TABLES.AI_CACHE)
+            .insert({ cache_key: cacheKey, response_data: images });
+          console.log(`- Cache miss. Stored new image search results for: ${query}`);
+        } catch (e) { console.error("Image search cache insert error:", (e as Error).message); }
       }
 
-      if (!selectedImage) {
-        return new Response(JSON.stringify({ error: "No images found" }), {
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-          status: 404,
-        });
-      }
-
-      // Скачиваем и сохраняем
-      const imageRes = await fetch(selectedImage.url);
-      if (!imageRes.ok) throw new Error("Failed to download image");
-      const imageBlob = await imageRes.blob();
-
-      const finalUrl = await optimizeAndUpload(
-        supabaseAdmin,
-        imageBlob,
-        id,
-        selectedImage.source,
-      );
-
-      return new Response(
-        JSON.stringify({ finalUrl, source: selectedImage.source }),
-        {
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-          status: 200,
-        },
-      );
-    } else {
-      throw new Error("Invalid mode specified");
+      return new Response(JSON.stringify({ success: true, images: images.slice(0, 12) }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
+
+    // --- AUTO MODE ---
+    // Background worker wants to automatically assign an image.
+    if (mode === 'auto') {
+        if (!id || !word) throw new Error("Missing 'id' or 'word' for auto mode.");
+        
+        const query = translation || word;
+        let images: ImageAPIResult[] = [];
+
+        // --- Optimization: Try multiple sources for auto-generation ---
+        const pixabayKey = Deno.env.get("PIXABAY_API_KEY");
+        if (pixabayKey) images = await searchPixabay(query, pixabayKey);
+
+        if (images.length === 0) {
+          const pexelsKey = Deno.env.get("PEXELS_API_KEY");
+          if (pexelsKey) images = await searchPexels(query, pexelsKey);
+        }
+
+        if (images.length === 0) {
+          const unsplashKey = Deno.env.get("UNSPLASH_ACCESS_KEY");
+          if (unsplashKey) images = await searchUnsplash(query, unsplashKey);
+        }
+
+        if (images.length === 0) {
+            return new Response(JSON.stringify({ success: true, finalUrl: null, source: null }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
+
+        const randomImage = images[Math.floor(Math.random() * images.length)];
+        const result = await processAndStoreImage(id, randomImage.url, randomImage.source);
+        
+        return new Response(JSON.stringify({ success: true, ...result }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+
+    // --- FINALIZE MODE ---
+    // User has selected an image, or auto mode has picked one.
+    if (mode === 'finalize') {
+        if (!id || !selectedUrl || !source) throw new Error("Missing 'id', 'selectedUrl', or 'source' for finalize mode.");
+        const result = await processAndStoreImage(id, selectedUrl, source);
+        return new Response(JSON.stringify({ success: true, ...result }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+
+    throw new Error("Invalid 'mode' provided to regenerate-image function.");
+
   } catch (error: unknown) {
     return createErrorResponse(error);
   }

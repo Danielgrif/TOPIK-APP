@@ -1,216 +1,186 @@
-// supabase/functions/check-essay/index.ts
 import { serve } from "std/http/server.ts";
-import { corsHeaders, GEMINI_MODELS } from "shared/constants.ts";
-import { selectBestModel } from "shared/gemini.ts";
-import { getGeminiClient } from "shared/clients.ts";
+import { corsHeaders, DB_TABLES, GEMINI_MODELS } from "shared/constants.ts";
+import { getGeminiClient, getSupabaseAdmin } from "shared/clients.ts";
 import { createErrorResponse } from "shared/utils.ts";
+import { SchemaType } from "@google/generative-ai";
 
-declare const Deno: {
-  env: {
-    get(key: string): string | undefined;
-  };
-};
+/**
+ * Builds a detailed, task-specific prompt for the Gemini API to evaluate a TOPIK essay.
+ * @param taskType The TOPIK question number (e.g., "51", "54").
+ * @param question The context or question for the essay.
+ * @param answer The student's written answer.
+ * @returns A detailed prompt string.
+ */
+function buildEssayPrompt(taskType: string, question: string, answer: string): string {
+  let taskSpecificInstructions = "";
 
-serve(async (req: Request): Promise<Response> => {
+  switch (taskType) {
+    case "51":
+      taskSpecificInstructions = `
+        - This is a practical writing task (e.g., email, notice).
+        - The user is filling in blanks (ㄱ) and (ㄴ).
+        - Evaluate the answer based on politeness level (usually -(스)ㅂ니다), contextual fit, and grammatical accuracy.
+        - The 'question' field contains the context text.
+      `;
+      break;
+    case "52":
+      taskSpecificInstructions = `
+        - This is a short descriptive task explaining a phenomenon.
+        - The user is completing sentences based on the provided context.
+        - Evaluate logical connection, coherence, and use of appropriate written-style grammar (e.g., -(ㄴ/는)다).
+        - The 'question' field contains the context text.
+      `;
+      break;
+    case "53":
+      taskSpecificInstructions = `
+        - This is a data description task (graph, chart). Length should be 200-300 characters.
+        - The 'question' field describes the data to be summarized.
+        - Evaluate the answer for:
+          1. Accurate representation of the main trends and data points.
+          2. Correct use of vocabulary for trends (e.g., 증가하다, 감소하다, 차지하다).
+          3. Logical structure (introduction, body, conclusion/summary).
+          4. Adherence to the character count.
+      `;
+      break;
+    case "54":
+      taskSpecificInstructions = `
+        - This is a formal argumentative essay. Length should be 600-700 characters.
+        - The 'question' field contains the essay prompt.
+        - Evaluate the answer for:
+          1. Clear structure (introduction, body paragraphs with arguments, conclusion).
+          2. Logical and persuasive arguments that directly address the prompt.
+          3. Use of advanced vocabulary and complex grammar.
+          4. Overall coherence and task fulfillment.
+      `;
+      break;
+    default:
+      taskSpecificInstructions = "- Evaluate for general grammatical correctness and natural phrasing.";
+  }
+
+  return `You are an expert TOPIK writing examiner grading an essay written by a Russian-speaking student.
+
+### Task Details
+- **Task Type:** TOPIK II, Question ${taskType}
+- **Task-Specific Rules:**
+${taskSpecificInstructions}
+
+### Student's Submission
+- **Question/Context:** "${question}"
+- **Student's Answer:** "${answer}"
+
+### Your Instructions
+1.  **Grade the essay** on a scale of 0 to 10, where 10 is a perfect native-level response.
+2.  **Provide overall feedback** in Russian. Be encouraging but clear about areas for improvement.
+3.  **Identify specific errors.** For each error, provide the original phrase, the corrected version, and a brief explanation in Russian.
+4.  **Suggest an improved version** of the student's entire answer, demonstrating a more natural and advanced writing style.
+5.  **Return your entire evaluation as a single, valid JSON object.** Do not use Markdown formatting.
+
+### JSON Output Schema
+{
+  "score": number (0-10),
+  "feedback": "string (Overall feedback in Russian)",
+  "corrections": [
+    {
+      "original": "string (The incorrect phrase from the student's answer)",
+      "corrected": "string (The corrected phrase)",
+      "reason": "string (A brief explanation of the error in Russian)"
+    }
+  ],
+  "improved_version": "string (A full, improved version of the answer)"
+}
+`;
+}
+
+serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
   }
 
   try {
-    console.log("📥 Request:", req.method, new URL(req.url).pathname);
-
-    if (req.method !== "POST") {
-      return createErrorResponse("Method Not Allowed. Use POST.", 405);
+    const { taskType, question, answer } = await req.json();
+    if (!taskType || !answer) {
+      return createErrorResponse("Missing 'taskType' or 'answer' in request body", 400);
     }
 
-    // Parse Request Body с улучшенной обработкой
-    const rawBody = await req.text();
-    console.log("📦 Raw request body:", rawBody);
+    const supabaseAdmin = getSupabaseAdmin();
 
-    interface RequestBody {
-      taskType?: string;
-      question?: string;
-      answer?: string;
-    }
-    
-    let body: RequestBody;
+    // --- Caching Logic ---
+    // Create a hash for the cache key to handle long inputs securely and efficiently.
+    const cacheKeySource = `check-essay:${taskType}:${question}:${answer}`;
+    const cacheKeyBuffer = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(cacheKeySource));
+    const cacheKey = Array.from(new Uint8Array(cacheKeyBuffer)).map(b => b.toString(16).padStart(2, '0')).join('');
+
     try {
-      body = JSON.parse(rawBody);
-    } catch (e) {
-      console.error("❌ JSON parse error:", e);
-      body = {};
-    }
-    
-    const taskType = body.taskType as string | undefined;
-    const question = body.question as string | undefined;
-    const answer = body.answer as string | undefined;
-    
-    if (!taskType || !question || !answer) {
-      return createErrorResponse("Missing required fields: taskType, question, answer", 400);
-    }
+      const { data: cachedData, error: cacheError } = await supabaseAdmin
+        .from(DB_TABLES.AI_CACHE)
+        .select('response_data')
+        .eq('cache_key', cacheKey)
+        .gt('expires_at', new Date().toISOString())
+        .maybeSingle();
 
-    // Инициализация новой google-genai библиотеки
-    console.log("🤖 Инициализация GoogleGenAI для проверки эссе...");
-    const genai = getGeminiClient();
-    
-    // Проверка доступных моделей и выбор лучшей для эссе
-    const preferredModels = [GEMINI_MODELS.PRO_1_5, GEMINI_MODELS.FLASH, GEMINI_MODELS.PRO];
-    const selectedModel = await selectBestModel(genai, preferredModels, GEMINI_MODELS.FLASH);
-    console.log("🎯 Используем модель для эссе:", selectedModel);
+      if (cacheError) throw cacheError;
 
-    // Создание модели с оптимальными настройками для проверки эссе
-    const model = genai.getGenerativeModel({ 
-      model: selectedModel,
-      generationConfig: {
-        temperature: 0.1,  // Низкая креативность для объективной оценки
-        topK: 40,
-        topP: 0.8,
-        maxOutputTokens: 4096,  // Больше токенов для детального анализа
+      if (cachedData) {
+        console.log(`✅ Cache hit for essay check.`);
+        return new Response(JSON.stringify({ success: true, ...cachedData.response_data }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
       }
+    } catch (e) {
+      console.warn("Cache read error (will proceed without cache):", (e as Error).message);
+    }
+
+    const genAI = getGeminiClient();
+    const model = genAI.getGenerativeModel({
+      model: GEMINI_MODELS.PRO_1_5,
+      generationConfig: {
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: SchemaType.OBJECT,
+          properties: {
+            score: { type: SchemaType.NUMBER },
+            feedback: { type: SchemaType.STRING },
+            corrections: {
+              type: SchemaType.ARRAY,
+              items: {
+                type: SchemaType.OBJECT,
+                properties: {
+                  original: { type: SchemaType.STRING },
+                  corrected: { type: SchemaType.STRING },
+                  reason: { type: SchemaType.STRING },
+                },
+                required: ["original", "corrected", "reason"],
+              },
+            },
+            improved_version: { type: SchemaType.STRING },
+          },
+          required: ["score", "feedback", "corrections", "improved_version"],
+        },
+      },
     });
 
-    // ЕДИНЫЙ подробный промпт для всех типов заданий TOPIK II Writing
-    let prompt = "";
-    switch (taskType) {
-      case "51":
-        prompt = `Ты строгий экзаменатор TOPIK II Writing Task 51 (Practical Writing). Оцени по критериям:
-- Контекстная уместность (использование honorifics, вежливости)
-- Грамматическая правильность
-- Релевантность содержания к заданию
-- Лексическая точность
-
-Вопрос: ${question}
-Ответ ученика (максимум 100 символов): ${answer}
-
-ВЕРНИ ТОЛЬКО ВАЛИДНЫЙ JSON БЕЗ МАРКДАУНА:
-{
-  "score": "X/10",
-  "feedback": "Краткий отзыв на русском (макс 100 символов)",
-  "corrections": [
-    {"original": "оригинальный текст", "corrected": "исправленный текст", "reason": "причина на русском"}
-  ],
-  "improved_version": "Полная улучшенная версия ответа (100 символов)"
-}`;
-        break;
-
-      case "52":
-        prompt = `Ты строгий экзаменатор TOPIK II Writing Task 52 (Explanatory Writing). Оцени по критериям:
-- Логический поток объяснения
-- Грамматика письменного стиля
-- Богатство словаря
-- Соответствие объёму
-
-Вопрос: ${question}
-Ответ ученика: ${answer}
-
-ВЕРНИ ТОЛЬКО ВАЛИДНЫЙ JSON БЕЗ МАРКДАУНА:
-{
-  "score": "X/10", 
-  "feedback": "Краткий отзыв на русском (макс 100 символов)",
-  "corrections": [
-    {"original": "оригинальный текст", "corrected": "исправленный текст", "reason": "причина на русском"}
-  ],
-  "improved_version": "Полная улучшенная версия ответа"
-}`;
-        break;
-
-      case "53":
-        prompt = `Ты строгий экзаменатор TOPIK II Writing Task 53 (Data Analysis). Оцени по критериям:
-- Точное описание данных из графика/таблицы
-- Сравнения и контрасты
-- Использование соединителей предложений
-- Объём 200-300 символов
-
-Данные: ${question}
-Ответ ученика: ${answer}
-
-ВЕРНИ ТОЛЬКО ВАЛИДНЫЙ JSON БЕЗ МАРКДАУНА:
-{
-  "score": "X/30",
-  "feedback": "Краткий отзыв на русском (макс 120 символов)", 
-  "corrections": [
-    {"original": "оригинальный текст", "corrected": "исправленный текст", "reason": "причина на русском"}
-  ],
-  "improved_version": "Полная улучшенная версия анализа данных"
-}`;
-        break;
-
-      case "54":
-        prompt = `Ты строгий экзаменатор TOPIK II Writing Task 54 (Argumentative Essay). Оцени по критериям:
-- Ясность тезиса и аргументации
-- Логическая структура (введение-развитие-заключение)
-- Продвинутый словарь и сложные конструкции
-- Объём 600-700 символов
-
-Тема: ${question}
-Ответ ученика: ${answer}
-
-ВЕРНИ ТОЛЬКО ВАЛИДНЫЙ JSON БЕЗ МАРКДАУНА:
-{
-  "score": "X/50",
-  "feedback": "Подробный отзыв на русском (макс 150 символов)",
-  "corrections": [
-    {"original": "оригинальный текст", "corrected": "исправленный текст", "reason": "причина на русском"}
-  ],
-  "improved_version": "Полная улучшенная версия эссе"
-}`;
-        break;
-
-      default:
-        throw new Error(`Invalid taskType: ${taskType}. Use 51-54`);
-    }
-
-    console.log("✨ Отправляем промпт проверки эссе в модель...");
-
-    // Generate Content с новой google-genai библиотекой
+    const prompt = buildEssayPrompt(taskType, question, answer);
     const result = await model.generateContent(prompt);
-    let text = await result.response.text();
+    const response = await result.response;
+    const responseText = response.text();
+    const data = JSON.parse(responseText);
 
-    console.log("📄 Получен ответ от AI (длина:", text.length, "символов)");
-    interface EssayResult {
-      score: string;
-      feedback: string;
-      corrections: { original: string; corrected: string; reason: string; }[];
-      improved_version: string;
-    }
-    
-    // Улучшенная очистка JSON
-    const jsonMatch = text.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
-    if (jsonMatch && jsonMatch[1]) {
-      text = jsonMatch[1];
-    }
-
-    // Удаляем висящие запятые
-    text = text.replace(/,\s*([}\]])/g, "$1").trim();
-
-    let data: EssayResult;
-    try {
-      data = JSON.parse(text);
-            console.log("✅ JSON успешно распарсен для задания:", taskType);
-    } catch (_parseError) {
-      console.error("❌ JSON Parse Error. Raw response (500 chars):", text.substring(0, 500));
-
-      return createErrorResponse(
-        { message: "AI response is not valid JSON", rawResponse: text.substring(0, 1000) }, 502
-      );
-    }
-
-    console.log("✅ Success for task:", taskType, "| Score:", data.score);
-
-    return new Response(
-      JSON.stringify({ 
-        success: true, 
-        ...data,
-        taskType,
-        modelUsed: selectedModel,
-        timestamp: new Date().toISOString()
-      }),
-      {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+    // --- Store the successful result in the cache ---
+    if (data) {
+      try {
+        await supabaseAdmin
+          .from(DB_TABLES.AI_CACHE)
+          .insert({ cache_key: cacheKey, response_data: data });
+        console.log(`- Cache miss. Stored new essay evaluation.`);
+      } catch (e) {
+        console.error("Cache insert error:", (e as Error).message);
       }
-    );
+    }
 
-  } catch (error: Error | unknown) {
+    return new Response(JSON.stringify({ success: true, ...data }), {
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  } catch (error: unknown) {
     return createErrorResponse(error);
   }
 });

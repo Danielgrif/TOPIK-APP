@@ -13,6 +13,7 @@ export function createErrorResponse(error: unknown, status = 500): Response {
   } else if (typeof error === "object" && error !== null) {
     // Instead of spreading, nest the object to prevent crashes on circular references
     // and to keep a predictable error structure.
+    // and to keep a predictable error structure. 
     errorPayload = {
       error: "An object was thrown. See details.",
       details: error,
@@ -21,7 +22,7 @@ export function createErrorResponse(error: unknown, status = 500): Response {
     errorPayload = { error: String(error) };
   }
 
-  console.error(`💥 Function Error (${status}):`, errorPayload);
+  console.error(`💥 Function Error (${status}):`, errorPayload, error); // Добавлено полное логирование ошибки
 
   // Свойства `success` и `timestamp` размещены последними, чтобы гарантировать,
   // что они не будут перезаписаны объектом ошибки.

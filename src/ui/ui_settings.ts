@@ -332,8 +332,15 @@ export function setVoice(voice: string) {
   updateSettingsTimestamp();
   scheduleSaveState();
 
-  // Проигрываем тестовый пример
-  speak("안녕하세요", null);
+  // Проигрываем тестовый пример, используя соответствующий аудиофайл
+  const sampleWord = state.dataStore.find(
+    (w) => w.word_kr === "안녕하세요" && w.audio_url && w.audio_male,
+  );
+  let sampleUrl = null;
+  if (sampleWord) {
+    sampleUrl = voice === "male" ? sampleWord.audio_male : sampleWord.audio_url;
+  }
+  speak("안녕하세요", sampleUrl); // Передаем URL, если он найден, иначе TTS
   document.dispatchEvent(new CustomEvent("state-changed"));
 }
 

@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { DB_BUCKETS, FUNCTION_NAMES } from "./constants.ts";
+import { DB_BUCKETS } from "./constants.ts";
+import { generateSpeech } from "./tts.ts";
 
 /**
  * Generates an audio file from text, uploads it to storage, and returns the public URL.
@@ -17,18 +18,17 @@ export async function createAudioFile(
   filePath: string,
 ) {
   try {
-    // 1. Generate audio by invoking the dedicated function.
-    const { data: audioData, error: audioError } = await supabaseAdmin.functions.invoke(
-      FUNCTION_NAMES.GENERATE_AUDIO,
-      { body: { text, voice } },
-    );
+    // 1. Generate audio directly using the shared helper function.
+    const audioBuffer = await generateSpeech(text, voice);
 
-    if (audioError) {
-      throw new Error(`Audio generation failed for text "${text}": ${audioError.message}`);
+    if (!audioBuffer || audioBuffer.byteLength < 500) {
+      throw new Error(
+        `Generated audio is too small (${audioBuffer?.byteLength} bytes). The TTS service might have failed silently.`,
+      );
     }
-    if (!(audioData instanceof Blob)) {
-      throw new Error(`Expected audio data to be a Blob, but got ${typeof audioData}`);
-    }
+
+    // Convert ArrayBuffer to Blob for uploading
+    const audioData = new Blob([audioBuffer], { type: "audio/mpeg" });
 
     // 2. Upload audio to storage.
     const { error: uploadError } = await supabaseAdmin.storage
