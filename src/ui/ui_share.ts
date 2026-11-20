@@ -34,13 +34,7 @@ export async function shareStats(themeOverride?: string) {
   ctx.fillStyle = gradient;
   ctx.fillRect(0, 0, width, height);
 
-  const drawRoundRect = (
-    x: number,
-    y: number,
-    w: number,
-    h: number,
-    r: number,
-  ) => {
+  const drawRoundRect = (x: number, y: number, w: number, h: number, r: number) => {
     if (ctx.roundRect) {
       ctx.beginPath();
       ctx.roundRect(x, y, w, h, r);
@@ -103,11 +97,7 @@ export async function shareStats(themeOverride?: string) {
 
   ctx.font = "28px sans-serif";
   ctx.fillStyle = "rgba(255, 255, 255, 0.9)";
-  ctx.fillText(
-    `${state.userStats.xp} / ${nextLevelXP} XP`,
-    centerX,
-    centerY + 230,
-  );
+  ctx.fillText(`${state.userStats.xp} / ${nextLevelXP} XP`, centerX, centerY + 230);
 
   const stats = [
     { label: "СЕРИЯ", value: state.streak.count, icon: "🔥" },
@@ -155,19 +145,13 @@ export async function shareStats(themeOverride?: string) {
   ctx.fillText("topik-master.app", width / 2, height - 40);
 
   try {
-    const blob = await new Promise<Blob | null>((resolve) =>
-      canvas.toBlob(resolve, "image/png"),
-    );
+    const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/png"));
     if (!blob) throw new Error("Blob creation failed");
     const file = new File([blob], "topik_stats.png", { type: "image/png" });
     let shared = false;
 
     // Check for Web Share API support
-    if (
-      navigator.share &&
-      navigator.canShare &&
-      navigator.canShare({ files: [file] })
-    ) {
+    if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
       try {
         await navigator.share({
           files: [file],
@@ -176,10 +160,7 @@ export async function shareStats(themeOverride?: string) {
         });
         shared = true;
       } catch (e) {
-        console.warn(
-          "Share API failed/cancelled, falling back to download:",
-          e,
-        );
+        console.warn("Share API failed/cancelled, falling back to download:", e);
       }
     }
 

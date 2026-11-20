@@ -21,7 +21,10 @@ export default tseslint.config(
           varsIgnorePattern: "^_",
         },
       ],
-      "@typescript-eslint/no-explicit-any": "warn",
+      "@typescript-eslint/no-explicit-any": "error",
+      // type-info rules (strict-boolean-expressions, prefer-nullish-coalescing,
+      // prefer-optional-chain, no-floating-promises, return-await) require
+      // parserServices and are intentionally omitted to keep linting simple.
       "no-console": ["warn", { allow: ["warn", "error", "info"] }],
     },
   },

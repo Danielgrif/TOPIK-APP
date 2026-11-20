@@ -45,6 +45,7 @@ export interface Achievement {
 }
 
 export interface UserStats {
+  sprintTimer: number;
   lastFreezeDate: number | null;
   user_id?: string;
   xp: number;
@@ -104,6 +105,7 @@ export interface UserWordProgress {
   sm2_interval?: number;
   sm2_repetitions?: number;
   sm2_ef?: number;
+  sm2_confidence?: "easy" | "medium" | "hard";
   sm2_next_review?: number;
 }
 

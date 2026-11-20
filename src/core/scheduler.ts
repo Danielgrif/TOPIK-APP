@@ -32,8 +32,7 @@ export const Scheduler = {
 
     let effectiveInterval = interval;
     if (lastReviewTime && grade >= 3) {
-      const daysSinceLast =
-        (Date.now() - lastReviewTime) / (1000 * 60 * 60 * 24);
+      const daysSinceLast = (Date.now() - lastReviewTime) / (1000 * 60 * 60 * 24);
       if (daysSinceLast > interval) {
         effectiveInterval = daysSinceLast;
       }

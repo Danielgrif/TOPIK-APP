@@ -20,11 +20,7 @@ declare global {
     installApp?: () => Promise<void>;
     updateSearchIndex?: () => void;
 
-    openConfirm: (
-      message: string,
-      onConfirm: () => void,
-      options?: ConfirmOptions,
-    ) => void;
+    openConfirm: (message: string, onConfirm: () => void, options?: ConfirmOptions) => void;
     closeConfirm: () => void;
     exportProgress: () => void;
     saveAndRender: () => void;
@@ -74,11 +70,7 @@ declare global {
     forceUpdateSW: () => void;
     dismissInstallBanner: () => void;
     deleteList: (listId: string, btn?: HTMLElement) => void;
-    openEditListModal: (
-      listId: string,
-      currentTitle: string,
-      currentIcon: string,
-    ) => void;
+    openEditListModal: (listId: string, currentTitle: string, currentIcon: string) => void;
     setCollectionFilter: (listId: string | null, e?: Event) => void;
     openEditWordModal: (id: string | number, onUpdate?: () => void) => void;
     restoreWord: (id: string | number) => void;

@@ -7,11 +7,7 @@ import {
 } from "workbox-precaching";
 import { clientsClaim } from "workbox-core";
 import { registerRoute, NavigationRoute } from "workbox-routing";
-import {
-  NetworkOnly,
-  CacheFirst,
-  StaleWhileRevalidate,
-} from "workbox-strategies";
+import { NetworkOnly, CacheFirst, StaleWhileRevalidate } from "workbox-strategies";
 import { BackgroundSyncPlugin } from "workbox-background-sync";
 import { ExpirationPlugin } from "workbox-expiration";
 import { CacheableResponsePlugin } from "workbox-cacheable-response";
@@ -88,9 +84,7 @@ registerRoute(
 // Кэширование данных словаря (API Supabase)
 // Используем StaleWhileRevalidate: отдаем кэш сразу, а в фоне обновляем его
 registerRoute(
-  ({ url }) =>
-    url.hostname.includes("supabase.co") &&
-    url.pathname.includes("/vocabulary"),
+  ({ url }) => url.hostname.includes("supabase.co") && url.pathname.includes("/vocabulary"),
   new StaleWhileRevalidate({
     cacheName: "api-vocabulary-cache",
     plugins: [
@@ -109,8 +103,7 @@ registerRoute(
 registerRoute(
   ({ url }) =>
     url.hostname.includes("supabase.co") &&
-    (url.pathname.includes("/user_lists") ||
-      url.pathname.includes("/list_items")),
+    (url.pathname.includes("/user_lists") || url.pathname.includes("/list_items")),
   new StaleWhileRevalidate({
     cacheName: "api-collections-cache",
     plugins: [
@@ -122,8 +115,7 @@ registerRoute(
 
 // Кэширование для цитат
 registerRoute(
-  ({ url }) =>
-    url.hostname.includes("supabase.co") && url.pathname.includes("/quotes"),
+  ({ url }) => url.hostname.includes("supabase.co") && url.pathname.includes("/quotes"),
   new StaleWhileRevalidate({
     cacheName: "api-quotes-cache",
     plugins: [
@@ -140,8 +132,7 @@ const bgSyncPlugin = new BackgroundSyncPlugin("supabase-queue", {
 
 // Перехватываем запросы на изменение данных в Supabase (POST, PUT, PATCH, DELETE)
 registerRoute(
-  ({ url, request }) =>
-    url.hostname.includes("supabase.co") && request.method !== "GET",
+  ({ url, request }) => url.hostname.includes("supabase.co") && request.method !== "GET",
   new NetworkOnly({
     plugins: [bgSyncPlugin],
   }),
@@ -167,9 +158,7 @@ async function performPeriodicSync() {
   try {
     // Эти переменные заменяются Vite во время сборки (см. vite.config.ts)
     if (!SUPABASE_URL || !SUPABASE_URL.startsWith("http")) {
-      console.warn(
-        "[SW] Periodic sync skipped: Supabase URL not configured for Service Worker.",
-      );
+      console.warn("[SW] Periodic sync skipped: Supabase URL not configured for Service Worker.");
       return;
     }
 
@@ -189,9 +178,8 @@ async function performPeriodicSync() {
   }
 }
 
-// Упрощенная и более надежная стратегия для аудио
 registerRoute(
-  ({ request }) => request.destination === "audio",
+  ({ request, url }) => request.destination === "audio" || url.pathname.endsWith(".mp3"),
   new CacheFirst({
     cacheName: AUDIO_CACHE_NAME,
     plugins: [

@@ -32,9 +32,7 @@ export function createLocalBackup() {
     // Предотвращаем ошибку квоты, если данных слишком много (> 3MB)
     // localStorage обычно ограничен 5MB
     if (size > 3 * 1024 * 1024) {
-      console.warn(
-        "⚠️ Backup skipped: Data too large for localStorage duplication.",
-      );
+      console.warn("⚠️ Backup skipped: Data too large for localStorage duplication.");
       return;
     }
 

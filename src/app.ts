@@ -4,6 +4,9 @@ console.log("🚀 App starting...");
 import "./css/style.css";
 import { client } from "./core/supabaseClient.ts";
 import { state } from "./core/state.ts";
+import { syncGlobalStats } from "./core/sync.ts";
+import { initPWA } from "./core/pwa.ts";
+import { setupWindowBindings } from "./core/window_bindings.ts";
 import { injectComponents } from "./ui/component_loader.ts";
 import {
   fetchVocabulary,
@@ -26,22 +29,18 @@ import {
   playAndSpeak,
 } from "./ui/ui.ts";
 import {
-  showUpdateNotification,
   setupGestures,
   setupScrollBehavior,
   saveSearchHistory,
   showSearchHistory,
   hideSearchHistory,
-  showInstallBanner,
   dismissInstallBanner,
 } from "./ui/ui_interactions.ts";
 import {
   toggleFilterPanel,
   populateFilters,
   setupFilterBehavior,
-  handleCategoryChange,
   setTypeFilter,
-  setStarFilter,
   resetFilters,
 } from "./ui/ui_filters.ts";
 import { checkAndShowOnboarding, startOnboarding } from "./ui/ui_onboarding.ts";
@@ -50,17 +49,19 @@ import {
   resetSearchHandler,
   restoreScroll,
   render,
+  toggleFavorite,
 } from "./ui/ui_card.ts";
-import {
-  openModal,
-  closeModal,
-  openConfirm,
-  closeConfirm,
-} from "./ui/ui_modal.ts";
+import { openModal, closeModal, openConfirm, closeConfirm } from "./ui/ui_modal.ts";
+// Эти модули уже статически импортируются component_loader.ts, поэтому
+// динамический импорт здесь лишь создавал предупреждение сборки.
+import { renderFavoriteQuotes } from "./ui/ui_quotes.ts";
+import { openMistakesModal, startMistakeQuiz } from "./ui/ui_mistakes.ts";
+import { openLeaderboard } from "./ui/ui_leaderboard.ts";
+import { openFailedRequestsModal } from "./ui/ui_failed_requests.ts";
+
 const getUiCollections = () => import("./ui/ui_collections.ts");
 const getUiHanja = () => import("./ui/ui_hanja.ts");
 const getUiGrammar = () => import("./ui/ui_grammar.ts");
-const getUiQuotes = () => import("./ui/ui_quotes.ts");
 import {
   toggleHanjaMode,
   setVoice,
@@ -87,6 +88,8 @@ import {
   updateThemePickerUI,
   setTrashRetention,
   setupSystemThemeListener,
+  toggleShowQuizExtraInfo,
+  initSettingsView,
 } from "./ui/ui_settings.ts";
 
 import {
@@ -96,7 +99,6 @@ import {
   handleChangeEmail,
   handleLogout,
   handleDeleteAccount,
-  toggleResetMode,
   togglePasswordVisibility,
   signInWithGoogle,
   updateAuthUI,
@@ -119,6 +121,7 @@ import {
   updateSRSBadge,
   renderDetailedStats,
   renderTopicMastery,
+  renderAchievements,
   processWeeklyResetUI,
 } from "./core/stats.ts";
 import {
@@ -129,54 +132,13 @@ import {
   buildQuizModes,
   handleQuizSummaryContinue,
 } from "./ui/quiz.ts";
-import {
-  canClaimDailyReward,
-  claimDailyReward,
-  openShopModal,
-  switchShopTab,
-  buyItem,
-  applyShopTheme,
-} from "./ui/ui_shop.ts";
-import {
-  setupTrash,
-  restoreWord,
-  permanentlyDeleteWord,
-  emptyTrash,
-} from "./ui/ui_trash.ts";
-import { checkPronunciation } from "./core/speech.ts";
-import { SW_MESSAGES, DB_TABLES } from "./core/constants.ts";
+
+import { setupTrash, restoreWord, permanentlyDeleteWord, emptyTrash } from "./ui/ui_trash.ts";
+import confetti from "canvas-confetti";
+import { DB_TABLES } from "./core/constants.ts";
 import { Quote, User, Word } from "./types/index.ts";
 import type { Session } from "@supabase/supabase-js";
 import { collectionsState } from "./core/collections_data.ts";
-import {
-  createList,
-  saveListChanges,
-  deleteList,
-  openEditListModal,
-  setCollectionFilter,
-  manageMyWords,
-  clearCollectionFilter,
-  editListTitleInline,
-  toggleWordInList,
-  shareList,
-} from "./ui/ui_collections.ts";
-import {
-  openEditWordModal,
-  saveWordChanges,
-  deleteWord,
-} from "./ui/ui_edit_word.ts";
-import {
-  toggleSelectMode,
-  bulkDelete,
-  bulkMoveToTopic,
-  bulkAddToList,
-  selectAll,
-  handleBulkAddToList,
-  createNewListForBulk,
-  bulkRemoveFromList,
-} from "./ui/ui_bulk.ts";
-import { startMistakeQuiz, openMistakesModal } from "./ui/ui_mistakes.ts";
-import { showRequestError } from "./ui/ui_custom_words.ts";
 
 /**
  * Updates the visual sync state in the UI.
@@ -216,8 +178,7 @@ function performWelcomeClose() {
   }
   const wOverlay = document.getElementById("welcome-overlay");
   if (wOverlay) {
-    wOverlay.style.animation =
-      "flyOutUp 0.5s cubic-bezier(0.4, 0, 0.2, 1) forwards";
+    wOverlay.style.animation = "flyOutUp 0.5s cubic-bezier(0.4, 0, 0.2, 1) forwards";
     wOverlay.style.pointerEvents = "none";
     setTimeout(() => {
       wOverlay.classList.remove("active");
@@ -236,9 +197,12 @@ function performWelcomeClose() {
 async function loadPrivateWords(): Promise<boolean> {
   if (!state.dataStore) return false;
 
-  const {
-    data: { user },
-  } = await client.auth.getUser();
+  let user = state.currentUser;
+  if (!user) {
+    const { data } = await client.auth.getUser();
+    user = data.user as unknown as User;
+  }
+
   if (!user) return false;
 
   const { data } = await client
@@ -265,25 +229,18 @@ async function loadPrivateWords(): Promise<boolean> {
 }
 
 // Используем Vite-совместимый импорт воркера
-let searchWorker: Worker;
+let searchWorker: Worker | null = null;
 let currentSearchRequestId = 0;
 try {
-  searchWorker = new Worker(
-    new URL("./workers/searchWorker.ts", import.meta.url),
-    { type: "module" },
-  );
+  searchWorker = new Worker(new URL("./workers/searchWorker.ts", import.meta.url), {
+    type: "module",
+  });
   console.log("✅ Worker initialized");
 } catch (e) {
   console.error("❌ Worker failed to initialize:", e);
 }
 const APP_VERSION = "v56";
 const AI_MODEL_NAME = "Gemini 2.5 Flash";
-
-interface BeforeInstallPromptEvent extends Event {
-  prompt: () => Promise<void>;
-  userChoice: Promise<{ outcome: "accepted" | "dismissed"; platform: string }>;
-}
-let deferredPrompt: BeforeInstallPromptEvent | null = null;
 
 window.onerror = function (msg, url, line, col, error) {
   console.error("🚨 Global Error:", { msg, url, line, col, error });
@@ -303,17 +260,11 @@ function updateBottomNav(target?: string) {
     // Авто-определение активной вкладки по открытому модальному окну
     if (document.getElementById("quiz-modal")?.classList.contains("active"))
       activeTarget = "quiz-modal";
-    else if (
-      document.getElementById("stats-modal")?.classList.contains("active")
-    )
+    else if (document.getElementById("stats-modal")?.classList.contains("active"))
       activeTarget = "stats-modal";
-    else if (
-      document.getElementById("collections-modal")?.classList.contains("active")
-    )
+    else if (document.getElementById("collections-modal")?.classList.contains("active"))
       activeTarget = "open-collections-filter";
-    else if (
-      document.getElementById("review-modal")?.classList.contains("active")
-    )
+    else if (document.getElementById("review-modal")?.classList.contains("active"))
       activeTarget = "open-review";
     else activeTarget = "nav-home";
   }
@@ -334,25 +285,34 @@ function updateBottomNav(target?: string) {
 
 async function measurePing() {
   if (!navigator.onLine) {
-    if (state.networkPing !== null) {
-      state.networkPing = null;
-      updatePingIndicator();
-    }
+    state.networkPing = null;
+    updatePingIndicator();
     return;
   }
+
   try {
     const start = performance.now();
     // @ts-expect-error - supabaseUrl is protected but we need it for ping check
     const baseUrl = client.supabaseUrl;
+    // @ts-expect-error - supabaseKey is protected but we need it for ping check
+    const apiKey = client.supabaseKey;
     if (!baseUrl) throw new Error("No URL");
+
+    // Ping the PostgREST root — returns OpenAPI spec, works for anon without RLS
     const apiUrl = `${baseUrl}/rest/v1/`;
-    await fetch(apiUrl, { method: "HEAD", mode: "cors", cache: "no-store" });
-    const duration = Math.round(performance.now() - start);
-    state.networkPing = duration;
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  } catch (e) {
-    state.networkPing = null; // Set to null on error
+
+    await fetch(apiUrl, {
+      method: "HEAD",
+      mode: "cors",
+      cache: "no-store",
+      headers: apiKey ? { apikey: apiKey } : {},
+    });
+
+    state.networkPing = Math.round(performance.now() - start);
+  } catch {
+    state.networkPing = null;
   }
+
   updatePingIndicator();
 }
 
@@ -415,12 +375,15 @@ function setupGlobalListeners() {
         openModal(modalId);
         updateBottomNav(modalId);
         if (modalId === "quotes-modal") {
-          getUiQuotes().then((m) => m.renderFavoriteQuotes());
+          renderFavoriteQuotes();
         }
         // FIX: Render stats when modal opens
         if (modalId === "stats-modal") {
           renderDetailedStats();
           updateThemePickerUI(); // Обновляем кнопки тем в статистике
+        }
+        if (modalId === "achievements-modal") {
+          renderAchievements();
         }
       }
       return;
@@ -460,9 +423,7 @@ function setupGlobalListeners() {
         case "toggle-favorite":
           if (value) {
             // Lazy load the module that contains toggleFavorite logic
-            import("./ui/ui_card.ts").then((m) =>
-              m.toggleFavorite(value, actionTrigger as HTMLElement),
-            );
+            toggleFavorite(value, actionTrigger as HTMLElement);
           }
           break;
         case "toggle-auth-mode":
@@ -508,9 +469,7 @@ function setupGlobalListeners() {
           });
           updateBottomNav("nav-home");
           // Сбрасываем фильтр коллекции при переходе на главную
-          import("./ui/ui_collections.ts").then((m) =>
-            m.setCollectionFilter(null),
-          );
+          import("./ui/ui_collections.ts").then((m) => m.setCollectionFilter(null));
           break;
         case "toggle-focus":
           toggleFocusMode();
@@ -543,8 +502,7 @@ function setupGlobalListeners() {
             const container = document.getElementById("level-filters");
             if (container) {
               container.querySelectorAll(".filter-chip").forEach((btn) => {
-                if (btn.getAttribute("data-value") === value)
-                  btn.classList.add("active");
+                if (btn.getAttribute("data-value") === value) btn.classList.add("active");
                 else btn.classList.remove("active");
               });
             }
@@ -571,7 +529,7 @@ function setupGlobalListeners() {
           updateBottomNav("open-review");
           break;
         case "open-shop":
-          openShopModal();
+          import("./ui/ui_shop.ts").then((m) => m.openShopModal());
           break;
         case "open-profile":
           openProfileModal();
@@ -584,15 +542,9 @@ function setupGlobalListeners() {
           if (value) setAccentColor(value);
           break;
         case "share-stats": {
-          const activeColorBtn = document.querySelector(
-            "#stats-theme-picker .active",
-          );
-          const color = activeColorBtn
-            ? activeColorBtn.getAttribute("data-value")
-            : "purple";
-          import("./ui/ui_share.ts").then((m) =>
-            m.shareStats(color ?? undefined),
-          );
+          const activeColorBtn = document.querySelector("#stats-theme-picker .active");
+          const color = activeColorBtn ? activeColorBtn.getAttribute("data-value") : "purple";
+          import("./ui/ui_share.ts").then((m) => m.shareStats(color ?? undefined));
           break;
         }
         case "install-app":
@@ -602,9 +554,7 @@ function setupGlobalListeners() {
           dismissInstallBanner();
           break;
         case "close-level-up":
-          document
-            .getElementById("level-up-overlay")
-            ?.classList.remove("active");
+          document.getElementById("level-up-overlay")?.classList.remove("active");
           break;
         case "close-welcome":
           performWelcomeClose();
@@ -612,19 +562,13 @@ function setupGlobalListeners() {
         case "submit-word-request":
           import("./ui/ui_custom_words.ts")
             .then((m) => m.submitWordRequest())
-            .catch((e) =>
-              console.error("❌ Failed to load submitWordRequest:", e),
-            );
+            .catch((e) => console.error("❌ Failed to load submitWordRequest:", e));
           break;
         case "open-add-word-modal":
-          import("./ui/ui_custom_words.ts").then((m) =>
-            m.setupAddWordPreview(),
-          );
+          import("./ui/ui_custom_words.ts").then((m) => m.setupAddWordPreview());
           openModal("add-word-modal");
           if (value) {
-            const select = document.getElementById(
-              "new-word-target-list",
-            ) as HTMLSelectElement;
+            const select = document.getElementById("new-word-target-list") as HTMLSelectElement;
             if (select) select.value = value;
           }
           break;
@@ -641,9 +585,7 @@ function setupGlobalListeners() {
               const isFav = state.favoriteQuotes.some((q) => q.id === quoteId);
 
               if (isFav) {
-                state.favoriteQuotes = state.favoriteQuotes.filter(
-                  (q) => q.id !== quoteId,
-                );
+                state.favoriteQuotes = state.favoriteQuotes.filter((q) => q.id !== quoteId);
                 actionTrigger.textContent = "🤍";
                 actionTrigger.classList.remove("active");
                 showToast("Цитата удалена из избранного");
@@ -699,21 +641,11 @@ function setupGlobalListeners() {
           break;
         case "open-leaderboard":
           console.log("🏆 Opening leaderboard...");
-          import("./ui/ui_leaderboard.ts")
-            .then((m) => m.openLeaderboard())
-            .catch((e) => {
-              console.error("Failed to load leaderboard module:", e);
-              showToast(
-                "❌ Ошибка загрузки таблицы лидеров. Проверьте интернет.",
-              );
-            });
+          openLeaderboard();
           break;
         case "close-confirm":
           // То же самое исправление для окна подтверждения
-          if (
-            actionTrigger.classList.contains("modal") &&
-            target !== actionTrigger
-          ) {
+          if (actionTrigger.classList.contains("modal") && target !== actionTrigger) {
             break;
           }
           closeConfirm();
@@ -728,40 +660,38 @@ function setupGlobalListeners() {
           startOnboarding();
           break;
         case "create-list":
-          createList();
+          import("./ui/ui_collections.ts").then((m) => m.createList());
           break;
         case "save-list-changes":
-          saveListChanges();
+          import("./ui/ui_collections.ts").then((m) => m.saveListChanges());
           break;
         case "save-word-changes":
-          saveWordChanges();
+          import("./ui/ui_edit_word.ts").then((m) => m.saveWordChanges());
           break;
         case "delete-word":
-          deleteWord();
+          import("./ui/ui_edit_word.ts").then((m) => m.deleteWord());
           break;
         case "open-collections-filter":
           openModal("collections-modal");
           updateBottomNav("open-collections-filter");
           break;
         case "open-failed-requests":
-          import("./ui/ui_failed_requests.ts").then((m) =>
-            m.openFailedRequestsModal(),
-          );
+          openFailedRequestsModal();
           break;
         case "toggle-select-mode":
-          toggleSelectMode();
+          import("./ui/ui_bulk.ts").then((m) => m.toggleSelectMode());
           break;
         case "bulk-delete":
-          bulkDelete();
+          import("./ui/ui_bulk.ts").then((m) => m.bulkDelete());
           break;
         case "bulk-move":
-          bulkMoveToTopic();
+          import("./ui/ui_bulk.ts").then((m) => m.bulkMoveToTopic());
           break;
         case "bulk-list":
-          bulkAddToList();
+          import("./ui/ui_bulk.ts").then((m) => m.bulkAddToList());
           break;
         case "bulk-select-all":
-          selectAll();
+          import("./ui/ui_bulk.ts").then((m) => m.selectAll());
           break;
         case "set-trash-retention":
           if (value) setTrashRetention(value);
@@ -773,16 +703,20 @@ function setupGlobalListeners() {
           resetSearchHandler();
           break;
         case "switch-shop-tab":
-          if (value) switchShopTab(value);
+          if (value) import("./ui/ui_shop.ts").then((m) => m.switchShopTab(value));
           break;
         case "delete-list":
-          if (value) deleteList(value, actionTrigger as HTMLElement);
+          if (value)
+            import("./ui/ui_collections.ts").then((m) =>
+              m.deleteList(value, actionTrigger as HTMLElement),
+            );
           break;
         case "edit-list":
           {
             const title = actionTrigger.getAttribute("data-title") || "";
             const icon = actionTrigger.getAttribute("data-icon") || "";
-            if (value) openEditListModal(value, title, icon);
+            if (value)
+              import("./ui/ui_collections.ts").then((m) => m.openEditListModal(value, title, icon));
           }
           break;
         case "set-collection-filter":
@@ -793,17 +727,16 @@ function setupGlobalListeners() {
               if (wordsAdded) render(); // Re-render only if new words were added
             });
           }
-          setCollectionFilter(value, e);
+          import("./ui/ui_collections.ts").then((m) => m.setCollectionFilter(value, e));
           break;
         case "edit-word":
-          if (value) openEditWordModal(value, render);
+          if (value) import("./ui/ui_edit_word.ts").then((m) => m.openEditWordModal(value, render));
           break;
         case "restore-word":
           if (value) restoreWord(Number(value));
           break;
         case "delete-word-permanent":
-          if (value)
-            permanentlyDeleteWord(Number(value), actionTrigger as HTMLElement);
+          if (value) permanentlyDeleteWord(Number(value), actionTrigger as HTMLElement);
           break;
         case "remove-from-list":
           if (value) {
@@ -811,23 +744,21 @@ function setupGlobalListeners() {
           }
           break;
         case "bulk-add-to-list-item":
-          if (value) handleBulkAddToList(value);
+          if (value) import("./ui/ui_bulk.ts").then((m) => m.handleBulkAddToList(value));
           break;
         case "bulk-remove-list":
-          bulkRemoveFromList();
+          import("./ui/ui_bulk.ts").then((m) => m.bulkRemoveFromList());
           break;
         case "create-new-list-bulk":
-          createNewListForBulk();
+          import("./ui/ui_bulk.ts").then((m) => m.createNewListForBulk());
           break;
         case "toggle-word-in-list":
           {
             const listId = actionTrigger.getAttribute("data-list-id");
             const wordId = actionTrigger.getAttribute("data-word-id");
             if (listId && wordId) {
-              toggleWordInList(
-                listId,
-                Number(wordId),
-                actionTrigger as HTMLElement,
+              import("./ui/ui_collections.ts").then((m) =>
+                m.toggleWordInList(listId, Number(wordId), actionTrigger as HTMLElement),
               );
             }
           }
@@ -839,36 +770,41 @@ function setupGlobalListeners() {
           handleQuizSummaryContinue();
           break;
         case "claim-reward":
-          claimDailyReward(actionTrigger as HTMLElement);
+          import("./ui/ui_shop.ts").then((m) => m.claimDailyReward(actionTrigger as HTMLElement));
           break;
         case "buy-item":
-          if (value) buyItem(value, actionTrigger as HTMLButtonElement);
+          if (value)
+            import("./ui/ui_shop.ts").then((m) =>
+              m.buyItem(value, actionTrigger as HTMLButtonElement),
+            );
           break;
         case "apply-shop-theme":
-          if (value) applyShopTheme(value);
+          if (value) import("./ui/ui_shop.ts").then((m) => m.applyShopTheme(value));
           break;
         case "manage-my-words":
           // FIX: Подгружаем слова и для менеджера слов
           // Fire and forget, no need to re-render here as manageMyWords will handle it.
           loadPrivateWords();
-          manageMyWords(e);
+          import("./ui/ui_collections.ts").then((m) => m.manageMyWords(e));
           break;
         case "clear-collection-filter":
-          clearCollectionFilter(e);
+          import("./ui/ui_collections.ts").then((m) => m.clearCollectionFilter(e));
           break;
         case "share-list":
-          if (value) shareList(value);
+          if (value) import("./ui/ui_collections.ts").then((m) => m.shareList(value));
           break;
         case "edit-list-title-inline":
           if (value)
-            editListTitleInline(value, actionTrigger as HTMLElement, e);
+            import("./ui/ui_collections.ts").then((m) =>
+              m.editListTitleInline(value, actionTrigger as HTMLElement, e),
+            );
           break;
         case "empty-trash":
           emptyTrash();
           break;
         case "show-request-error": {
           const errorMsg = actionTrigger.getAttribute("data-error") || "";
-          showRequestError(errorMsg);
+          import("./ui/ui_custom_words.ts").then((m) => m.showRequestError(errorMsg));
           break;
         }
         case "speak": {
@@ -888,9 +824,7 @@ function setupGlobalListeners() {
   // Color Preview on Hover
   document.body.addEventListener("mouseover", (e) => {
     const target = e.target as HTMLElement;
-    const trigger = target.closest(
-      '[data-action="set-accent"], [data-action="preview-theme"]',
-    );
+    const trigger = target.closest('[data-action="set-accent"], [data-action="preview-theme"]');
     if (trigger) {
       const val = trigger.getAttribute("data-value");
       if (val) previewAccentColor(val);
@@ -899,13 +833,8 @@ function setupGlobalListeners() {
 
   document.body.addEventListener("mouseout", (e) => {
     const target = e.target as HTMLElement;
-    const trigger = target.closest(
-      '[data-action="set-accent"], [data-action="preview-theme"]',
-    );
-    if (
-      trigger &&
-      (!e.relatedTarget || !trigger.contains(e.relatedTarget as Node))
-    ) {
+    const trigger = target.closest('[data-action="set-accent"], [data-action="preview-theme"]');
+    if (trigger && (!e.relatedTarget || !trigger.contains(e.relatedTarget as Node))) {
       applyAccentColor(); // Revert to saved color
     }
   });
@@ -931,12 +860,12 @@ function setupGlobalListeners() {
     if (action === "toggle-auto-theme") toggleAutoTheme(target);
     if (action === "toggle-hanja") toggleHanjaMode(target);
     if (action === "toggle-music") toggleBackgroundMusic(target);
+    if (action === "toggle-extra-info") toggleShowQuizExtraInfo(target);
     if (action === "toggle-auto-update") {
       toggleAutoUpdate(target);
       if (state.autoUpdate && "serviceWorker" in navigator) {
         navigator.serviceWorker.getRegistration().then((reg) => {
-          if (reg && reg.waiting)
-            reg.waiting.postMessage({ type: "SKIP_WAITING" });
+          if (reg && reg.waiting) reg.waiting.postMessage({ type: "SKIP_WAITING" });
         });
       }
     }
@@ -945,9 +874,7 @@ function setupGlobalListeners() {
   });
 
   // Handle Enter key for creating a new list
-  const newListInput = document.getElementById(
-    "new-list-title",
-  ) as HTMLInputElement;
+  const newListInput = document.getElementById("new-list-title") as HTMLInputElement;
   if (newListInput) {
     newListInput.addEventListener("keydown", (e) => {
       if (e.key === "Enter") {
@@ -967,26 +894,16 @@ function setupGlobalListeners() {
   const validateTextOnly = (e: Event) => {
     const input = e.target as HTMLInputElement;
     // Allow: Letters (EN, RU, KR), Numbers, spaces, hyphens.
-    input.value = input.value.replace(
-      /[^a-zA-Zа-яА-Я가-힣\u3130-\u318F0-9\s-]/g,
-      "",
-    );
+    input.value = input.value.replace(/[^a-zA-Zа-яА-Я가-힣\u3130-\u318F0-9\s-]/g, "");
   };
 
-  [
-    "new-word-topic",
-    "new-word-category",
-    "edit-word-topic",
-    "edit-word-category",
-  ].forEach((id) => {
+  ["new-word-topic", "new-word-category", "edit-word-topic", "edit-word-category"].forEach((id) => {
     const el = document.getElementById(id);
     if (el) el.addEventListener("input", validateTextOnly);
   });
 
   // Handle "Create new list" selection in dropdown
-  const targetListSelect = document.getElementById(
-    "new-word-target-list",
-  ) as HTMLSelectElement;
+  const targetListSelect = document.getElementById("new-word-target-list") as HTMLSelectElement;
   if (targetListSelect) {
     targetListSelect.addEventListener("change", () => {
       if (targetListSelect.value === "create-new-list") {
@@ -1025,18 +942,16 @@ function setupLevelUpObserver() {
 
   const observer = new MutationObserver((mutations) => {
     mutations.forEach((mutation) => {
-      if (
-        mutation.type === "attributes" &&
-        mutation.attributeName === "class"
-      ) {
+      if (mutation.type === "attributes" && mutation.attributeName === "class") {
         if (overlay.classList.contains("active")) {
           // 🎆 Запускаем салют из конфетти
           const duration = 3000;
           const end = Date.now() + duration;
+          const isMobile = window.innerWidth < 768;
 
           (function frame() {
-            window.confetti({
-              particleCount: 4,
+            confetti({
+              particleCount: isMobile ? 2 : 4,
               angle: 60,
               spread: 55,
               origin: {
@@ -1044,10 +959,11 @@ function setupLevelUpObserver() {
                 y: 0,
               },
               colors: ["#6c5ce7", "#00b894", "#ffeaa7", "#ff7675", "#74b9ff"],
+              disableForReducedMotion: true,
               zIndex: 10000,
             });
-            window.confetti({
-              particleCount: 4,
+            confetti({
+              particleCount: isMobile ? 2 : 4,
               angle: 120,
               spread: 55,
               origin: {
@@ -1055,6 +971,7 @@ function setupLevelUpObserver() {
                 y: 0,
               },
               colors: ["#6c5ce7", "#00b894", "#ffeaa7", "#ff7675", "#74b9ff"],
+              disableForReducedMotion: true,
               zIndex: 10000,
             });
 
@@ -1079,8 +996,7 @@ function showWelcomeScreen(user?: User) {
     let name = "Гость";
     if (user) {
       // Если передан объект пользователя, берем имя из метаданных, иначе из email
-      name =
-        user.user_metadata?.full_name || user.email?.split("@")[0] || "Гость";
+      name = user.user_metadata?.full_name || user.email?.split("@")[0] || "Гость";
     }
     welcomeName.textContent = name;
 
@@ -1173,13 +1089,13 @@ function showWelcomeScreen(user?: User) {
         .catch((e) => {
           console.warn("Failed to fetch quote:", e);
         });
-    }
-
-    if (typeof window.confetti === "function") {
-      window.confetti({
-        particleCount: 100,
-        spread: 70,
+    } else {
+      const isMobile = window.innerWidth < 768;
+      confetti({
+        particleCount: isMobile ? 60 : 100,
+        spread: isMobile ? 50 : 70,
         origin: { y: 0.6 },
+        disableForReducedMotion: true,
         zIndex: 20020,
       });
     }
@@ -1220,10 +1136,8 @@ function setupNetworkListeners() {
     // Принудительно восстанавливаем Realtime соединение при появлении сети
     client.realtime.connect();
     updateDbStatus("waking");
-    isDatabaseActive(5000).then((active) =>
-      updateDbStatus(active ? "active" : "error"),
-    );
-    import("./core/sync.ts").then((m) => m.syncGlobalStats());
+    isDatabaseActive(5000).then((active) => updateDbStatus(active ? "active" : "error"));
+    syncGlobalStats();
     // Запускаем синхронизацию сохраненных заявок
     import("./ui/ui_retry.ts").then((m) => m.syncOfflineRequests());
   });
@@ -1321,10 +1235,7 @@ function setupRealtimeUpdates() {
         if (status === "SUBSCRIBED") {
           console.log("✅ Realtime: Подписка на 'public:vocabulary' активна.");
         } else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
-          console.warn(
-            `❌ Realtime: Ошибка канала 'public:vocabulary' (${status})`,
-            err,
-          );
+          console.warn(`❌ Realtime: Ошибка канала 'public:vocabulary' (${status})`, err);
           setTimeout(async () => {
             console.log("🔄 Переподключение 'public:vocabulary'...");
             await client.removeChannel(channel);
@@ -1346,9 +1257,7 @@ function setupRealtimeUpdates() {
           if (newItem && newItem.list_id && newItem.word_id) {
             // Проверяем, есть ли слово в локальном сторе.
             // Если его нет (например, оно приватное и было пропущено в handleNewWord), загружаем его.
-            const wordExists = state.dataStore.some(
-              (w) => w.id === newItem.word_id,
-            );
+            const wordExists = state.dataStore.some((w) => w.id === newItem.word_id);
             if (!wordExists) {
               const { data: wordData, error } = await client
                 .from(DB_TABLES.VOCABULARY)
@@ -1380,9 +1289,7 @@ function setupRealtimeUpdates() {
               if (grid) grid.scrollTop = savedScroll;
             }
             // Обновляем счетчики в меню коллекций
-            import("./ui/ui_collections.ts").then((m) =>
-              m.updateCollectionUI(),
-            );
+            import("./ui/ui_collections.ts").then((m) => m.updateCollectionUI());
           }
         },
       )
@@ -1390,10 +1297,7 @@ function setupRealtimeUpdates() {
         if (status === "SUBSCRIBED") {
           console.log("✅ Realtime: Подписка на 'public:list_items' активна.");
         } else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
-          console.warn(
-            `❌ Realtime: Ошибка канала 'public:list_items' (${status})`,
-            err,
-          );
+          console.warn(`❌ Realtime: Ошибка канала 'public:list_items' (${status})`, err);
           setTimeout(async () => {
             console.log("🔄 Переподключение 'public:list_items'...");
             await client.removeChannel(channel);
@@ -1422,16 +1326,11 @@ async function init() {
   // Это помогает "разбудить" Supabase на бесплатном тарифе, пока грузится UI
   updateDbStatus("waking");
   isDatabaseActive(5000).then((active) => {
-    console.log(
-      active ? "⚡ Database is active" : "💤 Database might be waking up...",
-    );
+    console.log(active ? "⚡ Database is active" : "💤 Database might be waking up...");
     updateDbStatus(active ? "active" : "error");
     if (!active) {
       setTimeout(
-        () =>
-          isDatabaseActive(5000).then((a) =>
-            updateDbStatus(a ? "active" : "error"),
-          ),
+        () => isDatabaseActive(5000).then((a) => updateDbStatus(a ? "active" : "error")),
         5000,
       );
     }
@@ -1443,6 +1342,9 @@ async function init() {
 
   // 1. Вставляем HTML-компоненты (Header, Toolbar, Modals) перед инициализацией UI
   injectComponents();
+
+  // 1.1 Init Settings UI
+  initSettingsView();
 
   // 1.1 Инъекция динамических стилей и элементов
   injectDynamicStyles();
@@ -1540,17 +1442,14 @@ async function init() {
   // 1. Удаленные слова (deleted_at)
   // 2. Приватные слова пользователя (is_public === false) - они не должны быть на главной
   if (state.dataStore) {
-    state.dataStore = state.dataStore.filter(
-      (w) => !w.deleted_at && w.is_public !== false,
-    );
+    state.dataStore = state.dataStore.filter((w) => !w.deleted_at && w.is_public !== false);
   }
 
   if (!state.dataStore || state.dataStore.length === 0) {
     throw new Error("Не удалось загрузить данные. Проверьте интернет.");
   }
 
-  if (searchWorker)
-    searchWorker.postMessage({ type: "SET_DATA", data: state.dataStore });
+  if (searchWorker) searchWorker.postMessage({ type: "SET_DATA", data: state.dataStore });
 
   if (searchWorker)
     searchWorker.onmessage = (e) => {
@@ -1565,35 +1464,33 @@ async function init() {
 
   // FIX: Настраиваем слушатель только для БУДУЩИХ событий (вход/выход).
   // INITIAL_SESSION игнорируем, так как обработаем его явно ниже, чтобы не было "скачка" интерфейса.
-  AuthService.onAuthStateChange(
-    async (event: string, session: Session | null) => {
-      if (event === "INITIAL_SESSION") return;
+  AuthService.onAuthStateChange(async (event: string, session: Session | null) => {
+    if (event === "INITIAL_SESSION") return;
 
-      try {
-        if (session?.user) {
-          updateAuthUI(session.user as unknown as User);
-          if (event === "SIGNED_IN") {
-            cleanAuthUrl();
-            await loadFromSupabase(session.user as unknown as User);
-            applyTheme();
-            updateVoiceUI();
-            saveAndRender();
-            closeModal("login-modal");
-            import("./ui/ui_collections.ts").then((m) => m.loadCollections());
-            showWelcomeScreen(session.user as unknown as User);
-          }
-          if (event === "PASSWORD_RECOVERY") {
-            openProfileModal();
-            showToast("ℹ️ Введите новый пароль");
-          }
-        } else {
-          updateAuthUI(null);
+    try {
+      if (session?.user) {
+        updateAuthUI(session.user as unknown as User);
+        if (event === "SIGNED_IN") {
+          cleanAuthUrl();
+          await loadFromSupabase(session.user as unknown as User);
+          applyTheme();
+          updateVoiceUI();
+          saveAndRender();
+          closeModal("login-modal");
+          import("./ui/ui_collections.ts").then((m) => m.loadCollections());
+          showWelcomeScreen(session.user as unknown as User);
         }
-      } catch (e) {
-        console.error("Auth State Change Error:", e);
+        if (event === "PASSWORD_RECOVERY") {
+          openProfileModal();
+          showToast("ℹ️ Введите новый пароль");
+        }
+      } else {
+        updateAuthUI(null);
       }
-    },
-  );
+    } catch (e) {
+      console.error("Auth State Change Error:", e);
+    }
+  });
 
   // FIX: Явно ждем проверки сессии ПЕРЕД тем, как убрать экран загрузки
   // Используем таймаут и безопасную деструктуризацию, чтобы не зависнуть на прелоадере
@@ -1613,23 +1510,19 @@ async function init() {
     updateAuthUI(session.user as unknown as User);
     cleanAuthUrl();
     try {
+      // OPTIMIZATION: Load profile and collections in parallel to speed up init
       await promiseWithTimeout(
-        loadFromSupabase(session.user as unknown as User),
-        7000, // 7-секундный таймаут на загрузку прогресса
-        new Error(
-          "Загрузка прогресса пользователя заняла слишком много времени",
-        ),
+        Promise.all([
+          loadFromSupabase(session.user as unknown as User),
+          import("./ui/ui_collections.ts").then((m) => m.loadCollections()),
+        ]),
+        10000, // 10s timeout for all user data
+        new Error("Загрузка данных пользователя заняла слишком много времени"),
       );
     } catch (e) {
-      console.error(
-        "Не удалось загрузить прогресс пользователя при инициализации:",
-        e,
-      );
-      showToast(
-        "⚠️ Не удалось загрузить ваш прогресс. Проверьте интернет или войдите заново.",
-      );
+      console.error("Init data load error:", e);
+      showToast("⚠️ Не удалось загрузить часть данных. Проверьте интернет.");
     }
-    import("./ui/ui_collections.ts").then((m) => m.loadCollections());
     showWelcomeScreen(session.user as unknown as User);
   } else {
     updateAuthUI(null);
@@ -1646,9 +1539,11 @@ async function init() {
   updateMusicUI();
   updateVoiceUI();
   applyTheme();
-  if (canClaimDailyReward()) {
-    claimDailyReward(); // Автоматически проверяем и выдаем ежедневную награду
-  }
+  import("./ui/ui_shop.ts").then((m) => {
+    if (m.canClaimDailyReward()) {
+      m.claimDailyReward(); // Автоматически проверяем и выдаем ежедневную награду
+    }
+  });
   checkAutoTheme();
   updateDailyChallengeUI();
   checkSuperChallengeNotification();
@@ -1675,11 +1570,7 @@ async function init() {
   const sharedListId = urlParams.get("share_list");
   if (sharedListId) {
     // Clean URL
-    window.history.replaceState(
-      null,
-      "",
-      window.location.pathname + window.location.hash,
-    );
+    window.history.replaceState(null, "", window.location.pathname + window.location.hash);
 
     setTimeout(async () => {
       const { data: list, error } = await client
@@ -1721,9 +1612,7 @@ async function init() {
   if (verEl)
     verEl.innerHTML = `TOPIK Master ${APP_VERSION} <span style="margin: 0 5px; opacity: 0.5;">|</span> ${AI_MODEL_NAME}`;
 
-  const searchInput = document.getElementById(
-    "searchInput",
-  ) as HTMLInputElement;
+  const searchInput = document.getElementById("searchInput") as HTMLInputElement;
   if (searchInput) {
     searchInput.addEventListener(
       "input",
@@ -1732,19 +1621,19 @@ async function init() {
         if (target) {
           const val = target.value.trim().toLowerCase();
           currentSearchRequestId++; // Увеличиваем ID при каждом новом вводе
-          searchWorker.postMessage({
-            type: "SEARCH",
-            query: val,
-            requestId: currentSearchRequestId,
-          });
+          if (searchWorker) {
+            searchWorker.postMessage({
+              type: "SEARCH",
+              query: val,
+              requestId: currentSearchRequestId,
+            });
+          }
         }
       }, 200) as EventListener,
     );
 
     searchInput.addEventListener("focus", () => showSearchHistory(searchInput));
-    searchInput.addEventListener("blur", () =>
-      setTimeout(hideSearchHistory, 200),
-    );
+    searchInput.addEventListener("blur", () => setTimeout(hideSearchHistory, 200));
     searchInput.addEventListener("keydown", (e) => {
       if (e.key === "Enter") {
         const val = searchInput.value.trim();
@@ -1754,93 +1643,8 @@ async function init() {
     });
   }
 
-  if ("serviceWorker" in navigator && !import.meta.env.DEV) {
-    navigator.serviceWorker
-      .register("/sw.js", {
-        scope: "/",
-      })
-      .then(async (reg) => {
-        if (!navigator.serviceWorker.controller) {
-          showToast("✅ Приложение готово к работе офлайн!");
-        }
-
-        // Register for Periodic Background Sync
-        const registration = reg as ServiceWorkerRegistration & {
-          periodicSync?: {
-            register: (
-              tag: string,
-              options: { minInterval: number },
-            ) => Promise<void>;
-          };
-        };
-        if (registration.periodicSync) {
-          try {
-            await registration.periodicSync.register(SW_MESSAGES.CONTENT_SYNC, {
-              // An interval of 12 hours. The browser will decide the exact frequency.
-              minInterval: 12 * 60 * 60 * 1000,
-            });
-            console.log("✅ Periodic Sync registered for tag: content-sync");
-          } catch (err) {
-            console.error("❌ Periodic Sync registration failed:", err);
-          }
-        } else {
-          console.warn(
-            "Periodic Background Sync is not supported by this browser.",
-          );
-        }
-
-        const handleUpdate = (worker: ServiceWorker) => {
-          if (state.autoUpdate) {
-            worker.postMessage({ type: SW_MESSAGES.SKIP_WAITING });
-          } else {
-            showUpdateNotification(worker);
-          }
-        };
-
-        if (reg.waiting) handleUpdate(reg.waiting);
-
-        reg.addEventListener("updatefound", () => {
-          const newWorker = reg.installing;
-          if (newWorker)
-            newWorker.addEventListener("statechange", () => {
-              if (
-                newWorker.state === "installed" &&
-                navigator.serviceWorker.controller
-              ) {
-                handleUpdate(newWorker);
-              }
-            });
-        });
-      })
-      .catch((err) => console.error("SW Registration Failed:", err));
-
-    let refreshing = false;
-    navigator.serviceWorker.addEventListener("controllerchange", () => {
-      if (refreshing) return;
-      window.location.reload();
-      refreshing = true;
-    });
-
-    // Слушаем сообщения от SW (например, о завершении докачки)
-    navigator.serviceWorker.addEventListener(
-      "message",
-      (event: MessageEvent) => {
-        const data = event.data as { type: string; count: number };
-        if (data && data.type === SW_MESSAGES.DOWNLOAD_QUEUE_COMPLETED) {
-          if (data.count > 0) showToast(`✅ Докачано файлов: ${data.count}`);
-        }
-      },
-    );
-  }
-
-  window.addEventListener("beforeinstallprompt", (e: Event) => {
-    e.preventDefault();
-    deferredPrompt = e as BeforeInstallPromptEvent;
-    const btn = document.getElementById("install-app-btn");
-    if (btn) btn.style.display = "flex";
-
-    showInstallBanner();
-  });
+  // Initialize PWA, Service Worker, and Install Prompt handling
+  initPWA();
 
   // Убираем прелоадер только после того, как всё загрузилось и отрендерилось
   const loader = document.getElementById("loading-overlay");
@@ -1866,13 +1670,8 @@ const handleInitError = (e: Error) => {
   ensureErrorOverlay();
 
   // Автоматическое восстановление при повреждении JSON в localStorage
-  if (
-    e instanceof SyntaxError &&
-    (e.message.includes("JSON") || e.message.includes("token"))
-  ) {
-    console.warn(
-      "⚠️ Обнаружен поврежденный кэш. Очистка localStorage и перезагрузка...",
-    );
+  if (e instanceof SyntaxError && (e.message.includes("JSON") || e.message.includes("token"))) {
+    console.warn("⚠️ Обнаружен поврежденный кэш. Очистка localStorage и перезагрузка...");
     localStorage.clear();
     setTimeout(() => location.reload(), 500);
     return;
@@ -1911,118 +1710,5 @@ if (document.readyState === "loading") {
   }
 }
 
-Object.assign(window, {
-  openConfirm,
-  closeConfirm,
-  exportProgress: () =>
-    import("./ui/ui_data.ts").then((m) => m.exportProgress()),
-  saveAndRender,
-  importProgress: (event: Event) =>
-    import("./ui/ui_data.ts").then((m) => m.importProgress(event)),
-  clearData: () => import("./ui/ui_data.ts").then((m) => m.clearData()),
-  toggleSessionTimer,
-  sortByWeakWords,
-  shuffleWords,
-  setStarFilter,
-  setTypeFilter,
-  handleCategoryChange,
-  toggleHanjaMode,
-  setVoice,
-  toggleFilterPanel,
-  toggleDarkMode,
-  toggleAutoUpdate: (el: HTMLInputElement) => {
-    toggleAutoUpdate(el);
-    if (state.autoUpdate && "serviceWorker" in navigator) {
-      navigator.serviceWorker.getRegistration().then((reg) => {
-        if (reg && reg.waiting)
-          reg.waiting.postMessage({ type: SW_MESSAGES.SKIP_WAITING });
-      });
-    }
-  },
-  toggleFocusMode,
-  toggleViewMode,
-  toggleBackgroundMusic: (el: HTMLInputElement) => {
-    toggleBackgroundMusic(el);
-  },
-  setBackgroundMusicVolume,
-  handleAuth,
-  openProfileModal,
-  handleLogout,
-  handleDeleteAccount,
-  handleChangePassword,
-  handleChangeEmail,
-  toggleResetMode,
-  togglePasswordVisibility,
-  setTtsVolume,
-  setAudioSpeed: (val: string | number) => setAudioSpeed(val),
-  signInWithGoogle,
-  speak,
-  openLoginModal,
-  openReviewMode: () =>
-    import("./ui/ui_review.ts").then((m) => m.openReviewMode()),
-  openShopModal: () => import("./ui/ui_shop.ts").then((m) => m.openShopModal()),
-  switchShopTab: (tab: string) =>
-    import("./ui/ui_shop.ts").then((m) => m.switchShopTab(tab)),
-  startDailyChallenge,
-  quitQuiz,
-  renderDetailedStats,
-  checkPronunciation: (
-    word: string,
-    btn: HTMLElement,
-    callback?: (score: number, text: string, audioUrl?: string) => void,
-    canvas?: HTMLCanvasElement,
-  ) => checkPronunciation(word, btn, callback, canvas),
-  resetSearchHandler,
-  forceUpdateSW: async () => {
-    if ("serviceWorker" in navigator) {
-      const regs = await navigator.serviceWorker.getRegistrations();
-      for (const reg of regs) await reg.unregister();
-      window.location.reload();
-    }
-  },
-  installApp: async () => {
-    dismissInstallBanner();
-    if (!deferredPrompt) return;
-    deferredPrompt.prompt();
-    const { outcome } = await deferredPrompt.userChoice;
-    if (outcome === "accepted") {
-      deferredPrompt = null;
-      const btn = document.getElementById("install-app-btn");
-      if (btn) btn.style.display = "none";
-    }
-  },
-  dismissInstallBanner,
-  deleteList: (id: string, btn?: HTMLElement) =>
-    import("./ui/ui_collections.ts").then((m) => m.deleteList(id, btn)),
-  openEditListModal: (id: string, title: string, icon: string) =>
-    import("./ui/ui_collections.ts").then((m) =>
-      m.openEditListModal(id, title, icon),
-    ),
-  setCollectionFilter: (id: string) =>
-    import("./ui/ui_collections.ts").then((m) => m.setCollectionFilter(id)),
-  openEditWordModal: (id: string | number, onUpdate?: () => void) =>
-    import("./ui/ui_edit_word.ts").then((m) =>
-      m.openEditWordModal(id, onUpdate),
-    ),
-  restoreWord: (id: number) =>
-    (window as unknown as { restoreWord: (id: number) => void }).restoreWord(
-      id,
-    ),
-  permanentlyDeleteWord: (id: number, btn: HTMLElement) =>
-    (
-      window as unknown as {
-        permanentlyDeleteWord: (id: number, btn: HTMLElement) => void;
-      }
-    ).permanentlyDeleteWord(id, btn),
-  toggleTrashSelection: (id: number, checked: boolean) =>
-    (
-      window as unknown as {
-        toggleTrashSelection: (id: number, checked: boolean) => void;
-      }
-    ).toggleTrashSelection(id, checked),
-  updateSearchIndex: () => {
-    if (searchWorker) {
-      searchWorker.postMessage({ type: "SET_DATA", data: state.dataStore });
-    }
-  },
-});
+// Global window bindings for inline HTML handlers & external tools
+setupWindowBindings(searchWorker);

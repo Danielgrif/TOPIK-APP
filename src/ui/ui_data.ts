@@ -41,6 +41,7 @@ export async function resetAllProgress() {
     progressKeys.forEach((k) => localStorage.removeItem(k));
 
     state.userStats = {
+      sprintTimer: 60,
       xp: 0,
       level: 1,
       sprintRecord: 0,
@@ -72,15 +73,9 @@ export async function resetAllProgress() {
     const { data } = await client.auth.getSession();
     if (data && data.session) {
       showToast("☁️ Очистка облака...");
-      await client
-        .from("user_progress")
-        .delete()
-        .eq("user_id", data.session.user.id);
+      await client.from("user_progress").delete().eq("user_id", data.session.user.id);
       // Также сбрасываем глобальную статистику (удаляем строку, она пересоздастся при входе)
-      await client
-        .from("user_global_stats")
-        .delete()
-        .eq("user_id", data.session.user.id);
+      await client.from("user_global_stats").delete().eq("user_id", data.session.user.id);
     }
 
     const shopBalance = document.getElementById("shop-user-points");
@@ -171,6 +166,7 @@ export function exportProgress() {
             backgroundMusicVolume: state.backgroundMusicVolume,
             ttsVolume: state.ttsVolume,
             trashRetentionDays: state.trashRetentionDays,
+            showQuizExtraInfo: state.showQuizExtraInfo,
           },
           searchHistory: state.searchHistory,
           customWords: state.customWords,
@@ -231,10 +227,10 @@ export function importProgress(event: Event) {
           backgroundMusicVolume?: number;
           ttsVolume?: number;
           trashRetentionDays?: number;
+          showQuizExtraInfo?: boolean;
         };
       };
-      if (!data || typeof data !== "object")
-        throw new Error("Invalid data format");
+      if (!data || typeof data !== "object") throw new Error("Invalid data format");
 
       if (data.stats) {
         state.userStats.xp = Number(data.stats.xp) || 0;
@@ -254,34 +250,23 @@ export function importProgress(event: Event) {
         state.userStats.league = data.stats.league || "Bronze";
         state.userStats.lastWeekId = data.stats.lastWeekId || "";
       }
-      if (Array.isArray(data.learned))
-        state.learned = new Set(data.learned as (string | number)[]);
+      if (Array.isArray(data.learned)) state.learned = new Set(data.learned as (string | number)[]);
       if (Array.isArray(data.mistakes))
         state.mistakes = new Set(data.mistakes as (string | number)[]);
       if (Array.isArray(data.favorites))
         state.favorites = new Set(data.favorites as (string | number)[]);
       if (data.wordHistory)
-        state.wordHistory = data.wordHistory as Record<
-          string | number,
-          WordHistoryItem
-        >;
+        state.wordHistory = data.wordHistory as Record<string | number, WordHistoryItem>;
       if (data.streak) state.streak = data.streak as typeof state.streak;
-      if (Array.isArray(data.sessions))
-        state.sessions = data.sessions as Session[];
-      if (Array.isArray(data.achievements))
-        state.achievements = data.achievements as Achievement[];
-      if (data.dailyChallenge)
-        state.dailyChallenge = data.dailyChallenge as DailyChallenge;
-      if (Array.isArray(data.searchHistory))
-        state.searchHistory = data.searchHistory as string[];
-      if (Array.isArray(data.customWords))
-        state.customWords = data.customWords as Word[];
+      if (Array.isArray(data.sessions)) state.sessions = data.sessions as Session[];
+      if (Array.isArray(data.achievements)) state.achievements = data.achievements as Achievement[];
+      if (data.dailyChallenge) state.dailyChallenge = data.dailyChallenge as DailyChallenge;
+      if (Array.isArray(data.searchHistory)) state.searchHistory = data.searchHistory as string[];
+      if (Array.isArray(data.customWords)) state.customWords = data.customWords as Word[];
       if (Array.isArray(data.wordRequests))
         state.wordRequests = data.wordRequests as WordRequestState[];
-      if (Array.isArray(data.purchasedItems))
-        state.purchasedItems = data.purchasedItems;
-      if (Array.isArray(data.favoriteQuotes))
-        state.favoriteQuotes = data.favoriteQuotes as Quote[];
+      if (Array.isArray(data.purchasedItems)) state.purchasedItems = data.purchasedItems;
+      if (Array.isArray(data.favoriteQuotes)) state.favoriteQuotes = data.favoriteQuotes as Quote[];
 
       if (data.settings) {
         const s = data.settings;
@@ -295,19 +280,17 @@ export function importProgress(event: Event) {
         if (s.viewMode !== undefined) state.viewMode = s.viewMode;
         if (s.studyGoal !== undefined) state.studyGoal = s.studyGoal;
         if (s.themeColor !== undefined) state.themeColor = s.themeColor;
-        if (s.lastDailyReward !== undefined)
-          state.userStats.lastDailyReward = s.lastDailyReward;
+        if (s.lastDailyReward !== undefined) state.userStats.lastDailyReward = s.lastDailyReward;
         if (s.autoTheme !== undefined) state.autoTheme = s.autoTheme;
-        if (s.autoThemeStart !== undefined)
-          state.autoThemeStart = s.autoThemeStart;
+        if (s.autoThemeStart !== undefined) state.autoThemeStart = s.autoThemeStart;
         if (s.autoThemeEnd !== undefined) state.autoThemeEnd = s.autoThemeEnd;
         if (s.backgroundMusicEnabled !== undefined)
           state.backgroundMusicEnabled = s.backgroundMusicEnabled;
         if (s.backgroundMusicVolume !== undefined)
           state.backgroundMusicVolume = s.backgroundMusicVolume;
         if (s.ttsVolume !== undefined) state.ttsVolume = s.ttsVolume;
-        if (s.trashRetentionDays !== undefined)
-          state.trashRetentionDays = s.trashRetentionDays;
+        if (s.trashRetentionDays !== undefined) state.trashRetentionDays = s.trashRetentionDays;
+        if (s.showQuizExtraInfo !== undefined) state.showQuizExtraInfo = s.showQuizExtraInfo;
       }
 
       // Помечаем все восстановленные данные как "грязные", чтобы они синхронизировались с облаком

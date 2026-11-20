@@ -1,98 +1,244 @@
 import { serve } from "std/http/server.ts";
-import { getGeminiClient } from "shared/clients.ts";
-import { selectBestModel } from "shared/gemini.ts";
-import { createErrorResponse } from "shared/utils.ts";
-import { corsHeaders, GEMINI_MODELS, VALID_TOPICS, VALID_CATEGORIES } from "shared/constants.ts";
+import { GoogleGenerativeAI } from "@google/generative-ai";
+import { z } from "zod";
+import { getSupabaseAdmin } from "shared/clients.ts";
+import { getAuthenticatedUser } from "shared/auth.ts";
+import { DB_TABLES, LIMITS } from "shared/constants.ts";
+import {
+  corsPreflightResponse,
+  createErrorResponse,
+  jsonResponse,
+  withTimeout,
+} from "shared/utils.ts";
+import { readJsonObject, validateWords } from "shared/validation.ts";
 
-/**
- * This function is a direct port of the Python worker's AIContentGenerator.
- * It builds a detailed prompt to get structured data about a Korean word from Gemini.
- */
-function buildPrompt(word_kr: string): string {
-  return `You are an expert Korean language teacher for Russian speakers.
-Analyze the following Korean word: '${word_kr}' for use in TOPIK II exam preparation. The response should be in Russian. Also find frequency of use for this word (high, medium, low), and approximately to which TOPIK level this word corresponds (TOPIK I, TOPIK II level 3, TOPIK II level 4, TOPIK II level 5, TOPIK II level 6). Always explain Hanja component if it is available.
+const genAI = new GoogleGenerativeAI(Deno.env.get("GEMINI_API_KEY") ?? "");
 
-### 1. Identification & Correction
-- Detect if the input is Korean, a typo (e.g. 'gks' -> '한'), or Romanization (e.g. 'annyeong' -> '안녕').
-- Use the **corrected Korean word** for analysis.
-- Provide frequency of use AND TOPIK Level
-- If the input is gibberish or not a valid Korean word, return: {"error": "Invalid input"}
-### 2. Hanja Explaination 
-- Always explain hanja component if it is available.
-### 2. Analysis Rules
-- If the word has multiple distinct meanings (homonyms), return a JSON ARRAY of objects (max 3 most common).
-- If it has a single meaning, return a single JSON object instead of an array.
-- **Strictly** follow the JSON structure below. Do NOT use Markdown formatting (no \`\`\`json).
+// =========================
+// 🧠 ZOD
+// =========================
+const WordSchema = z.object({
+  word_kr: z.string(),
+  translation: z.string(),
+  example_kr: z.string().optional(),
+  example_ru: z.string().optional(),
+  topik_level: z.string().optional(),
+  synonyms: z.string().optional(),
+  antonyms: z.string().optional(),
+  word_hanja: z.string().optional(),
+  topic: z.string().optional(),
+  category: z.string().optional(),
+  grammar_info: z.string().optional(),
+  collocations: z.string().optional(),
+});
 
-### 3. JSON Structure
-Each object must have:
-- "word_kr": string (The corrected Korean word)
-- "translation": string (Concise Russian translation, MUST be less than 4 words)
-- "frequency": string ("high" or "medium" or "low")
-- "topik_level": string ("TOPIK I", "TOPIK II level 3", "TOPIK II level 4", "TOPIK II level 5", "TOPIK II level 6")
-- "tone": string (Describe the tone/register. Options: Formal, Informal, Poetic, Technical, Slang. Be consistent with example sentences.)
-- "word_hanja": string (Hanja characters ONLY if applicable. Empty string if native Korean)
-- "topic": string (One from: ${VALID_TOPICS.join(", ")}. If unsure, use "기타 (Другое)")
-- "category": string (One from: ${VALID_CATEGORIES.join(", ")}. If unsure, use "기타 (Другое)")
-- "level": string (One of: "★★★" (Beginner), "★★☆" (Intermediate), "★☆☆" (Advanced))
-- "example_kr": string (A simple, natural Korean sentence using the word in **polite informal style (해요체)**)
-- "example_ru": string (Russian translation of the example)
-- "synonyms": string (Comma-separated Korean synonyms **matching this specific meaning**, max 3. Empty if none)
-- "antonyms": string (Comma-separated Korean antonyms **matching this specific meaning**, max 3. Empty if none)
-- "collocations": string (Common word pairings, e.g. "make friends", max 3)
-- "grammar_info": string (Brief usage note, conjugation tip, or Hanja meaning breakdown. E.g. "Irregular verb" or "學(learn) 校(school)")
-- "type": string ("word" or "grammar")
+const ResponseSchema = z.union([WordSchema, z.array(WordSchema)]);
 
-### 4. Constraints
-- Topic/Category MUST be exactly from the provided lists. If unsure, use "기타 (Другое)".
-- Examples should be suitable for the word's difficulty level AND maintain consistent tone (formal, informal, etc.).
-- Return ONLY a valid JSON string. No explanations or extra text.
+type WordItem = z.infer<typeof WordSchema>;
 
-Input: '${word_kr}'
+// =========================
+// 📊 MODELS (AUTO ROUTER)
+// =========================
+type ModelStats = {
+  name: string;
+  score: number;
+  success: number;
+  fail: number;
+  blockedUntil: number;
+};
+
+const BASE_MODELS: ReadonlyArray<{ name: string; score: number }> = [
+  { name: "models/gemini-3.1-flash-lite", score: 100 },
+  { name: "models/gemini-3-flash", score: 90 },
+  { name: "models/gemini-2.5-flash", score: 80 },
+  { name: "models/gemini-flash-latest", score: 70 },
+];
+
+const models: ModelStats[] = BASE_MODELS.map((m) => ({
+  ...m,
+  success: 0,
+  fail: 0,
+  blockedUntil: 0,
+}));
+
+function getBestModels(): ModelStats[] {
+  return models
+    .filter((m) => Date.now() > m.blockedUntil)
+    .sort((a, b) => b.score + b.success * 2 - b.fail * 5 - (a.score + a.success * 2 - a.fail * 5));
+}
+
+function blockModel(m: ModelStats): void {
+  m.fail++;
+  m.blockedUntil = Date.now() + 30000; // Block for 30 seconds
+}
+
+function markSuccess(m: ModelStats): void {
+  m.success++;
+}
+
+// =========================
+// 🧠 PROMPT
+// =========================
+function buildPrompt(words: string[]): string {
+  return `You are a Korean language dictionary API. Return a JSON array of objects for the given Korean words.
+Each object MUST have these fields:
+- "word_kr": the Korean word exactly as given
+- "translation": Russian translation (concise, 1-3 words)
+- "example_kr": example sentence in Korean using this word
+- "example_ru": Russian translation of the example sentence
+- "synonyms": comma-separated Korean synonyms (or "" if none)
+- "antonyms": comma-separated Korean antonyms (or "" if none)
+- "word_hanja": Hanja (Chinese characters) if applicable, otherwise ""
+- "topic": thematic category in Russian (e.g. "Еда", "Путешествия", "Работа")
+- "category": part of speech in Russian (e.g. "Существительное", "Глагол", "Прилагательное")
+- "grammar_info": brief grammar note in Russian (e.g. "Неправильный глагол ㄹ")
+- "topik_level": TOPIK level ("1" to "6")
+
+Return ONLY valid JSON, no markdown, no extra text.
+Words: ${words.join(", ")}`;
+}
+
+function simplePrompt(words: string[]): string {
+  return `Return JSON:
+[{"word_kr":"","translation":"","example_kr":"","example_ru":""}]
+Words: ${words.join(", ")}
 `;
 }
 
-serve(async (req: Request) => {
+// =========================
+// 🔧 FIX JSON
+// =========================
+function autoFixJSON(text: string): string {
+  let fixed = text.trim();
+  const first = fixed.indexOf("{");
+  const firstArr = fixed.indexOf("[");
+  const start = firstArr !== -1 && firstArr < first ? firstArr : first;
+  if (start > 0) fixed = fixed.slice(start);
+  const lastBrace = fixed.lastIndexOf("}");
+  const lastBracket = fixed.lastIndexOf("]");
+  const end = Math.max(lastBrace, lastBracket);
+  if (end !== -1) fixed = fixed.slice(0, end + 1);
+  return fixed;
+}
+
+// =========================
+// 🚀 GENERATE
+// =========================
+async function generate(prompt: string): Promise<{ text: string; model: string }> {
+  for (const m of getBestModels()) {
+    try {
+      const model = genAI.getGenerativeModel({ model: m.name });
+      const res = await withTimeout(
+        model.generateContent({
+          contents: [{ role: "user", parts: [{ text: prompt }] }],
+        }),
+        LIMITS.AI_TIMEOUT_MS,
+        "Word generation timed out",
+      );
+      const text = res.response.text();
+      if (!text || text.length < 5) {
+        blockModel(m);
+        continue;
+      }
+      markSuccess(m);
+      return { text, model: m.name };
+    } catch (err: unknown) {
+      console.log("❌ model fail:", m.name, err instanceof Error ? err.message : String(err));
+      blockModel(m);
+    }
+  }
+  throw new Error("All models failed");
+}
+
+async function generateSafe(words: string[]): Promise<{ items: WordItem[]; model: string }> {
+  try {
+    const ai = await generate(buildPrompt(words));
+    const parsed = JSON.parse(autoFixJSON(ai.text));
+    const result = ResponseSchema.safeParse(parsed);
+    if (!result.success) throw new Error("Primary parse failed");
+    const items = Array.isArray(result.data) ? result.data : [result.data];
+    return { items, model: ai.model };
+  } catch (e: unknown) {
+    console.log("⚠️ fallback prompt after error:", e instanceof Error ? e.message : String(e));
+    const ai = await generate(simplePrompt(words));
+    const parsed = JSON.parse(autoFixJSON(ai.text));
+    const result = ResponseSchema.safeParse(parsed);
+    if (!result.success) throw new Error("Fallback parse also failed");
+    const items = Array.isArray(result.data) ? result.data : [result.data];
+    return { items, model: ai.model };
+  }
+}
+
+// =========================
+// 🌐 SERVER
+// =========================
+serve(async (req) => {
   if (req.method === "OPTIONS") {
-    return new Response("ok", { headers: corsHeaders });
+    return corsPreflightResponse();
   }
 
   try {
-    const { word } = await req.json();
-    if (!word) {
-      return createErrorResponse("Missing 'word' in request body", 400);
+    // [SECURITY] Проверяем аутентификацию пользователя по JWT.
+    const { user } = await getAuthenticatedUser(req);
+
+    const body = await readJsonObject(req);
+
+    // [SECURITY] Ограничиваем количество и длину слов до вызова Gemini.
+    const words = validateWords(body.word !== undefined ? body.word : body.words);
+
+    // 1. Проверка кеша (DB Cache)
+    const supabase = getSupabaseAdmin();
+    const cacheKey = `word-data:${words.map((w) => w.trim().toLowerCase()).join(",")}`;
+
+    try {
+      const { data: cached } = await supabase
+        .from(DB_TABLES.AI_CACHE)
+        .select("response_data")
+        .eq("cache_key", cacheKey)
+        .gt("expires_at", new Date().toISOString())
+        .maybeSingle();
+
+      if (cached?.response_data) {
+        console.log(`⚡ Cache hit for user ${user.id}:`, cacheKey);
+        return jsonResponse({
+          success: true,
+          data: cached.response_data,
+        });
+      }
+    } catch (err) {
+      // Не блокируем выполнение, если с кешем проблемы
+      console.warn("⚠️ Cache read failed:", err);
     }
 
-    const genAI = getGeminiClient();
-    const prompt = buildPrompt(word);
-    
-    const modelsToTry = [GEMINI_MODELS.FLASH, GEMINI_MODELS.PRO];
-    const modelName = await selectBestModel(genAI, modelsToTry, GEMINI_MODELS.FLASH);
-    const model = genAI.getGenerativeModel({ model: modelName });
+    // 2. Генерация, если в кеше нет
+    console.log(`🤖 Generating word data for user ${user.id}:`, words.join(", "));
+    const { items, model } = await generateSafe(words);
 
-    const result = await model.generateContent(prompt);
-    const response = result.response;
-    let text = response.text().trim();
+    // 3. Сохранение в кеш
+    try {
+      const expiresAt = new Date();
+      expiresAt.setDate(expiresAt.getDate() + 30);
 
-    if (text.startsWith("```json")) {
-      text = text.substring(7, text.length - 3).trim();
-    } else if (text.startsWith("```")) {
-      text = text.substring(3, text.length - 3).trim();
+      // Ensure we are inserting an array
+      const dataToCache = Array.isArray(items) ? items : [items];
+
+      if (dataToCache.length > 0) {
+        await supabase.from(DB_TABLES.AI_CACHE).insert({
+          cache_key: cacheKey,
+          response_data: dataToCache,
+          expires_at: expiresAt.toISOString(),
+        });
+      }
+    } catch (err) {
+      console.error("❌ Cache write failed:", err);
     }
 
-    const sanitizedText = text.replace(/,\s*([}\]])/g, "$1");
-    const data = JSON.parse(sanitizedText);
-
-    if (typeof data === 'object' && data !== null && !Array.isArray(data) && 'error' in data) {
-      throw new Error(`AI Error: ${(data as {error: string}).error}`);
-    }
-
-    const items = Array.isArray(data) ? data : [data];
-
-    return new Response(JSON.stringify({ success: true, data: items }), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    return jsonResponse({
+      success: true,
+      data: items,
+      model,
     });
-  } catch (error: unknown) {
-    return createErrorResponse(error);
+  } catch (e) {
+    return createErrorResponse(e);
   }
 });

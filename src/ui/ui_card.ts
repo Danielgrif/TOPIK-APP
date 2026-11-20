@@ -1,13 +1,13 @@
 import { state } from "../core/state.ts";
 import { scheduleSaveState, recordAttempt } from "../core/db.ts";
-import { addXP, checkAchievements } from "../core/stats.ts";
-import { Word } from "../types/index.ts";
+import { addXP, checkAchievements, updateSRSBadge, updateStats } from "../core/stats.ts";
+import type { Word } from "../types/index.ts";
 import { collectionsState } from "../core/collections_data.ts";
 import { createCardElement, createListItem } from "../core/renderer.ts"; // Now this import is valid
 import { client } from "../core/supabaseClient.ts";
 import { showToast, promiseWithTimeout } from "../utils/utils.ts";
 import { openModal, closeModal } from "./ui_modal.ts";
-import { ensureSessionStarted, saveAndRender } from "./ui.ts";
+import { ensureSessionStarted } from "../core/session.ts";
 import { DB_BUCKETS } from "../core/constants.ts";
 
 // --- Virtual Scroll Constants (for List View) ---
@@ -24,14 +24,19 @@ let resizeHandler: (() => void) | null = null;
 
 let counterTimeout: number | null = null;
 
+// Локальный хелпер для разрыва циклической зависимости с ui.ts
+function saveAndRenderLocal() {
+  scheduleSaveState();
+  updateSRSBadge();
+  updateStats();
+  render();
+}
+
 export function updateGridCardHeight() {
   // FIX: Устанавливаем фиксированную высоту для карточек в сетке.
   // Динамический расчет (window.innerHeight) делал их слишком огромными.
   ITEM_HEIGHT_GRID = 480; // Увеличена высота
-  document.documentElement.style.setProperty(
-    "--card-height",
-    `${ITEM_HEIGHT_GRID}px`,
-  );
+  document.documentElement.style.setProperty("--card-height", `${ITEM_HEIGHT_GRID}px`);
 }
 
 export function restoreScroll() {
@@ -79,6 +84,7 @@ export function render() {
   const grid = document.getElementById("vocabulary-grid");
   if (!grid) return;
 
+  const previousScroll = grid.scrollTop;
   // Оптимизация: кэшируем отфильтрованные данные один раз при рендере
   updateFilteredData();
 
@@ -93,12 +99,18 @@ export function render() {
   if (state.viewMode === "list") {
     grid.classList.add("list-view", "virtual-scroll-container");
     initVirtualScroll(grid);
-    return;
+  } else {
+    updateGridCardHeight();
+    grid.classList.add("virtual-scroll-container");
+    initGridVirtualScroll(grid);
   }
 
-  updateGridCardHeight();
-  grid.classList.add("virtual-scroll-container");
-  initGridVirtualScroll(grid);
+  // Restore scroll position immediately after render
+  if (previousScroll > 0) {
+    requestAnimationFrame(() => {
+      grid.scrollTop = previousScroll;
+    });
+  }
 }
 
 function renderEmptyState(grid: HTMLElement) {
@@ -135,18 +147,11 @@ function updateFilteredData() {
       w.level !== state.currentStar
     )
       return false;
-    if (
-      state.currentStar === "favorites" &&
-      !state.favorites.has(w.id as number)
-    )
-      return false;
-    if (state.currentStar === "mistakes" && !state.mistakes.has(w.id as number))
-      return false;
+    if (state.currentStar === "favorites" && !state.favorites.has(w.id as number)) return false;
+    if (state.currentStar === "mistakes" && !state.mistakes.has(w.id as number)) return false;
     if (w.type !== state.currentType) return false;
     const wTopic = w.topic_ru || w.topic_kr || "Общее";
-    const topics = Array.isArray(state.currentTopic)
-      ? state.currentTopic
-      : [state.currentTopic];
+    const topics = Array.isArray(state.currentTopic) ? state.currentTopic : [state.currentTopic];
     if (!topics.includes("all") && !topics.includes(wTopic)) return false;
     const wCat = w.category_ru || w.category_kr || "Общее";
     const categories = Array.isArray(state.currentCategory)
@@ -161,15 +166,10 @@ function updateFilteredData() {
         const isInAnyList = allCategorizedIds?.has(w.id as number);
         if (isInAnyList) return false;
       } else if (collectionsState.currentCollectionFilter === "my-custom") {
-        if (!state.currentUser || w.created_by !== state.currentUser.id)
-          return false;
-      } else if (
-        collectionsState.listItems[collectionsState.currentCollectionFilter]
-      ) {
+        if (!state.currentUser || w.created_by !== state.currentUser.id) return false;
+      } else if (collectionsState.listItems[collectionsState.currentCollectionFilter]) {
         if (
-          !collectionsState.listItems[
-            collectionsState.currentCollectionFilter
-          ].has(w.id as number)
+          !collectionsState.listItems[collectionsState.currentCollectionFilter].has(w.id as number)
         )
           return false;
       }
@@ -215,10 +215,7 @@ function onVirtualScroll(_e: Event) {
     if (grid && indicator && currentFilteredData.length > 0) {
       const scrollTop = grid.scrollTop;
       // Calculate approximate index based on scroll position
-      const itemHeight =
-        state.viewMode === "list"
-          ? ITEM_HEIGHT_LIST
-          : ITEM_HEIGHT_GRID + GRID_GAP;
+      const itemHeight = state.viewMode === "list" ? ITEM_HEIGHT_LIST : ITEM_HEIGHT_GRID + GRID_GAP;
       // For grid, we need to know columns.
       const gridWidth = grid.clientWidth;
       const gap = GRID_GAP; // CSS gap
@@ -263,9 +260,7 @@ function initGridVirtualScroll(grid: HTMLElement) {
   content.style.left = "0";
   content.style.width = "100%";
   const isMobile = window.innerWidth < 600;
-  content.style.padding = isMobile
-    ? "16px 16px 100px 16px"
-    : "24px 24px 100px 24px";
+  content.style.padding = isMobile ? "16px 16px 100px 16px" : "24px 24px 100px 24px";
   content.style.boxSizing = "border-box";
   grid.appendChild(content);
 
@@ -306,17 +301,13 @@ function renderVisibleGridItems(params: {
   const paddingX = window.innerWidth < 600 ? 32 : 48;
   const gridWidth = grid.clientWidth - paddingX;
   const gap = GRID_GAP;
-  const colCount = Math.max(
-    1,
-    Math.floor((gridWidth + gap) / (MIN_COL_WIDTH + gap)),
-  );
+  const colCount = Math.max(1, Math.floor((gridWidth + gap) / (MIN_COL_WIDTH + gap)));
 
   // FIX: Синхронизируем колонки CSS Grid с расчетами JS
   content.style.gridTemplateColumns = `repeat(${colCount}, 1fr)`;
 
   const totalRows = Math.ceil(sourceData.length / colCount);
-  const totalHeight =
-    totalRows > 0 ? totalRows * (ITEM_HEIGHT_GRID + gap) - gap : 0;
+  const totalHeight = totalRows > 0 ? totalRows * (ITEM_HEIGHT_GRID + gap) - gap : 0;
 
   // Добавляем высоту паддингов (24px сверху + 100px снизу = 124px)
   (sizer as HTMLElement).style.height = `${totalHeight + 124}px`;
@@ -324,17 +315,11 @@ function renderVisibleGridItems(params: {
   const scrollTop = grid.scrollTop;
   const viewportHeight = grid.clientHeight;
 
-  const startRow = Math.max(
-    0,
-    Math.floor(scrollTop / (ITEM_HEIGHT_GRID + gap)),
-  );
+  const startRow = Math.max(0, Math.floor(scrollTop / (ITEM_HEIGHT_GRID + gap)));
   const visibleRows = Math.ceil(viewportHeight / (ITEM_HEIGHT_GRID + gap)) + 1;
 
   const startIndex = startRow * colCount;
-  const endIndex = Math.min(
-    sourceData.length,
-    (startRow + visibleRows) * colCount,
-  );
+  const endIndex = Math.min(sourceData.length, (startRow + visibleRows) * colCount);
 
   const topOffset = startRow * (ITEM_HEIGHT_GRID + gap);
   (content as HTMLElement).style.transform = `translateY(${topOffset}px)`;
@@ -384,10 +369,7 @@ function initVirtualScroll(grid: HTMLElement) {
   renderVisibleListItems({ target: grid, sourceData });
 }
 
-function renderVisibleListItems(params: {
-  target: HTMLElement;
-  sourceData: Word[];
-}) {
+function renderVisibleListItems(params: { target: HTMLElement; sourceData: Word[] }) {
   const grid = params.target;
   if (!grid) return;
 
@@ -398,15 +380,9 @@ function renderVisibleListItems(params: {
   const scrollTop = grid.scrollTop;
   const viewportHeight = grid.clientHeight;
 
-  const startIndex = Math.max(
-    0,
-    Math.floor(scrollTop / ITEM_HEIGHT_LIST) - BUFFER_ITEMS,
-  );
+  const startIndex = Math.max(0, Math.floor(scrollTop / ITEM_HEIGHT_LIST) - BUFFER_ITEMS);
   const visibleItemsCount = Math.ceil(viewportHeight / ITEM_HEIGHT_LIST);
-  const endIndex = Math.min(
-    sourceData.length,
-    startIndex + visibleItemsCount + BUFFER_ITEMS * 2,
-  );
+  const endIndex = Math.min(sourceData.length, startIndex + visibleItemsCount + BUFFER_ITEMS * 2);
 
   const topOffset = startIndex * ITEM_HEIGHT_LIST;
   (content as HTMLElement).style.transform = `translateY(${topOffset}px)`;
@@ -430,11 +406,7 @@ export function setupLongPress(el: HTMLElement, itemId: string | number) {
 
   const start = (e: Event) => {
     // Игнорируем, если уже в режиме выбора или клик был по кнопке/инпуту
-    if (
-      state.selectMode ||
-      (e.target as HTMLElement).closest("button, input, textarea")
-    )
-      return;
+    if (state.selectMode || (e.target as HTMLElement).closest("button, input, textarea")) return;
 
     timer = window.setTimeout(() => {
       import("./ui_bulk.ts").then((m) => {
@@ -486,8 +458,7 @@ function prefetchNextAudio(startIndex: number, count: number = 3) {
     if (idx < data.length) {
       const item = data[idx];
       let url = item.audio_url;
-      if (state.currentVoice === "male" && item.audio_male)
-        url = item.audio_male;
+      if (state.currentVoice === "male" && item.audio_male) url = item.audio_male;
 
       if (url) {
         const audio = new Audio();
@@ -572,11 +543,7 @@ export async function openImagePicker(item: Word, btn: HTMLElement) {
   }
 }
 
-export async function finalizeImageSelection(
-  item: Word,
-  selectedUrl: string,
-  source: string,
-) {
+export async function finalizeImageSelection(item: Word, selectedUrl: string, source: string) {
   try {
     const invokePromise = client.functions.invoke("regenerate-image", {
       body: { mode: "finalize", id: item.id, selectedUrl, source },
@@ -604,13 +571,10 @@ export async function finalizeImageSelection(
         imgEl.src = data.finalUrl;
         imgEl.dataset.src = data.finalUrl;
         // Force reveal if it was hidden
-        const container = cardEl.querySelector(
-          ".back-image-container",
-        ) as HTMLElement;
+        const container = cardEl.querySelector(".back-image-container") as HTMLElement;
         if (container) container.style.display = "block";
         const btn = cardEl.querySelector(".btn-text") as HTMLElement; // The "Show Image" button
-        if (btn && btn.innerHTML.includes("Показать"))
-          btn.style.display = "none";
+        if (btn && btn.innerHTML.includes("Показать")) btn.style.display = "none";
       }
     }
 
@@ -633,17 +597,17 @@ export async function openAddToListModal(wordId: number) {
   const content = document.getElementById("add-to-list-content");
   if (!modal || !content) return;
 
-  const {
-    data: { user },
-  } = await client.auth.getUser();
+  let user = state.currentUser;
+  if (!user) {
+    const { data } = await client.auth.getUser();
+    user = data.user as unknown as import("../types/index.ts").User;
+  }
   if (!user) {
     showToast("Войдите в аккаунт");
     return;
   }
 
-  const myLists = collectionsState.userLists.filter(
-    (l) => l.user_id === user.id,
-  );
+  const myLists = collectionsState.userLists.filter((l) => l.user_id === user.id);
 
   content.scrollTop = 0;
   content.innerHTML = myLists
@@ -680,7 +644,7 @@ export function markLearned(id: string | number) {
   state.dirtyWordIds.add(id);
   addXP(10);
   checkAchievements();
-  saveAndRender();
+  saveAndRenderLocal();
 }
 
 export function markMistake(id: string | number) {
@@ -691,7 +655,7 @@ export function markMistake(id: string | number) {
   state.dirtyWordIds.add(id);
   addXP(-5);
   checkAchievements();
-  saveAndRender();
+  saveAndRenderLocal();
 }
 
 export function toggleFavorite(id: string | number, btn?: HTMLElement) {
@@ -722,7 +686,7 @@ export function resetProgress(id: string | number) {
   state.dirtyWordIds.add(id);
   checkAchievements();
   scheduleSaveState();
-  saveAndRender();
+  saveAndRenderLocal();
 }
 
 export function resetSearchHandler() {
@@ -853,8 +817,7 @@ export function compressImage(
 
         ctx.drawImage(img, 0, 0, width, height);
         canvas.toBlob(
-          (blob) =>
-            blob ? resolve(blob) : reject(new Error("Canvas to Blob failed")),
+          (blob) => (blob ? resolve(blob) : reject(new Error("Canvas to Blob failed"))),
           "image/jpeg",
           quality,
         );

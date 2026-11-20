@@ -6,6 +6,7 @@ import {
   playTone,
   escapeHtml,
   escapeRegExp,
+  showToast,
 } from "../utils/utils.ts";
 import { enableQuizKeyboard } from "./ui.ts";
 import { findAssociations } from "../core/associations.ts";
@@ -14,6 +15,7 @@ import { findConfusingWords } from "../core/confusing_words.ts";
 import { Word } from "../types/index.ts";
 import { quitQuiz } from "./quiz.ts";
 import { recordAttempt } from "../core/db.ts";
+import { renderVirtualKeyboard } from "./keyboard.ts";
 
 function getAudioBtnHtml(url: string | undefined): string {
   if (!url) return "";
@@ -24,8 +26,7 @@ function getAudioBtnHtml(url: string | undefined): string {
 function getOptions(correctWord: Word, count: number = 4): Word[] {
   const options: Word[] = [correctWord];
   while (options.length < count && state.dataStore.length > count) {
-    const r =
-      state.dataStore[Math.floor(Math.random() * state.dataStore.length)];
+    const r = state.dataStore[Math.floor(Math.random() * state.dataStore.length)];
     if (r && !options.find((o) => o.id === r.id)) options.push(r);
   }
   return options.sort(() => Math.random() - 0.5);
@@ -44,6 +45,7 @@ function handleChoiceClick(
     });
   }
   if (btn) btn.classList.add(isCorrect ? "correct" : "incorrect");
+  if (!isCorrect && btn) btn.classList.add("shake");
   onAnswer(isCorrect);
 }
 
@@ -51,29 +53,17 @@ interface Strategy {
   render: (
     word: Word,
     container: HTMLElement,
-    onAnswer: (
-      isCorrect: boolean | null,
-      autoAdvance?: boolean,
-      forceNext?: boolean,
-    ) => void,
+    onAnswer: (isCorrect: boolean | null, autoAdvance?: boolean, forceNext?: boolean) => void,
     qEl: HTMLElement,
   ) => void;
   _renderInput?: (
     word: Word,
     container: HTMLElement,
-    onAnswer: (
-      isCorrect: boolean | null,
-      autoAdvance?: boolean,
-      forceNext?: boolean,
-    ) => void,
+    onAnswer: (isCorrect: boolean | null, autoAdvance?: boolean, forceNext?: boolean) => void,
   ) => void;
   _addNextBtn?: (
     container: HTMLElement,
-    onAnswer: (
-      isCorrect: boolean | null,
-      autoAdvance?: boolean,
-      forceNext?: boolean,
-    ) => void,
+    onAnswer: (isCorrect: boolean | null, autoAdvance?: boolean, forceNext?: boolean) => void,
   ) => void;
 }
 
@@ -87,8 +77,7 @@ export const QuizStrategies: Record<string, Strategy> = {
         btn.className = "quiz-option";
         btn.textContent = opt.translation;
         if (opt.id === word.id) btn.dataset.correct = "true";
-        btn.onclick = () =>
-          handleChoiceClick(opt.id === word.id, btn, onAnswer);
+        btn.onclick = () => handleChoiceClick(opt.id === word.id, btn, onAnswer);
         container.appendChild(btn);
       });
       enableQuizKeyboard(container);
@@ -122,37 +111,45 @@ export const QuizStrategies: Record<string, Strategy> = {
         }
         container.innerHTML = "";
         container.classList.add("grid-2"); // Отображаем кнопки в 2 колонки
-        const ok = document.createElement("button");
-        ok.className = "quiz-option flashcard-remember";
-        ok.textContent = "✓ Помню";
-        ok.onclick = () => onAnswer(true);
-        const no = document.createElement("button");
-        no.className = "quiz-option flashcard-forgot";
-        no.textContent = "✗ Забыл";
-        no.onclick = () => onAnswer(false);
-        container.appendChild(no); // Сначала "Забыл"
-        container.appendChild(ok);
 
-        // Custom keyboard handler for flashcards
-        const keyHandler = (e: KeyboardEvent) => {
-          if (e.key === "ArrowLeft") {
-            e.preventDefault();
-            no.click();
-          } else if (e.key === "ArrowRight") {
-            e.preventDefault();
-            ok.click();
-          }
+        const easy = document.createElement("button");
+        easy.className = "quiz-option flashcard-remember";
+        easy.textContent = "✓ Помню отлично";
+        easy.onclick = () => {
+          if (easy.disabled) return;
+          easy.disabled = true;
+          medium.disabled = true;
+          ok.disabled = true;
+          onAnswer(true, true);
         };
 
-        document.addEventListener("keydown", keyHandler, { once: true });
-        // Cleanup if user clicks manually or quits
-        const cleanup = () =>
-          document.removeEventListener("keydown", keyHandler);
-        ok.addEventListener("click", cleanup);
-        no.addEventListener("click", cleanup);
+        const medium = document.createElement("button");
+        medium.className = "quiz-option flashcard-remember";
+        medium.textContent = "✓ Помню с трудом";
+        medium.onclick = () => {
+          if (medium.disabled) return;
+          easy.disabled = true;
+          medium.disabled = true;
+          ok.disabled = true;
+          onAnswer(true, true);
+        };
+
+        const ok = document.createElement("button");
+        ok.className = "quiz-option flashcard-forgot";
+        ok.textContent = "✗ Забыл";
+        ok.onclick = () => {
+          if (ok.disabled) return;
+          easy.disabled = true;
+          medium.disabled = true;
+          ok.disabled = true;
+          onAnswer(false);
+        };
+
+        container.appendChild(easy);
+        container.appendChild(medium);
+        container.appendChild(ok);
       };
       container.appendChild(btn);
-      enableQuizKeyboard(container);
     },
   },
 
@@ -164,10 +161,7 @@ export const QuizStrategies: Record<string, Strategy> = {
         const safeNotes = escapeHtml(word.my_notes);
         const safeWord = escapeHtml(word.word_kr);
         const maskedNotes = safeWord
-          ? safeNotes.replace(
-              new RegExp(escapeRegExp(safeWord), "gi"),
-              maskHtml,
-            )
+          ? safeNotes.replace(new RegExp(escapeRegExp(safeWord), "gi"), maskHtml)
           : safeNotes;
         html += `<div style="font-size:14px; color:var(--text-sub); margin-top:5px;">(${maskedNotes})</div>`;
       }
@@ -178,8 +172,7 @@ export const QuizStrategies: Record<string, Strategy> = {
         btn.className = "quiz-option";
         btn.textContent = opt.word_kr;
         if (opt.id === word.id) btn.dataset.correct = "true";
-        btn.onclick = () =>
-          handleChoiceClick(opt.id === word.id, btn, onAnswer);
+        btn.onclick = () => handleChoiceClick(opt.id === word.id, btn, onAnswer);
         container.appendChild(btn);
       });
       enableQuizKeyboard(container);
@@ -191,9 +184,7 @@ export const QuizStrategies: Record<string, Strategy> = {
       const full = escapeHtml(word.example_kr || "");
       const safeWord = escapeHtml(word.word_kr);
 
-      const display = full.includes(safeWord)
-        ? full.replace(safeWord, "___")
-        : `___ ${full}`;
+      const display = full.includes(safeWord) ? full.replace(safeWord, "___") : `___ ${full}`;
       const audioBtn = getAudioBtnHtml(word.example_audio);
 
       qEl.innerHTML = `<div class="quiz-question-text small">"${display}"</div><div class="quiz-question-sub">Вставьте пропущенное слово</div>`;
@@ -205,8 +196,7 @@ export const QuizStrategies: Record<string, Strategy> = {
         btn.className = "quiz-option";
         btn.textContent = opt.word_kr;
         if (opt.id === word.id) btn.dataset.correct = "true";
-        btn.onclick = () =>
-          handleChoiceClick(opt.id === word.id, btn, onAnswer);
+        btn.onclick = () => handleChoiceClick(opt.id === word.id, btn, onAnswer);
         container.appendChild(btn);
       });
       enableQuizKeyboard(container);
@@ -217,7 +207,8 @@ export const QuizStrategies: Record<string, Strategy> = {
     render(word, container, onAnswer, qEl) {
       let html = "";
       if (word.image) {
-        html += `<img src="${word.image}" class="quiz-image" loading="lazy">`;
+        // & и кавычки экранируются для атрибута; браузер декодирует &amp; обратно в &, URL работает.
+        html += `<img src="${escapeHtml(word.image)}" class="quiz-image" loading="lazy">`;
       }
       html += `<div class="quiz-question-text">${escapeHtml(word.translation || "")}</div><div class="quiz-question-sub">Напишите на корейском</div>`;
 
@@ -226,16 +217,12 @@ export const QuizStrategies: Record<string, Strategy> = {
         let notes = escapeHtml(word.my_notes);
         if (word.word_kr) {
           const safeWord = escapeHtml(word.word_kr);
-          notes = notes.replace(
-            new RegExp(escapeRegExp(safeWord), "gi"),
-            maskHtml,
-          );
+          notes = notes.replace(new RegExp(escapeRegExp(safeWord), "gi"), maskHtml);
         }
         html += `<div style="font-size:14px; color:var(--text-sub); margin-top:5px;">(${notes})</div>`;
       }
       qEl.innerHTML = html;
-      if (typeof this._renderInput === "function")
-        this._renderInput(word, container, onAnswer);
+      if (typeof this._renderInput === "function") this._renderInput(word, container, onAnswer);
     },
     _renderInput(word, container, onAnswer) {
       container.innerHTML = "";
@@ -248,6 +235,19 @@ export const QuizStrategies: Record<string, Strategy> = {
       btn.className = "btn btn-quiz";
       btn.style.width = "100%";
       btn.textContent = "Проверить";
+
+      // Toggle Keyboard Button
+      const kbToggle = document.createElement("button");
+      kbToggle.innerHTML = "⌨️";
+      kbToggle.className = "btn-icon";
+      kbToggle.style.cssText =
+        "position: absolute; right: 10px; top: 10px; z-index: 5; width: 32px; height: 32px; font-size: 16px;";
+
+      const inputWrapper = document.createElement("div");
+      inputWrapper.style.position = "relative";
+      inputWrapper.appendChild(input);
+      inputWrapper.appendChild(kbToggle);
+
       const feedback = document.createElement("div");
       feedback.className = "essay-feedback";
 
@@ -255,6 +255,20 @@ export const QuizStrategies: Record<string, Strategy> = {
         if (input.disabled) return;
         const val = input.value.trim().toLowerCase();
         const correct = word.word_kr.trim().toLowerCase();
+
+        // Validation: Check if input language matches target (Korean)
+        // Simple regex for Hangul characters
+        const hasHangul = /[ㄱ-ㅎ|ㅏ-ㅣ|가-힣]/.test(val);
+        const shouldBeHangul = /[ㄱ-ㅎ|ㅏ-ㅣ|가-힣]/.test(correct);
+
+        if (shouldBeHangul && !hasHangul && val.length > 0) {
+          playTone("failure");
+          input.classList.add("shake");
+          setTimeout(() => input.classList.remove("shake"), 500);
+          showToast("⚠️ Введите ответ на корейском языке!");
+          return;
+        }
+
         const dist = levenshtein(val, correct);
         const isRight = dist <= (correct.length > 3 ? 1 : 0);
         input.disabled = true;
@@ -263,27 +277,36 @@ export const QuizStrategies: Record<string, Strategy> = {
           input.classList.add("correct");
           input.classList.add("pulse-green");
           if (dist > 0) {
-            feedback.innerHTML = `<div style="color:var(--warning); font-weight:bold; margin-bottom:5px;">Опечатка:</div><div style="font-size:18px;">${generateDiffHtml(escapeHtml(val), escapeHtml(correct))}</div>`;
+            feedback.innerHTML = `<div style="color:var(--warning); font-weight:bold; margin-bottom:5px;">Опечатка:</div><div style="font-size:18px;">${generateDiffHtml(val, correct)}</div>`;
             container.appendChild(feedback);
             autoAdvance = false;
           }
         } else {
           input.classList.add("incorrect");
           input.classList.add("shake");
-          feedback.innerHTML = `<div style="color:var(--danger); font-weight:bold; margin-bottom:5px;">Неверно! Ответ: ${escapeHtml(word.word_kr)}</div><div style="font-size:18px;">${generateDiffHtml(escapeHtml(val), escapeHtml(correct))}</div>`;
+          feedback.innerHTML = `<div style="color:var(--danger); font-weight:bold; margin-bottom:5px;">Неверно! Ответ: ${escapeHtml(word.word_kr)}</div><div style="font-size:18px;">${generateDiffHtml(val, correct)}</div>`;
           container.appendChild(feedback);
           autoAdvance = false;
         }
         onAnswer(isRight, autoAdvance);
-        if (!autoAdvance && this._addNextBtn)
-          this._addNextBtn(container, onAnswer);
+        if (!autoAdvance && this._addNextBtn) this._addNextBtn(container, onAnswer);
       };
       input.addEventListener("keydown", (e) => {
         if (e.key === "Enter") check();
       });
       btn.onclick = check;
-      container.appendChild(input);
+      container.appendChild(inputWrapper);
       container.appendChild(btn);
+
+      // Init Virtual Keyboard
+      const kb = renderVirtualKeyboard(container, input, kbToggle);
+      if (kb) {
+        kbToggle.onclick = () => {
+          const isVisible = kb.style.display === "grid";
+          kb.style.display = isVisible ? "none" : "grid";
+        };
+      }
+
       setTimeout(() => input.focus(), 100);
     },
     _addNextBtn(container, onAnswer) {
@@ -309,6 +332,20 @@ export const QuizStrategies: Record<string, Strategy> = {
       textarea.rows = 3;
       textarea.placeholder = "Ваш перевод...";
 
+      // Container for keyboard
+      const kbWrapper = document.createElement("div");
+
+      const kbToggle = document.createElement("button");
+      kbToggle.innerHTML = "⌨️";
+      kbToggle.className = "btn-icon";
+      kbToggle.style.cssText =
+        "position: absolute; right: 10px; top: 10px; z-index: 5; width: 32px; height: 32px; font-size: 16px;";
+
+      const inputWrapper = document.createElement("div");
+      inputWrapper.style.position = "relative";
+      inputWrapper.appendChild(textarea);
+      inputWrapper.appendChild(kbToggle);
+
       const checkBtn = document.createElement("button");
       checkBtn.className = "btn btn-quiz";
       checkBtn.style.width = "100%";
@@ -317,13 +354,11 @@ export const QuizStrategies: Record<string, Strategy> = {
       checkBtn.onclick = () => {
         textarea.disabled = true;
         checkBtn.style.display = "none";
+        kbWrapper.innerHTML = ""; // Hide keyboard if open
 
         const feedback = document.createElement("div");
         feedback.className = "essay-feedback";
-        const diffHtml = generateDiffHtml(
-          escapeHtml(textarea.value),
-          escapeHtml(word.example_kr || ""),
-        );
+        const diffHtml = generateDiffHtml(textarea.value, word.example_kr || "");
         const audioBtn = getAudioBtnHtml(word.example_audio);
         feedback.innerHTML = `
                     <div style="font-weight:bold; margin-bottom:5px;">Правильный ответ:</div>
@@ -351,8 +386,19 @@ export const QuizStrategies: Record<string, Strategy> = {
         enableQuizKeyboard(buttonContainer);
       };
 
-      container.appendChild(textarea);
+      container.appendChild(inputWrapper);
+      container.appendChild(kbWrapper);
       container.appendChild(checkBtn);
+
+      // Init Virtual Keyboard for Essay
+      const kb = renderVirtualKeyboard(kbWrapper, textarea, kbToggle);
+      if (kb) {
+        kbToggle.onclick = () => {
+          const isVisible = kb.style.display === "grid";
+          kb.style.display = isVisible ? "none" : "grid";
+        };
+      }
+
       setTimeout(() => textarea.focus(), 100);
     },
   },
@@ -360,10 +406,7 @@ export const QuizStrategies: Record<string, Strategy> = {
   dictation: {
     render(word, container, onAnswer, qEl) {
       const currentVoice = state.currentVoice;
-      const url =
-        currentVoice === "male" && word.audio_male
-          ? word.audio_male
-          : word.audio_url;
+      const url = currentVoice === "male" && word.audio_male ? word.audio_male : word.audio_url;
 
       qEl.innerHTML = `<div style="margin-bottom:15px;"><button class="audio-btn-lg" id="dictation-play-btn">🔊</button></div><div class="quiz-question-sub">Напишите услышанное</div>`;
 
@@ -387,8 +430,7 @@ export const QuizStrategies: Record<string, Strategy> = {
       if (!isCorrectPair) {
         let other;
         do {
-          other =
-            state.dataStore[Math.floor(Math.random() * state.dataStore.length)];
+          other = state.dataStore[Math.floor(Math.random() * state.dataStore.length)];
         } while (other && other.id === word.id);
         if (other && other.translation !== word.translation) {
           shownTranslation = other.translation;
@@ -425,10 +467,7 @@ export const QuizStrategies: Record<string, Strategy> = {
       btn.className = "audio-btn-lg";
       btn.textContent = "🔊";
       const currentVoice = state.currentVoice;
-      const url =
-        currentVoice === "male" && word.audio_male
-          ? word.audio_male
-          : word.audio_url;
+      const url = currentVoice === "male" && word.audio_male ? word.audio_male : word.audio_url;
       const play = () => {
         btn.style.transform = "scale(0.95)";
         setTimeout(() => (btn.style.transform = ""), 150);
@@ -458,7 +497,12 @@ export const QuizStrategies: Record<string, Strategy> = {
   dialogue: {
     render(word, container, onAnswer, qEl) {
       const fullText = word.example_kr || "";
-      const maskedText = fullText.replace(
+
+      // Улучшенная маскировка: если точного совпадения нет, не ломаем UI
+      const hasWord = new RegExp(escapeRegExp(word.word_kr), "gi").test(fullText);
+      const textToDisplay = hasWord ? fullText : `${fullText} \n\n(Слово: ${word.word_kr})`;
+
+      const maskedText = textToDisplay.replace(
         new RegExp(escapeRegExp(word.word_kr), "gi"),
         "_______",
       );
@@ -472,7 +516,8 @@ export const QuizStrategies: Record<string, Strategy> = {
       if (dialogueText) dialogueText.textContent = maskedText;
 
       const playBtn = qEl.querySelector("#dialogue-play-btn") as HTMLElement;
-      const play = () => speak("", word.example_audio || null);
+      // Передаем текст примера для TTS, если аудио-файла нет
+      const play = () => speak(word.example_kr || "No text", word.example_audio || null);
       if (playBtn) playBtn.onclick = play;
 
       setTimeout(play, 400);
@@ -483,8 +528,7 @@ export const QuizStrategies: Record<string, Strategy> = {
         btn.className = "quiz-option";
         btn.textContent = opt.word_kr; // Show Korean words as options
         if (opt.id === word.id) btn.dataset.correct = "true";
-        btn.onclick = () =>
-          handleChoiceClick(opt.id === word.id, btn, onAnswer);
+        btn.onclick = () => handleChoiceClick(opt.id === word.id, btn, onAnswer);
         container.appendChild(btn);
       });
       enableQuizKeyboard(container);
@@ -514,23 +558,33 @@ export const QuizStrategies: Record<string, Strategy> = {
       resetBtn.style.cssText =
         "margin-bottom: 15px; padding: 8px 16px; font-size: 14px; display: none; background: var(--surface-3); color: var(--text-main);";
       resetBtn.innerHTML = "↺ Сброс";
+
+      const checkBtn = document.createElement("button");
+      checkBtn.className = "btn btn-quiz";
+      checkBtn.style.cssText = "width: 100%; margin-top: 15px; display: none;";
+      checkBtn.textContent = "Проверить";
+
       resetBtn.onclick = () => {
         currentAnswer.length = 0;
         if (targetEl) targetEl.style.background = "";
         if (targetEl) targetEl.style.borderColor = "";
+        // Clean up previous next buttons if any
+        const oldNextBtns = container.querySelectorAll(".next-btn-group");
+        oldNextBtns.forEach((btn) => btn.remove());
+        checkBtn.disabled = false;
+        checkBtn.style.display = "none";
         renderChips();
       };
       container.appendChild(resetBtn);
 
       const currentAnswer: Array<{ text: string; id: number }> = [];
-      const pool = parts
-        .map((text, i) => ({ text, id: i }))
-        .sort(() => Math.random() - 0.5);
+      const pool = parts.map((text, i) => ({ text, id: i })).sort(() => Math.random() - 0.5);
       const renderChips = () => {
         if (sourceEl) sourceEl.innerHTML = "";
         if (targetEl) targetEl.innerHTML = "";
-        resetBtn.style.display =
-          currentAnswer.length > 0 ? "inline-block" : "none";
+        resetBtn.style.display = currentAnswer.length > 0 ? "inline-block" : "none";
+        checkBtn.style.display = currentAnswer.length > 0 ? "block" : "none";
+
         currentAnswer.forEach((item, idx) => {
           const chip = document.createElement("div");
           chip.className = "scramble-chip";
@@ -551,40 +605,50 @@ export const QuizStrategies: Record<string, Strategy> = {
             playTone("pop");
             currentAnswer.push(item);
             renderChips();
-            if (currentAnswer.length === parts.length) {
-              const userAnswer = currentAnswer.map((x) => x.text).join(" ");
-              const isCorrect = userAnswer === sentence;
-              if (isCorrect) {
-                if (targetEl) {
-                  targetEl.style.borderColor = "var(--success)";
-                  targetEl.style.background = "#d1fae5";
-                }
-              } else {
-                if (targetEl) {
-                  targetEl.style.borderColor = "var(--danger)";
-                  targetEl.style.background = "#fee2e2";
-                }
-                const feedback = document.createElement("div");
-                feedback.className = "essay-feedback";
-                const audioBtn = getAudioBtnHtml(word.example_audio);
-                feedback.innerHTML = `<div style="font-weight:bold; margin-bottom:5px;">Правильный ответ:</div><div style="font-size:18px; display:flex; align-items:center;"><span>${escapeHtml(sentence)}</span> ${audioBtn}</div>`;
-                container.appendChild(feedback);
-              }
-              onAnswer(isCorrect, false);
-
-              const nextBtn = document.createElement("button");
-              nextBtn.className = "btn btn-quiz";
-              nextBtn.style.marginTop = "15px";
-              nextBtn.style.width = "100%";
-              nextBtn.textContent = "Далее ➡";
-              nextBtn.onclick = () => onAnswer(null, true, true);
-              container.appendChild(nextBtn);
-            }
           };
           if (sourceEl) sourceEl.appendChild(chip);
         });
       };
+
+      checkBtn.onclick = () => {
+        const userAnswer = currentAnswer.map((x) => x.text).join(" ");
+        const isCorrect = userAnswer === sentence;
+        checkBtn.disabled = true;
+
+        if (isCorrect) {
+          if (targetEl) {
+            targetEl.style.borderColor = "var(--success)";
+            targetEl.style.background = "#d1fae5";
+            // FIX: Принудительно озвучиваем полное предложение, а не отдельное слово
+            setTimeout(() => {
+              speak(sentence, word.example_audio || null);
+            }, 100);
+          }
+        } else {
+          if (targetEl) {
+            targetEl.style.borderColor = "var(--danger)";
+            targetEl.style.background = "#fee2e2";
+          }
+          const feedback = document.createElement("div");
+          feedback.className = "essay-feedback";
+          const audioBtn = getAudioBtnHtml(word.example_audio);
+          feedback.innerHTML = `<div style="font-weight:bold; margin-bottom:5px;">Правильный ответ:</div><div style="font-size:18px; display:flex; align-items:center;"><span>${escapeHtml(sentence)}</span> ${audioBtn}</div>`;
+          container.appendChild(feedback);
+        }
+        onAnswer(isCorrect, false);
+
+        const nextBtn = document.createElement("button");
+        nextBtn.className = "btn btn-quiz next-btn-group";
+        nextBtn.style.marginTop = "15px";
+        nextBtn.style.width = "100%";
+        nextBtn.textContent = "Далее ➡";
+        nextBtn.onclick = () => onAnswer(null, true, true);
+        container.appendChild(nextBtn);
+        checkBtn.style.display = "none";
+      };
+
       renderChips();
+      container.appendChild(checkBtn);
     },
   },
 
@@ -594,15 +658,12 @@ export const QuizStrategies: Record<string, Strategy> = {
       container.innerHTML = "";
 
       const allGroups = findConfusingWords();
-      const group = allGroups.find((g) => g.find((w) => w.id === word.id)) || [
-        word,
-      ];
+      const group = allGroups.find((g) => g.find((w) => w.id === word.id)) || [word];
 
       let options = [...group];
 
       while (options.length < 4 && state.dataStore.length > 4) {
-        const r =
-          state.dataStore[Math.floor(Math.random() * state.dataStore.length)];
+        const r = state.dataStore[Math.floor(Math.random() * state.dataStore.length)];
         if (r && !options.find((o) => o.id === r.id)) options.push(r);
       }
       options = options.slice(0, 4).sort(() => Math.random() - 0.5);
@@ -612,8 +673,7 @@ export const QuizStrategies: Record<string, Strategy> = {
         btn.className = "quiz-option";
         btn.textContent = opt.word_kr;
         if (opt.id === word.id) btn.dataset.correct = "true";
-        btn.onclick = () =>
-          handleChoiceClick(opt.id === word.id, btn, onAnswer);
+        btn.onclick = () => handleChoiceClick(opt.id === word.id, btn, onAnswer);
         container.appendChild(btn);
       });
       enableQuizKeyboard(container);
@@ -636,8 +696,7 @@ export const QuizStrategies: Record<string, Strategy> = {
       ];
 
       while (options.length < 4 && state.dataStore.length > 4) {
-        const r =
-          state.dataStore[Math.floor(Math.random() * state.dataStore.length)];
+        const r = state.dataStore[Math.floor(Math.random() * state.dataStore.length)];
         if (
           r &&
           r.word_kr !== word.word_kr &&
@@ -676,8 +735,7 @@ export const QuizStrategies: Record<string, Strategy> = {
         { text: correctText, correct: true },
       ];
       while (options.length < 4 && state.dataStore.length > 4) {
-        const r =
-          state.dataStore[Math.floor(Math.random() * state.dataStore.length)];
+        const r = state.dataStore[Math.floor(Math.random() * state.dataStore.length)];
         // FIX: Проверяем, чтобы дистрактор не был одним из антонимов
         if (
           r &&
@@ -715,9 +773,7 @@ export const QuizStrategies: Record<string, Strategy> = {
       }
 
       const leftSide = pairs.map((p) => p.left).sort(() => Math.random() - 0.5);
-      const rightSide = pairs
-        .map((p) => p.right)
-        .sort(() => Math.random() - 0.5);
+      const rightSide = pairs.map((p) => p.right).sort(() => Math.random() - 0.5);
 
       let selectedLeft: HTMLButtonElement | null = null;
       let matchesFound = 0;
@@ -747,9 +803,7 @@ export const QuizStrategies: Record<string, Strategy> = {
 
               // Check if this specific pair exists in the generated pairs
               const isMatch = pairs.some(
-                (p) =>
-                  String(p.left.id) === leftId &&
-                  String(p.right.id) === rightId,
+                (p) => String(p.left.id) === leftId && String(p.right.id) === rightId,
               );
 
               if (isMatch) {
@@ -775,6 +829,8 @@ export const QuizStrategies: Record<string, Strategy> = {
               } else {
                 playTone("failure", 100);
                 btn.classList.add("incorrect");
+                // FIX: Не завершаем раунд при ошибке в ассоциациях, даем попробовать еще раз
+                // onAnswer(false);
                 if (selectedLeft) selectedLeft.classList.add("incorrect");
                 setTimeout(() => {
                   btn.classList.remove("incorrect");
@@ -799,32 +855,115 @@ export const QuizStrategies: Record<string, Strategy> = {
 
   pronunciation: {
     render(word, container, onAnswer, qEl) {
-      qEl.innerHTML = `<div class="quiz-question-text">${escapeHtml(word.word_kr)}</div><div class="quiz-question-sub">${escapeHtml(word.translation || "")}</div>`;
+      let targetText = word.word_kr;
+      let isExample = false;
+
+      const updateHeader = () => {
+        if (isExample) {
+          qEl.innerHTML = `<div class="quiz-question-text small" style="font-size: 1.4em;">"${escapeHtml(word.example_kr || "")}"</div><div class="quiz-question-sub">${escapeHtml(word.example_ru || "")}</div>`;
+        } else {
+          qEl.innerHTML = `<div class="quiz-question-text">${escapeHtml(word.word_kr)}</div><div class="quiz-question-sub">${escapeHtml(word.translation || "")}</div>`;
+        }
+      };
+
+      updateHeader();
       container.innerHTML = "";
 
       const wrapper = document.createElement("div");
       wrapper.style.display = "flex";
       wrapper.style.flexDirection = "column";
       wrapper.style.alignItems = "center";
+      wrapper.style.margin = "0 auto";
       wrapper.style.width = "100%";
+      wrapper.style.maxWidth = "500px";
+
+      // Add Switcher if example exists
+      if (word.example_kr && word.example_kr.length > 2) {
+        const switchContainer = document.createElement("div");
+        switchContainer.className = "segment-control";
+        switchContainer.style.marginBottom = "20px";
+        switchContainer.style.width = "100%";
+
+        const btnWord = document.createElement("button");
+        btnWord.className = "segment-btn active";
+        btnWord.textContent = "Слово";
+
+        const btnEx = document.createElement("button");
+        btnEx.className = "segment-btn";
+        btnEx.textContent = "Пример";
+
+        const toggle = (ex: boolean) => {
+          isExample = ex;
+          targetText = ex ? word.example_kr || "" : word.word_kr;
+          if (ex) {
+            btnWord.classList.remove("active");
+            btnEx.classList.add("active");
+          } else {
+            btnWord.classList.add("active");
+            btnEx.classList.remove("active");
+          }
+          updateHeader();
+          // Hide feedback if any
+          const fb = wrapper.querySelector(".essay-feedback") as HTMLElement;
+          if (fb) fb.style.display = "none";
+          // Reset hints
+          const h = wrapper.querySelector(".quiz-hint") as HTMLElement;
+          if (h) {
+            h.style.display = "block";
+            h.textContent = "Нажмите и произнесите " + (ex ? "предложение" : "слово");
+            h.style.color = "var(--text-sub)";
+          }
+          // Reset controls
+          const c = wrapper.querySelector(".pronunciation-controls") as HTMLElement;
+          if (c) c.style.display = "flex";
+
+          const b = wrapper.querySelector(".audio-btn-lg") as HTMLElement;
+          if (b) {
+            b.style.backgroundColor = "";
+            b.classList.remove("pulse-red-effect");
+          }
+        };
+
+        btnWord.onclick = () => toggle(false);
+        btnEx.onclick = () => toggle(true);
+
+        switchContainer.appendChild(btnWord);
+        switchContainer.appendChild(btnEx);
+        wrapper.appendChild(switchContainer);
+      }
+
+      const controls = document.createElement("div");
+      controls.className = "pronunciation-controls";
+      controls.style.cssText =
+        "display: flex; gap: 20px; align-items: center; justify-content: center; width: 100%; margin-top: 10px; margin-bottom: 20px;";
+
+      const listenBtn = document.createElement("button");
+      listenBtn.className = "btn-icon";
+      listenBtn.style.cssText =
+        "width: 50px; height: 50px; font-size: 24px; background: var(--surface-2); color: var(--text-main); border: 1px solid var(--border-color);";
+      listenBtn.innerHTML = "🔊";
+      listenBtn.onclick = () => {
+        const url = isExample
+          ? word.example_audio
+          : state.currentVoice === "male" && word.audio_male
+            ? word.audio_male
+            : word.audio_url;
+        speak(targetText, url || null);
+      };
 
       const btn = document.createElement("button");
       btn.className = "audio-btn-lg";
-      btn.style.marginTop = "20px";
-      btn.style.marginBottom = "10px";
+      btn.style.margin = "0";
       btn.innerHTML = "🎤";
 
       const hint = document.createElement("div");
       hint.className = "quiz-hint";
-      hint.style.color = "var(--text-sub)";
-      hint.style.marginBottom = "20px";
+      hint.style.cssText = "color: var(--text-sub); margin-bottom: 20px; min-height: 24px;";
       hint.textContent = "Нажмите и произнесите слово";
 
       const canvas = document.createElement("canvas");
-      canvas.width = 400;
-      canvas.height = 80;
       canvas.style.width = "100%";
-      canvas.style.height = "80px";
+      canvas.style.height = "120px";
       canvas.style.borderRadius = "12px";
       canvas.style.background = "var(--surface-3)";
       canvas.style.marginBottom = "20px";
@@ -835,7 +974,10 @@ export const QuizStrategies: Record<string, Strategy> = {
       feedback.style.display = "none";
       feedback.style.width = "100%";
 
-      wrapper.appendChild(btn);
+      controls.appendChild(listenBtn);
+      controls.appendChild(btn);
+      wrapper.appendChild(controls);
+
       wrapper.appendChild(hint);
       wrapper.appendChild(canvas);
       wrapper.appendChild(feedback);
@@ -849,10 +991,15 @@ export const QuizStrategies: Record<string, Strategy> = {
 
         canvas.style.display = "block";
 
+        // Fix scaling for Retina/High DPI displays
+        const dpr = window.devicePixelRatio || 1;
+        canvas.width = canvas.offsetWidth * dpr;
+        canvas.height = canvas.offsetHeight * dpr;
+
         checkPronunciation(
-          word.word_kr,
+          targetText,
           btn,
-          (similarity: number, text: string, audioUrl?: string) => {
+          (similarity: number, text: string, audioUrl?: string, diffHtml?: string) => {
             btn.style.backgroundColor = "";
             btn.classList.remove("pulse-red-effect");
             hint.style.display = "none";
@@ -865,31 +1012,75 @@ export const QuizStrategies: Record<string, Strategy> = {
             const icon = isPass ? "✅" : "❌";
             const title = isPass ? "Отлично!" : "Попробуйте еще раз";
 
+            const resultDisplay = diffHtml
+              ? `<div style="font-size: 18px; letter-spacing: 1px; word-break: break-all;">${diffHtml}</div>`
+              : `<div style="font-size: 16px; font-weight: 600; color: var(--text-main);">${escapeHtml(text || "...")}</div>`;
+
             feedback.innerHTML = `
               <div style="text-align: center; margin-bottom: 15px;">
                 <div style="font-size: 40px; margin-bottom: 5px;">${icon}</div>
                 <div style="font-size: 20px; font-weight: 800; color: ${color};">${title}</div>
-                <div style="font-size: 14px; color: var(--text-sub);">Точность: ${similarity}%</div>
+                
+                <div style="margin-top: 15px; padding: 0 10px;">
+                    <div style="display: flex; justify-content: space-between; font-size: 13px; margin-bottom: 5px; font-weight: 600;">
+                        <span style="color: var(--text-sub);">Точность</span>
+                        <span style="color: ${color};">${similarity}%</span>
+                    </div>
+                    <div style="height: 10px; background: var(--surface-2); border-radius: 5px; overflow: hidden; border: 1px solid var(--border-color);">
+                        <div style="width: ${similarity}%; background: ${color}; height: 100%; transition: width 1s ease-out; border-radius: 5px;"></div>
+                    </div>
+                </div>
               </div>
               
-              <div style="background: var(--surface-2); padding: 12px; border-radius: 12px; margin-bottom: 15px;">
-                <div style="font-size: 12px; color: var(--text-sub); margin-bottom: 4px;">Вы сказали:</div>
-                <div style="font-size: 16px; font-weight: 600; color: var(--text-main);">${escapeHtml(text || "...")}</div>
+              <div style="background: var(--surface-2); padding: 12px; border-radius: 12px; margin-bottom: 15px; border: 1px solid var(--border-color);">
+                <div style="font-size: 12px; color: var(--text-sub); margin-bottom: 4px;">Распознано:</div>
+                ${resultDisplay}
               </div>
             `;
 
+            const actionsRow = document.createElement("div");
+            actionsRow.style.cssText =
+              "display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 15px;";
+
+            const origBtn = document.createElement("button");
+            origBtn.className = "btn";
+            origBtn.style.cssText =
+              "padding: 10px; font-size: 13px; background: var(--surface-3); color: var(--text-main); border: 1px solid var(--border-color); justify-content: center;";
+            origBtn.innerHTML = "🔊 Оригинал";
+            origBtn.onclick = () => {
+              const url = isExample
+                ? word.example_audio
+                : state.currentVoice === "male" && word.audio_male
+                  ? word.audio_male
+                  : word.audio_url;
+              speak(targetText, url || null);
+            };
+            actionsRow.appendChild(origBtn);
+
             if (audioUrl) {
-              const playBtn = document.createElement("button");
-              playBtn.className = "btn";
-              playBtn.style.cssText =
-                "width: 100%; margin-bottom: 10px; background: var(--surface-3); color: var(--text-main);";
-              playBtn.textContent = "▶️ Моя запись";
+              const userBtn = document.createElement("button");
+              userBtn.className = "btn";
+              userBtn.style.cssText =
+                "padding: 10px; font-size: 13px; background: var(--primary-light); color: var(--primary); border: 1px solid var(--primary); justify-content: center;";
+              userBtn.innerHTML = "▶️ Моя запись";
               const audio = new Audio(audioUrl);
-              playBtn.onclick = () => {
-                audio.play();
-              };
-              feedback.appendChild(playBtn);
+              userBtn.onclick = () => audio.play();
+              actionsRow.appendChild(userBtn);
+
+              // Auto-playback sequence: Original -> User
+              setTimeout(async () => {
+                const url = isExample
+                  ? word.example_audio
+                  : state.currentVoice === "male" && word.audio_male
+                    ? word.audio_male
+                    : word.audio_url;
+                await speak(targetText, url || null);
+                setTimeout(() => audio.play().catch(() => {}), 500);
+              }, 600);
+            } else {
+              origBtn.style.gridColumn = "1 / -1";
             }
+            feedback.appendChild(actionsRow);
 
             const nextBtn = document.createElement("button");
             nextBtn.className = "btn btn-quiz";
@@ -899,11 +1090,15 @@ export const QuizStrategies: Record<string, Strategy> = {
             feedback.appendChild(nextBtn);
 
             // Скрываем кнопку записи, чтобы сфокусировать внимание на результате
-            btn.style.display = "none";
+            controls.style.display = "none";
 
             onAnswer(isPass, false);
           },
           canvas,
+          (interimText) => {
+            hint.textContent = interimText;
+            hint.style.color = "var(--text-main)";
+          },
         );
       };
     },

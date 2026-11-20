@@ -1,82 +1,114 @@
 import { serve } from "std/http/server.ts";
-import { createErrorResponse } from "shared/utils.ts";
+import { createErrorResponse, HttpError, jsonResponse } from "shared/utils.ts";
 import { getSupabaseAdmin } from "shared/clients.ts";
+import { bearerHeaders, getAuthenticatedUser } from "shared/auth.ts";
 import { createAudioFile } from "shared/audio.ts";
-import { DB_TABLES, FUNCTION_NAMES, corsHeaders } from "shared/constants.ts";
-import type { WordData } from "shared/types.ts";
+import { DB_TABLES, FUNCTION_NAMES, LIMITS } from "shared/constants.ts";
+import { readJsonObject } from "shared/validation.ts";
+import type { ImageResult, WordData } from "shared/types.ts";
 
 /**
  * This function is invoked asynchronously to generate all media files for a given word.
  * It handles audio generation for the word and its example, and invokes another function for image generation.
+ *
+ * [SECURITY] пользователь берётся из JWT; слово для обработки загружается из БД
+ * и проверяется на принадлежность этому пользователю.
  */
 serve(async (req: Request) => {
-    if (req.method === "OPTIONS") {
-        return new Response("ok", { headers: corsHeaders });
+  if (req.method === "OPTIONS") {
+    return jsonResponse({ ok: true });
+  }
+
+  try {
+    const { user, token } = await getAuthenticatedUser(req);
+    const payload = await readJsonObject(req);
+
+    const rawId = payload.word_id ?? (payload.word as { id?: unknown } | null)?.id;
+    if (
+      typeof rawId !== "string" && typeof rawId !== "number"
+    ) {
+      throw new HttpError("Request must contain a valid 'word_id'", 400);
     }
 
-    try {
-        const payload = await req.json();
-        let word: WordData | null = payload.word;
-        const word_id = payload.word_id || word?.id;
+    const supabaseAdmin = getSupabaseAdmin();
 
-        if (!word_id) {
-            throw new Error("Request must contain either a 'word' object or a 'word_id'.");
-        }
+    // Всегда читаем слово из БД, не доверяя переданному клиентом объекту.
+    const { data: word, error: fetchError } = await supabaseAdmin
+      .from(DB_TABLES.VOCABULARY)
+      .select("id, word_kr, translation, example_kr, created_by, user_id, is_public")
+      .eq("id", rawId)
+      .maybeSingle();
 
-        const supabaseAdmin = getSupabaseAdmin();
+    if (fetchError) throw fetchError;
+    if (!word) throw new HttpError("Word not found", 404);
 
-        // Optimization: If the full word object isn't passed, fetch it.
-        // This maintains compatibility with callers that only provide an ID (like pg_cron).
-        if (!word) {
-            const { data: fetchedWord, error: fetchError } = await supabaseAdmin
-                .from(DB_TABLES.VOCABULARY)
-                .select("id, word_kr, translation, example_kr")
-                .eq('id', word_id)
-                .single();
-            if (fetchError) throw fetchError;
-            word = fetchedWord;
-        }
-
-        if (!word) throw new Error(`Word with id ${word_id} not found.`);
-
-        // Generate all media files in parallel for efficiency
-        const results = await Promise.allSettled([
-            createAudioFile(supabaseAdmin, word.word_kr, 'female', `female/${word.id}.mp3`),
-            createAudioFile(supabaseAdmin, word.word_kr, 'male', `male/${word.id}_M.mp3`),
-            word.example_kr ? createAudioFile(supabaseAdmin, word.example_kr, 'female', `examples/${word.id}.mp3`) : Promise.resolve(null),
-            supabaseAdmin.functions.invoke(FUNCTION_NAMES.REGENERATE_IMAGE, {
-                body: { mode: "auto", id: word.id, word: word.word_kr, translation: word.translation }
-            })
-        ]);
-
-        const updates: Record<string, string | null> = {};
-        const [femaleAudioRes, maleAudioRes, exampleAudioRes, imageRes] = results;
-
-        if (femaleAudioRes.status === 'fulfilled') updates.audio_url = femaleAudioRes.value;
-        if (maleAudioRes.status === 'fulfilled') updates.audio_male = maleAudioRes.value;
-        if (exampleAudioRes.status === 'fulfilled') updates.example_audio = exampleAudioRes.value;
-        if (imageRes.status === 'fulfilled' && imageRes.value.data) {
-            updates.image = imageRes.value.data.finalUrl;
-            updates.image_source = imageRes.value.data.source;
-        }
-
-        // Log any errors that occurred during media generation
-        results.forEach(p => {
-            if (p.status === 'rejected') console.error(`Media generation for word ${word.id} failed:`, p.reason);
-        });
-
-        if (Object.keys(updates).length > 0) {
-            const { error: updateError } = await supabaseAdmin
-                .from(DB_TABLES.VOCABULARY)
-                .update(updates)
-                .eq('id', word.id);
-            if (updateError) throw updateError;
-        }
-
-        return new Response(JSON.stringify({ success: true, updates }), {
-            headers: { "Content-Type": "application/json" },
-        });
-    } catch (error) {
-        return createErrorResponse(error, 500);
+    const isOwner = word.created_by === user.id || word.user_id === user.id;
+    if (!isOwner) {
+      throw new HttpError("Word does not belong to the authenticated user", 403);
     }
+
+    const wordData = word as WordData;
+    if (
+      !wordData.word_kr ||
+      wordData.word_kr.length > LIMITS.MAX_WORD_LENGTH ||
+      (wordData.example_kr && wordData.example_kr.length > 500)
+    ) {
+      throw new HttpError("Invalid word data for media generation", 400);
+    }
+
+    // Generate all media files in parallel for efficiency.
+    // Внутренний вызов также использует JWT пользователя.
+    const results = await Promise.allSettled([
+      createAudioFile(supabaseAdmin, wordData.word_kr, "female", `female/${wordData.id}.mp3`),
+      createAudioFile(supabaseAdmin, wordData.word_kr, "male", `male/${wordData.id}_M.mp3`),
+      wordData.example_kr
+        ? createAudioFile(
+            supabaseAdmin,
+            wordData.example_kr,
+            "female",
+            `examples/${wordData.id}.mp3`,
+          )
+        : Promise.resolve(null),
+      supabaseAdmin.functions.invoke<ImageResult>(FUNCTION_NAMES.REGENERATE_IMAGE, {
+        body: {
+          mode: "auto",
+          id: wordData.id,
+          word: wordData.word_kr,
+          translation: wordData.translation,
+        },
+        headers: bearerHeaders(token),
+      }),
+    ]);
+
+    const updates: Record<string, string | null> = {};
+    const [femaleAudioRes, maleAudioRes, exampleAudioRes, imageRes] = results;
+
+    if (femaleAudioRes.status === "fulfilled") updates.audio_url = femaleAudioRes.value;
+    if (maleAudioRes.status === "fulfilled") updates.audio_male = maleAudioRes.value;
+    if (exampleAudioRes.status === "fulfilled") updates.example_audio = exampleAudioRes.value;
+    if (imageRes.status === "fulfilled" && imageRes.value.data) {
+      updates.image = imageRes.value.data.finalUrl;
+      updates.image_source = imageRes.value.data.source;
+    }
+
+    // Log any errors that occurred during media generation
+    results.forEach((p) => {
+      if (p.status === "rejected") {
+        console.error(`Media generation for word ${wordData.id} failed:`, p.reason);
+      }
+    });
+
+    if (Object.keys(updates).length > 0) {
+      const { error: updateError } = await supabaseAdmin
+        .from(DB_TABLES.VOCABULARY)
+        .update(updates)
+        .eq("id", wordData.id)
+        .eq("created_by", user.id);
+      if (updateError) throw updateError;
+    }
+
+    return jsonResponse({ success: true, updates });
+  } catch (error) {
+    return createErrorResponse(error);
+  }
 });

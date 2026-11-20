@@ -1,0 +1,164 @@
+/* Feedback Modal Styles */
+
+#feedback-modal .modal-content {
+  max-width: 500px;
+  width: 95%;
+  background: var(--surface-1);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid var(--border-color);
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+}
+
+/* Drop Zone */
+#feedback-modal .drop-zone {
+  border: 2px dashed var(--primary);
+  border-radius: 16px;
+  padding: 30px 20px;
+  text-align: center;
+  background: rgba(99, 102, 241, 0.03); /* Subtle tint of primary */
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  cursor: pointer;
+  margin-bottom: 15px;
+  position: relative;
+  overflow: hidden;
+}
+
+#feedback-modal .drop-zone:hover {
+  background: rgba(99, 102, 241, 0.08);
+  transform: translateY(-2px);
+}
+
+#feedback-modal .drop-zone.dragover {
+  background: rgba(99, 102, 241, 0.15);
+  transform: scale(1.02);
+  border-color: var(--primary-hover);
+  box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.1);
+}
+
+#feedback-modal .drop-zone-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  pointer-events: none; /* Let clicks pass through to parent */
+}
+
+/* Priority Selector */
+#feedback-modal .priority-selector {
+  display: flex;
+  gap: 8px;
+  margin-top: 5px;
+  overflow-x: auto;
+  padding-bottom: 5px; /* Scrollbar space */
+}
+
+#feedback-modal .priority-btn {
+  flex: 1;
+  background: var(--surface-2);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-sub);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+}
+
+#feedback-modal .priority-btn:hover {
+  background: var(--surface-3);
+}
+
+#feedback-modal .priority-btn.active {
+  background: var(--p-color, var(--primary)); /* Use CSS variable for color */
+  color: white;
+  border-color: transparent;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  transform: translateY(-1px);
+}
+
+/* Attachments Grid */
+#feedback-modal .attachments-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
+  gap: 10px;
+  margin-top: 10px;
+}
+
+#feedback-modal .attachment-thumbnail {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1;
+  border-radius: 12px;
+  overflow: hidden;
+  background: var(--surface-2);
+  border: 1px solid var(--border-color);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+}
+
+#feedback-modal .attachment-thumbnail img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+#feedback-modal .attachment-thumbnail .remove-btn {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.6);
+  color: white;
+  border: none;
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  backdrop-filter: blur(4px);
+}
+
+#feedback-modal .attachment-thumbnail .remove-btn:hover {
+  background: var(--danger);
+}
+
+#feedback-modal .file-icon {
+  font-size: 32px;
+}
+
+/* Pulsing animation for submit button */
+@keyframes subtle-pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(99, 102, 241, 0.4);
+  }
+  70% {
+    box-shadow: 0 0 0 10px rgba(99, 102, 241, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(99, 102, 241, 0);
+  }
+}
+
+#submit-feedback-btn:not(:disabled) {
+  animation: subtle-pulse 2s infinite;
+}
+
+/* Mobile adjustments */
+@media (max-width: 480px) {
+  #feedback-modal .priority-selector {
+    flex-wrap: wrap; /* Stack on very small screens */
+  }
+  #feedback-modal .priority-btn {
+    flex: 1 1 40%; /* 2 per row */
+  }
+}

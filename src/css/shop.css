@@ -61,7 +61,7 @@
   min-width: 48px;
   height: 100px;
   box-sizing: border-box;
-  box-shadow: 0 4px 10px rgba(0,0,0,0.03);
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.03);
 }
 
 .reward-day .day-number {
@@ -77,7 +77,7 @@
   font-size: 26px;
   line-height: 1;
   margin-bottom: 4px;
-  filter: drop-shadow(0 4px 8px rgba(0,0,0,0.1));
+  filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.1));
   transition: transform 0.3s ease;
 }
 
@@ -97,16 +97,16 @@
 }
 
 /* States */
-.reward-day.future { 
-    opacity: 0.7; 
-    background: var(--surface-1); 
-    border-color: var(--border-color);
-    border-style: solid; 
-    box-shadow: none;
+.reward-day.future {
+  opacity: 0.7;
+  background: var(--surface-1);
+  border-color: var(--border-color);
+  border-style: solid;
+  box-shadow: none;
 }
 .reward-day.future .day-amount {
-    background: var(--surface-2);
-    color: var(--text-tertiary);
+  background: var(--surface-2);
+  color: var(--text-tertiary);
 }
 
 .shop-header {
@@ -120,9 +120,9 @@
 }
 
 .shop-header-right {
-    display: flex;
-    align-items: center;
-    gap: 12px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
 }
 
 .shop-header h3 {
@@ -150,19 +150,19 @@
 }
 
 #shop-scroll-container {
-    flex: 1;
-    overflow-y: auto; /* Прокрутка только для контента */
-    min-height: 0; /* Важно для flex-контейнера */
-    width: 100%;
-    display: flex; /* Делаем контейнер гибким */
-    flex-direction: column;
+  flex: 1;
+  overflow-y: auto; /* Прокрутка только для контента */
+  min-height: 0; /* Важно для flex-контейнера */
+  width: 100%;
+  display: flex; /* Делаем контейнер гибким */
+  flex-direction: column;
 }
 
 .shop-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
-    gap: 16px;
-    padding: 20px 24px;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 16px;
+  padding: 20px 24px;
 }
 
 .reward-day.claimed {
@@ -173,22 +173,25 @@
   box-shadow: inset 0 0 15px rgba(16, 185, 129, 0.1);
 }
 .reward-day.claimed .day-icon {
-    filter: grayscale(1);
-    opacity: 0.6;
+  filter: grayscale(1);
+  opacity: 0.6;
 }
 .reward-day.claimed::after {
-  content: '✓';
+  content: "✓";
   position: absolute;
   top: -6px;
   right: -6px;
   font-size: 10px;
   color: white;
   background: var(--success);
-  width: 18px; height: 18px;
+  width: 18px;
+  height: 18px;
   border-radius: 50%;
-  display: flex; align-items: center; justify-content: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   font-weight: 900;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
   z-index: 2;
 }
 
@@ -197,129 +200,146 @@
   background: linear-gradient(145deg, var(--surface-1), var(--surface-2));
   cursor: pointer;
   transform: translateY(-8px) scale(1.1);
-  box-shadow: 0 15px 30px rgba(108, 92, 231, 0.3), 0 0 0 4px rgba(108, 92, 231, 0.1);
+  box-shadow:
+    0 15px 30px rgba(108, 92, 231, 0.3),
+    0 0 0 4px rgba(108, 92, 231, 0.1);
   z-index: 5;
 }
-.reward-day.available:hover { 
-    transform: translateY(-10px) scale(1.15); 
-    box-shadow: 0 20px 40px rgba(108, 92, 231, 0.4), 0 0 0 6px rgba(108, 92, 231, 0.15);
+.reward-day.available:hover {
+  transform: translateY(-10px) scale(1.15);
+  box-shadow:
+    0 20px 40px rgba(108, 92, 231, 0.4),
+    0 0 0 6px rgba(108, 92, 231, 0.15);
 }
-.reward-day.available .day-number { color: var(--primary); }
-.reward-day.available .day-amount { color: white; background: var(--primary); }
-.reward-day.available .day-icon { animation: bounce 2s infinite; }
+.reward-day.available .day-number {
+  color: var(--primary);
+}
+.reward-day.available .day-amount {
+  color: white;
+  background: var(--primary);
+}
+.reward-day.available .day-icon {
+  animation: bounce 2s infinite;
+}
 
 /* Day 7 Special */
 .reward-day:last-child {
-    border: 2px solid var(--gold);
-    background: linear-gradient(135deg, var(--surface-1) 0%, #fffbeb 100%);
+  border: 2px solid var(--gold);
+  background: linear-gradient(135deg, var(--surface-1) 0%, #fffbeb 100%);
 }
-.reward-day:last-child .day-number { color: var(--gold); }
+.reward-day:last-child .day-number {
+  color: var(--gold);
+}
 .reward-day:last-child.available {
-    box-shadow: 0 15px 30px rgba(245, 158, 11, 0.4), 0 0 0 4px rgba(245, 158, 11, 0.1);
-    border-color: var(--gold);
+  box-shadow:
+    0 15px 30px rgba(245, 158, 11, 0.4),
+    0 0 0 4px rgba(245, 158, 11, 0.1);
+  border-color: var(--gold);
 }
-.reward-day:last-child.available .day-amount { background: var(--gold); }
+.reward-day:last-child.available .day-amount {
+  background: var(--gold);
+}
 
-#next-reward-timer { 
-    text-align: center; 
-    color: var(--primary); 
-    font-size: 14px; 
-    margin-top: 0; /* Убираем, так как используем gap */
-    background: var(--primary-light);
-    display: inline-block;
-    padding: 10px 24px;
-    border-radius: 24px;
-    border: 2px solid var(--primary);
-    font-weight: 700;
-    box-shadow: 0 4px 15px rgba(108, 92, 231, 0.2);
-    animation: pulse-btn 3s infinite;
+#next-reward-timer {
+  text-align: center;
+  color: var(--primary);
+  font-size: 14px;
+  margin-top: 0; /* Убираем, так как используем gap */
+  background: var(--primary-light);
+  display: inline-block;
+  padding: 10px 24px;
+  border-radius: 24px;
+  border: 2px solid var(--primary);
+  font-weight: 700;
+  box-shadow: 0 4px 15px rgba(108, 92, 231, 0.2);
+  animation: pulse-btn 3s infinite;
 }
 
 /* Shop Item Card */
 .shop-item-card {
-    background: var(--surface-1);
-    border: 1px solid var(--border-color);
-    border-radius: 20px;
-    padding: 16px;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    text-align: center;
-    transition: all 0.2s cubic-bezier(0.25, 0.8, 0.25, 1);
-    position: relative;
-    overflow: hidden;
+  background: var(--surface-1);
+  border: 1px solid var(--border-color);
+  border-radius: 20px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  transition: all 0.2s cubic-bezier(0.25, 0.8, 0.25, 1);
+  position: relative;
+  overflow: hidden;
 }
 
 .shop-item-card:hover {
-    transform: translateY(-4px);
-    box-shadow: var(--shadow-md);
-    border-color: var(--primary-light);
+  transform: translateY(-4px);
+  box-shadow: var(--shadow-md);
+  border-color: var(--primary-light);
 }
 
 .shop-item-icon {
-    font-size: 48px;
-    margin-bottom: 12px;
-    filter: drop-shadow(0 4px 8px rgba(0,0,0,0.1));
-    transition: transform 0.3s ease;
+  font-size: 48px;
+  margin-bottom: 12px;
+  filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.1));
+  transition: transform 0.3s ease;
 }
 
 .shop-item-card:hover .shop-item-icon {
-    transform: scale(1.1);
+  transform: scale(1.1);
 }
 
 .shop-item-name {
-    font-size: 15px;
-    font-weight: 700;
-    color: var(--text-main);
-    margin: 0 0 6px 0;
-    line-height: 1.3;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-main);
+  margin: 0 0 6px 0;
+  line-height: 1.3;
 }
 
 .shop-item-desc {
-    font-size: 12px;
-    color: var(--text-sub);
-    margin: 0 0 16px 0;
-    line-height: 1.4;
-    flex-grow: 1;
+  font-size: 12px;
+  color: var(--text-sub);
+  margin: 0 0 16px 0;
+  line-height: 1.4;
+  flex-grow: 1;
 }
 
 .shop-item-buy-btn {
-    width: 100%;
-    padding: 10px;
-    border-radius: 12px;
-    font-size: 14px;
-    font-weight: 700;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 6px;
+  width: 100%;
+  padding: 10px;
+  border-radius: 12px;
+  font-size: 14px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
 }
 
 .shop-item-card.disabled {
-    opacity: 0.7;
+  opacity: 0.7;
 }
 
 .shop-item-card.disabled .shop-item-buy-btn {
-    background: var(--surface-3);
-    color: var(--text-tertiary);
-    box-shadow: none;
-    cursor: not-allowed;
+  background: var(--surface-3);
+  color: var(--text-tertiary);
+  box-shadow: none;
+  cursor: not-allowed;
 }
 
 .purchased {
-    background: var(--success) !important;
-    color: white !important;
-    opacity: 1 !important;
-    box-shadow: none !important;
-    cursor: default !important;
+  background: var(--success) !important;
+  color: white !important;
+  opacity: 1 !important;
+  box-shadow: none !important;
+  cursor: default !important;
 }
 
 .daily-reward-note {
-    font-size: 11px;
-    color: var(--text-tertiary);
-    text-align: center;
-    margin-top: -5px;
-    margin-bottom: 5px;
-    padding: 0 10px;
-    line-height: 1.4;
+  font-size: 11px;
+  color: var(--text-tertiary);
+  text-align: center;
+  margin-top: -5px;
+  margin-bottom: 5px;
+  padding: 0 10px;
+  line-height: 1.4;
 }

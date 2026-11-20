@@ -13,18 +13,31 @@
       <div class="modal-header">
         <h3 id="quiz-modal-title">🎯 Режимы тренировки</h3>
         <div class="header-actions">
-          <button class="btn btn-icon close-modal-btn" data-close-modal="quiz-modal" aria-label="Закрыть">✕</button>
+          <button
+            class="btn btn-icon close-modal-btn"
+            data-close-modal="quiz-modal"
+            aria-label="Закрыть"
+          >
+            ✕
+          </button>
         </div>
       </div>
 
       <!-- New Controls Wrapper -->
       <div id="quiz-controls-wrapper" class="quiz-controls-wrapper">
         <div class="input-wrapper">
-            <label for="quiz-search-input" class="visually-hidden">Поиск слов</label>
-            <input type="text" id="quiz-search-input" name="quiz-search" class="search-box quiz-search" placeholder="Поиск слов для тренировки..." autocomplete="off">
-            <span class="search-icon-overlay">🔍</span>
+          <label for="quiz-search-input" class="visually-hidden">Поиск слов</label>
+          <input
+            type="text"
+            id="quiz-search-input"
+            name="quiz-search"
+            class="search-box quiz-search"
+            placeholder="Поиск слов для тренировки..."
+            autocomplete="off"
+          />
+          <span class="search-icon-overlay">🔍</span>
         </div>
-        
+
         <div id="quiz-filters" class="quiz-filters-row">
           <div class="select-wrapper">
             <select id="quiz-topic-select" name="quiz-topic"></select>
@@ -33,27 +46,29 @@
             <select id="quiz-category-select" name="quiz-category"></select>
           </div>
         </div>
-        
+
         <div id="quiz-difficulty" class="quiz-difficulty-group"></div>
-        
+
         <div id="quiz-count" class="quiz-count-label">Слов: 0</div>
       </div>
 
-    <div class="quiz-modes" id="quiz-mode-selector"></div>
-    <div id="quiz-game">
-      <div class="quiz-header">
-        <div id="quiz-score" class="quiz-meta-item">Вопрос 1/10</div>
-        <div class="quiz-progress-container">
-          <div class="quiz-progress-fill" id="quiz-progress-fill"></div>
+      <div class="quiz-modes" id="quiz-mode-selector"></div>
+      <div id="quiz-game">
+        <div class="quiz-header">
+          <div id="quiz-score" class="quiz-meta-item">Вопрос 1/10</div>
+          <div class="quiz-progress-container">
+            <div class="quiz-progress-fill" id="quiz-progress-fill"></div>
+          </div>
+          <div id="quiz-timer-display" class="quiz-meta-item">00:00</div>
         </div>
-        <div id="quiz-timer-display" class="quiz-meta-item">00:00</div>
+        <div class="quiz-body">
+          <div class="quiz-question" id="quiz-q"></div>
+          <div class="quiz-options" id="quiz-opts"></div>
+        </div>
+        <div class="quiz-footer">
+          <button class="btn btn-text-only" data-action="quit-quiz">Завершить тренировку</button>
+        </div>
       </div>
-      <div class="quiz-body">
-        <div class="quiz-question" id="quiz-q"></div>
-        <div class="quiz-options" id="quiz-opts"></div>
-      </div>
-      <div class="quiz-footer"><button class="btn btn-text-only" data-action="quit-quiz">Завершить тренировку</button></div>
-    </div>
     </div>
   </div>
 </div>

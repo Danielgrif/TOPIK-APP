@@ -8,14 +8,11 @@ import {
 } from "../utils/utils.ts";
 import { closeModal, openConfirm } from "./ui_modal.ts";
 import { state } from "../core/state.ts";
-import { immediateSaveState } from "../core/db.ts";
+import { immediateSaveState, fetchVocabulary } from "../core/db.ts";
 import { toKorean } from "../utils/hangul.ts";
 import { DB_TABLES, WORD_REQUEST_STATUS } from "../core/constants.ts";
 import { WordRequestState } from "../core/state.ts";
-import {
-  RealtimePostgresChangesPayload,
-  RealtimeChannel,
-} from "@supabase/supabase-js";
+import { RealtimePostgresChangesPayload, RealtimeChannel } from "@supabase/supabase-js";
 
 let observer: MutationObserver | null = null;
 
@@ -31,11 +28,7 @@ const requestProgress = new Map<
 >();
 
 function ensureLevelSelector(categoryInput: HTMLInputElement) {
-  if (
-    categoryInput &&
-    categoryInput.parentNode &&
-    !document.getElementById("new-word-level")
-  ) {
+  if (categoryInput && categoryInput.parentNode && !document.getElementById("new-word-level")) {
     const container = document.createElement("div");
     container.className = "form-group";
     container.innerHTML = `
@@ -54,26 +47,14 @@ function ensureLevelSelector(categoryInput: HTMLInputElement) {
 }
 
 export async function submitWordRequest() {
-  const input = document.getElementById(
-    "new-word-input",
-  ) as HTMLTextAreaElement;
-  const listSelect = document.getElementById(
-    "new-word-target-list",
-  ) as HTMLSelectElement;
-  const topicInput = document.getElementById(
-    "new-word-topic",
-  ) as HTMLInputElement;
-  const categoryInput = document.getElementById(
-    "new-word-category",
-  ) as HTMLInputElement;
-  const levelSelect = document.getElementById(
-    "new-word-level",
-  ) as HTMLSelectElement;
+  const input = document.getElementById("new-word-input") as HTMLTextAreaElement;
+  const listSelect = document.getElementById("new-word-target-list") as HTMLSelectElement;
+  const topicInput = document.getElementById("new-word-topic") as HTMLInputElement;
+  const categoryInput = document.getElementById("new-word-category") as HTMLInputElement;
+  const levelSelect = document.getElementById("new-word-level") as HTMLSelectElement;
 
   // UI: Сразу блокируем кнопку для мгновенного отклика
-  const btn = document.querySelector(
-    '[data-action="submit-word-request"]',
-  ) as HTMLButtonElement;
+  const btn = document.querySelector('[data-action="submit-word-request"]') as HTMLButtonElement;
   let originalContent = "";
   if (btn) {
     originalContent = btn.innerHTML;
@@ -128,8 +109,7 @@ export async function submitWordRequest() {
     // --- Валидация и Авто-исправление ---
     const corrections: { original: string; corrected: string }[] = [];
     // Разрешаем: Корейский, Английский, Цифры, пробелы, дефис, знаки препинания.
-    const VALID_PATTERN =
-      /^[a-zA-Z\uAC00-\uD7AF\u1100-\u11FF\u3130-\u318F0-9\s.,?!~-]+$/;
+    const VALID_PATTERN = /^[a-zA-Z\uAC00-\uD7AF\u1100-\u11FF\u3130-\u318F0-9\s.,?!~-]+$/;
 
     for (const w of rawWords) {
       let wordToAdd = w;
@@ -151,23 +131,17 @@ export async function submitWordRequest() {
     }
 
     if (rawWords.length > validWords.length) {
-      showToast(
-        `⚠️ Пропущено слов с ошибками: ${rawWords.length - validWords.length}`,
-      );
+      showToast(`⚠️ Пропущено слов с ошибками: ${rawWords.length - validWords.length}`);
     }
 
     // --- Подтверждение исправлений ---
     if (corrections.length > 0) {
       const confirmed = await new Promise<boolean>((resolve) => {
-        const list = corrections
-          .map((c) => `${c.original} ➡ ${c.corrected}`)
-          .join("\n");
-        import("./ui_modal.ts").then(({ openConfirm }) => {
-          openConfirm(`Исправить опечатки?\n\n${list}`, () => resolve(true), {
-            onCancel: () => resolve(false),
-            showCopy: true,
-            copyText: list,
-          });
+        const list = corrections.map((c) => `${c.original} ➡ ${c.corrected}`).join("\n");
+        openConfirm(`Исправить опечатки?\n\n${list}`, () => resolve(true), {
+          onCancel: () => resolve(false),
+          showCopy: true,
+          copyText: list,
         });
       });
 
@@ -179,9 +153,7 @@ export async function submitWordRequest() {
     // --- Проверка на дубликаты (с учетом омонимов) ---
     const duplicates: { word: string; translations: string[] }[] = [];
     if (validWords.length > 0) {
-      if (btn)
-        btn.innerHTML =
-          '<div class="spinner-tiny"></div> Проверка дубликатов...';
+      if (btn) btn.innerHTML = '<div class="spinner-tiny"></div> Проверка дубликатов...';
       const { data: existingWords, error } = await client
         .from(DB_TABLES.VOCABULARY)
         .select("word_kr, translation")
@@ -197,9 +169,7 @@ export async function submitWordRequest() {
           if (existing.length > 0) {
             duplicates.push({
               word: w,
-              translations: existing
-                .map((e) => e.translation)
-                .filter((t) => !!t),
+              translations: existing.map((e) => e.translation).filter((t) => !!t),
             });
           }
         }
@@ -223,23 +193,18 @@ export async function submitWordRequest() {
         const limit = 5;
         let list = duplicates
           .slice(0, limit)
-          .map(
-            (d) =>
-              `• ${d.word} (${d.translations.join(", ") || "без перевода"})`,
-          )
+          .map((d) => `• ${d.word} (${d.translations.join(", ") || "без перевода"})`)
           .join("\n");
 
         if (duplicates.length > limit) {
           list += `\n...и еще ${duplicates.length - limit}`;
         }
 
-        import("./ui_modal.ts").then(({ openConfirm }) => {
-          openConfirm(
-            `⚠️ Слова уже есть в словаре:\n\n${list}\n\nДобавить их снова (например, это омонимы)?`,
-            () => resolve(true),
-            { onCancel: () => resolve(false) },
-          );
-        });
+        openConfirm(
+          `⚠️ Слова уже есть в словаре:\n\n${list}\n\nДобавить их снова (например, это омонимы)?`,
+          () => resolve(true),
+          { onCancel: () => resolve(false) },
+        );
       });
 
       if (!confirmed) {
@@ -308,6 +273,15 @@ export async function submitWordRequest() {
     if (insertedRequests && insertedRequests.length > 0) {
       showToast(`✅ Заявка на ${insertedRequests.length} слов отправлена!`);
 
+      // --- ОПТИМИЗАЦИЯ: Мгновенный запуск обработки в реальном времени ---
+      // Вместо ожидания cron-задачи, мы сами вызываем обработчик для каждой заявки.
+      // Мы не ждем ответа (не используем await), чтобы не блокировать UI.
+      for (const request of insertedRequests) {
+        client.functions
+          .invoke("process-word-request", { body: { record: request } })
+          .catch((err) => console.error("Real-time processing trigger failed:", err));
+      }
+
       const formView = document.getElementById("add-word-form-view");
       const progressView = document.getElementById("add-word-progress-view");
 
@@ -353,33 +327,18 @@ async function restorePendingRequests() {
   if (!error && data && data.length > 0) {
     const formView = document.getElementById("add-word-form-view");
     const progressView = document.getElementById("add-word-progress-view");
-    const input = document.getElementById(
-      "new-word-input",
-    ) as HTMLTextAreaElement;
-    const listSelect = document.getElementById(
-      "new-word-target-list",
-    ) as HTMLSelectElement;
-    const topicInput = document.getElementById(
-      "new-word-topic",
-    ) as HTMLInputElement;
-    const categoryInput = document.getElementById(
-      "new-word-category",
-    ) as HTMLInputElement;
-    const btn = document.querySelector(
-      '[data-action="submit-word-request"]',
-    ) as HTMLButtonElement;
+    const input = document.getElementById("new-word-input") as HTMLTextAreaElement;
+    const listSelect = document.getElementById("new-word-target-list") as HTMLSelectElement;
+    const topicInput = document.getElementById("new-word-topic") as HTMLInputElement;
+    const categoryInput = document.getElementById("new-word-category") as HTMLInputElement;
+    const btn = document.querySelector('[data-action="submit-word-request"]') as HTMLButtonElement;
 
     if (formView && progressView) {
       formView.style.display = "none";
       progressView.style.display = "block";
 
       const requests: WordRequestState[] = data.map(
-        (row: {
-          id: string | number;
-          word_kr: string;
-          created_at: string;
-          my_notes?: string;
-        }) => ({
+        (row: { id: string | number; word_kr: string; created_at: string; my_notes?: string }) => ({
           id: row.id,
           word: row.word_kr,
           status: "pending",
@@ -406,17 +365,13 @@ async function restorePendingRequests() {
 }
 
 export function setupAddWordPreview() {
-  const container = document.querySelector(
-    "#add-word-modal .modal-body-container",
-  );
+  const container = document.querySelector("#add-word-modal .modal-body-container");
   if (!container) return;
 
   container.scrollTop = 0;
 
   // 1. Инъекция селектора уровня, если его нет (для корректного отображения в превью)
-  const categoryInput = document.getElementById(
-    "new-word-category",
-  ) as HTMLInputElement;
+  const categoryInput = document.getElementById("new-word-category") as HTMLInputElement;
   if (categoryInput) ensureLevelSelector(categoryInput as HTMLInputElement);
 
   // 2. Создание контейнера превью
@@ -441,15 +396,11 @@ export function setupAddWordPreview() {
   }
 
   // 3. Настройка слушателей
-  const input = document.getElementById(
-    "new-word-input",
-  ) as HTMLTextAreaElement;
+  const input = document.getElementById("new-word-input") as HTMLTextAreaElement;
   // Подсказка браузеру переключить клавиатуру на корейский (работает на мобильных/некоторых ОС)
   if (input) input.setAttribute("lang", "ko");
 
-  const levelSelect = document.getElementById(
-    "new-word-level",
-  ) as HTMLSelectElement;
+  const levelSelect = document.getElementById("new-word-level") as HTMLSelectElement;
 
   const checkWordExistence = debounce((...args: unknown[]) => {
     const word = args[0] as string;
@@ -533,8 +484,7 @@ function renderPreview(container: HTMLElement, word: string, level: string) {
     } else {
       const wordEl = wordContainer.querySelector(".word");
       if (wordEl) {
-        if (wordEl.textContent !== displayWord)
-          wordEl.textContent = displayWord;
+        if (wordEl.textContent !== displayWord) wordEl.textContent = displayWord;
       } else {
         wordContainer.innerHTML = `<div class="word" style="font-size: 32px; margin-bottom: 0;">${escapeHtml(displayWord)}</div>`;
       }
@@ -555,8 +505,7 @@ function trackProgress(
 ) {
   const progressBar = document.getElementById("word-request-progress-bar");
   const statusText = document.getElementById("word-request-status-text");
-  const progressViewContainer =
-    progressView.querySelector(".modal-body-container") || progressView;
+  const progressViewContainer = progressView.querySelector(".modal-body-container") || progressView;
   let errorCount = 0;
 
   let vocabChannel: RealtimeChannel | null = null;
@@ -566,6 +515,7 @@ function trackProgress(
   let workerWarningTimeout: number | null = null;
   let pollingTimeout: number | null = null;
   let isTracking = true;
+  let realtimeFailed = false; // FIX: Track if Realtime failed to enable polling fallback
 
   // Очистка старых элементов UI прогресса (чтобы избежать дублирования при повторном использовании)
   const oldDetails = document.getElementById("word-request-details");
@@ -757,13 +707,10 @@ function trackProgress(
     const audioCount = Array.from(requestProgress.values()).filter(
       (p) => p.status === "audio",
     ).length;
-    const aiCount = Array.from(requestProgress.values()).filter(
-      (p) => p.status === "ai",
-    ).length;
+    const aiCount = Array.from(requestProgress.values()).filter((p) => p.status === "ai").length;
 
     // Weighted progress for a smoother bar
-    const progress =
-      (doneCount * 100 + audioCount * 80 + aiCount * 40) / currentTotal;
+    const progress = (doneCount * 100 + audioCount * 80 + aiCount * 40) / currentTotal;
 
     if (progressBar) progressBar.style.width = `${progress}%`;
     if (statusText) {
@@ -779,8 +726,7 @@ function trackProgress(
     const toggleBtn = document.getElementById("toggle-details-btn");
     if (toggleBtn) {
       const isHidden = detailsList.style.display === "none";
-      if (isHidden)
-        toggleBtn.textContent = `▼ Показать список (${currentTotal})`;
+      if (isHidden) toggleBtn.textContent = `▼ Показать список (${currentTotal})`;
       // Если список открыт, текст "Скрыть список" не меняется
     }
 
@@ -797,11 +743,7 @@ function trackProgress(
     );
 
     // Автоматически разворачиваем список, если есть ошибки
-    if (
-      errorEntries.length > 0 &&
-      detailsList &&
-      detailsList.style.display === "none"
-    ) {
+    if (errorEntries.length > 0 && detailsList && detailsList.style.display === "none") {
       const toggleBtn = document.getElementById("toggle-details-btn");
       if (toggleBtn) {
         detailsList.style.display = "flex";
@@ -819,14 +761,11 @@ function trackProgress(
         retryBtn.style.cssText =
           "width: 100%; margin-top: 15px; background: var(--warning); color: white; font-weight: bold; border: none; border-radius: 12px; padding: 12px; cursor: pointer; transition: transform 0.2s;";
         retryBtn.innerHTML = `↻ Повторить сбойные (${errorEntries.length})`;
-        retryBtn.onmousedown = () =>
-          (retryBtn!.style.transform = "scale(0.98)");
+        retryBtn.onmousedown = () => (retryBtn!.style.transform = "scale(0.98)");
         retryBtn.onmouseup = () => (retryBtn!.style.transform = "scale(1)");
 
         retryBtn.onclick = async () => {
-          const btn = document.getElementById(
-            "retry-all-errors-btn",
-          ) as HTMLButtonElement;
+          const btn = document.getElementById("retry-all-errors-btn") as HTMLButtonElement;
           if (btn) {
             btn.disabled = true;
             btn.innerHTML = '<div class="spinner-tiny"></div> Отправка...';
@@ -843,26 +782,18 @@ function trackProgress(
 
           const results = await Promise.allSettled(promises);
           const hasErrors = results.some(
-            (res) =>
-              res.status === "rejected" ||
-              (res.status === "fulfilled" && res.value.error),
+            (res) => res.status === "rejected" || (res.status === "fulfilled" && res.value.error),
           );
 
           if (hasErrors) {
             let errorMsg = "Unknown error";
             const firstError = results.find(
-              (res) =>
-                res.status === "rejected" ||
-                (res.status === "fulfilled" && res.value.error),
+              (res) => res.status === "rejected" || (res.status === "fulfilled" && res.value.error),
             );
             if (firstError) {
               if (firstError.status === "rejected") {
-                errorMsg =
-                  firstError.reason?.message || String(firstError.reason);
-              } else if (
-                firstError.status === "fulfilled" &&
-                firstError.value.error
-              ) {
+                errorMsg = firstError.reason?.message || String(firstError.reason);
+              } else if (firstError.status === "fulfilled" && firstError.value.error) {
                 errorMsg = firstError.value.error.message;
               }
             }
@@ -887,10 +818,7 @@ function trackProgress(
         };
 
         if (detailsList && detailsList.parentNode) {
-          detailsList.parentNode.insertBefore(
-            retryBtn,
-            detailsList.nextSibling,
-          );
+          detailsList.parentNode.insertBefore(retryBtn, detailsList.nextSibling);
         }
       } else {
         retryBtn.innerHTML = `↻ Повторить сбойные (${errorEntries.length})`;
@@ -903,8 +831,10 @@ function trackProgress(
       cleanup(); // Останавливаем прослушку и таймер
       if (errorCount > 0) {
         showToast(`⚠️ Готово, но с ошибками: ${errorCount}`);
+        fetchVocabulary(); // Fetch the successful ones
       } else {
         showToast("✅ Готово! Слова добавлены.");
+        fetchVocabulary(); // Immediately fetch the new words so they appear in UI
         // Wait a bit before closing to show "Готово!"
         setTimeout(resetFormAndClose, 3000);
       }
@@ -949,16 +879,15 @@ function trackProgress(
     if (!anyProgress && detailsList) {
       const warning = document.createElement("div");
       warning.className = "worker-warning";
-      warning.innerHTML =
-        "⚠️ Сервер долго не отвечает. Возможно, очередь перегружена.";
+      warning.innerHTML = "⚠️ Сервер долго не отвечает. Возможно, очередь перегружена.";
       detailsList.insertAdjacentElement("beforebegin", warning);
     }
   }, 8000);
 
   // --- Robust Polling Loop (Резервный опрос) ---
-  // Используем рекурсивный setTimeout вместо setInterval для предотвращения наслоения запросов
+  // FIX: Polling теперь запускается только как fallback, если Realtime-канал не работает
   const pollStatus = async () => {
-    if (!isTracking) return;
+    if (!isTracking || !realtimeFailed) return;
 
     if (!navigator.onLine) {
       // Если оффлайн, пробуем реже
@@ -995,12 +924,7 @@ function trackProgress(
       if (!error && data) {
         let changed = false;
         data.forEach(
-          (row: {
-            id: string | number;
-            status: string;
-            my_notes: string;
-            word_kr: string;
-          }) => {
+          (row: { id: string | number; status: string; my_notes: string; word_kr: string }) => {
             const progress = requestProgress.get(row.id);
             if (progress) {
               let newStatus = progress.status;
@@ -1016,12 +940,7 @@ function trackProgress(
               }
 
               if (newStatus !== progress.status) {
-                progress.status = newStatus as
-                  | "pending"
-                  | "ai"
-                  | "audio"
-                  | "done"
-                  | "error";
+                progress.status = newStatus as "pending" | "ai" | "audio" | "done" | "error";
                 if (newStatus === "done") progress.justFinished = true;
                 if (newStatus === "error") {
                   progress.error = row.my_notes || "Ошибка обработки";
@@ -1044,13 +963,12 @@ function trackProgress(
     }
   };
 
-  // Запускаем опрос сразу, чтобы синхронизировать состояние
-  pollStatus();
+  // FIX: Запускаем опрос с задержкой, чтобы дать Realtime время подключиться.
+  // Если Realtime работает, polling не запустится (проверка realtimeFailed в pollStatus).
+  pollingTimeout = window.setTimeout(pollStatus, 5000);
 
   // --- Realtime Listeners ---
-  const handleVocabInsert = (
-    payload: RealtimePostgresChangesPayload<{ word_kr: string }>,
-  ) => {
+  const handleVocabInsert = (payload: RealtimePostgresChangesPayload<{ word_kr: string }>) => {
     const newWord = payload.new;
     if (!newWord || !("word_kr" in newWord)) return;
 
@@ -1064,8 +982,12 @@ function trackProgress(
     }
   };
 
+  // FIX: Очищаем старые каналы перед созданием новых, чтобы избежать дубликатов
+  if (vocabChannel) client.removeChannel(vocabChannel);
+  if (requestChannel) client.removeChannel(requestChannel);
+
   vocabChannel = client
-    .channel("public:vocabulary:custom-words")
+    .channel(`custom-words-vocab-${Date.now()}`)
     .on(
       "postgres_changes",
       { event: "INSERT", schema: "public", table: DB_TABLES.VOCABULARY },
@@ -1074,11 +996,16 @@ function trackProgress(
     .subscribe((status) => {
       if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
         console.warn(`Vocab channel error: ${status}`);
+        // FIX: Активируем polling как fallback
+        if (!realtimeFailed) {
+          realtimeFailed = true;
+          pollStatus();
+        }
       }
     });
 
   requestChannel = client
-    .channel("word_requests_tracker")
+    .channel(`word-requests-tracker-${Date.now()}`)
     .on(
       "postgres_changes",
       {
@@ -1122,13 +1049,16 @@ function trackProgress(
     .subscribe((status) => {
       if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
         console.warn(`Request channel error: ${status}`);
-        showToast(
-          "⚠️ Проблема с подключением. Обновления могут задерживаться.",
-        );
+        showToast("⚠️ Проблема с подключением. Обновления могут задерживаться.");
+        // FIX: Активируем polling как fallback
+        if (!realtimeFailed) {
+          realtimeFailed = true;
+          pollStatus();
+        }
       }
     });
 
-  // Safety Timeout: Если через 45 секунд ничего не произошло, разблокируем интерфейс
+  // Safety Timeout: Если через 60 секунд ничего не произошло, разблокируем интерфейс
   safetyTimeout = window.setTimeout(() => {
     const doneCount = Array.from(requestProgress.values()).filter(
       (p) => p.status === "done",
@@ -1143,7 +1073,7 @@ function trackProgress(
       if (statusText) statusText.textContent = "⚠️ Время ожидания истекло";
       resetFormAndClose();
     }
-  }, 90000); // Увеличено до 90 секунд
+  }, 60000); // FIX: Снижено с 90 до 60 секунд для лучшего UX
 
   const cancelBtn = document.getElementById("cancel-word-request-btn");
   if (cancelBtn) {
@@ -1154,10 +1084,7 @@ function trackProgress(
       const idsToCancel = requests.map((r) => r.id);
       if (idsToCancel.length > 0) {
         try {
-          await client
-            .from(DB_TABLES.WORD_REQUESTS)
-            .delete()
-            .in("id", idsToCancel);
+          await client.from(DB_TABLES.WORD_REQUESTS).delete().in("id", idsToCancel);
           showToast("🚫 Заявка отменена на сервере");
         } catch (e) {
           console.error("Failed to cancel request on server:", e);
@@ -1180,8 +1107,7 @@ export async function deleteCustomWord(id: string | number) {
   // Оптимистичное удаление
   if (wordIndex > -1) state.customWords.splice(wordIndex, 1);
   if (dataIndex > -1) state.dataStore.splice(dataIndex, 1);
-  if (state.searchResults)
-    state.searchResults = state.searchResults.filter((w) => w.id !== id);
+  if (state.searchResults) state.searchResults = state.searchResults.filter((w) => w.id !== id);
 
   const grid = document.getElementById("vocabulary-grid");
   const savedScroll = grid ? grid.scrollTop : 0;

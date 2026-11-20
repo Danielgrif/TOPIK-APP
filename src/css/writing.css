@@ -1,35 +1,228 @@
+/* Writing Modal Layout Overrides */
+#writing-modal .modal-content {
+  width: 95%;
+  height: 90vh;
+  max-height: 90vh;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+#writing-modal .modal-body {
+  padding: 20px;
+  flex: 1;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Input Areas */
+#writing-question,
+#writing-answer {
+  font-size: 16px; /* Prevent zooming on iOS */
+  line-height: 1.5;
+  border-radius: 12px;
+}
+
+/* Result Section */
+#writing-result {
+  margin-top: 20px;
+  border: 1px solid var(--border-color);
+}
+
+/* Corrections List */
 .writing-correction-item {
-    background: var(--surface-1);
-    padding: 10px;
-    border-radius: 8px;
-    margin-bottom: 8px;
-    border-left: 3px solid var(--warning);
-    font-size: 14px;
+  background: var(--surface-1);
+  padding: 16px;
+  border-radius: 12px;
+  margin-bottom: 12px;
+  border-left: 4px solid var(--warning);
+  font-size: 15px;
+  box-shadow: var(--shadow-sm);
+  line-height: 1.5;
 }
 
 .writing-correction-original {
-    color: var(--danger);
-    text-decoration: line-through;
-    margin-right: 6px;
+  color: var(--danger);
+  text-decoration: line-through;
+  margin-right: 8px;
+  opacity: 0.8;
 }
 
 .writing-correction-fixed {
-    color: var(--success);
-    font-weight: bold;
+  color: var(--success);
+  font-weight: 800;
 }
 
 .writing-correction-reason {
-    display: block;
-    margin-top: 4px;
-    font-size: 12px;
-    color: var(--text-sub);
+  display: block;
+  margin-top: 6px;
+  font-size: 13px;
+  color: var(--text-sub);
+  font-style: italic;
 }
 
+/* Improved Version Box */
 .writing-improved-box {
-    background: rgba(16, 185, 129, 0.1);
+  background: linear-gradient(135deg, rgba(16, 185, 129, 0.1) 0%, rgba(16, 185, 129, 0.05) 100%);
+  padding: 16px;
+  border-radius: 16px;
+  margin-top: 20px;
+  font-size: 15px;
+  line-height: 1.6;
+  color: var(--text-main);
+  border: 1px solid rgba(16, 185, 129, 0.2);
+}
+
+/* Mobile optimizations */
+@media (max-width: 480px) {
+  #writing-modal .modal-body {
+    padding: 16px;
+  }
+
+  .writing-correction-item {
     padding: 12px;
-    border-radius: 12px;
-    margin-top: 15px;
     font-size: 14px;
-    line-height: 1.6;
+  }
+
+  #writing-task-selector .segment-btn {
+    padding: 8px 4px;
+    font-size: 12px;
+  }
+}
+
+/* History Card */
+.history-card {
+  background: var(--surface-2);
+  padding: 16px;
+  border-radius: 16px;
+  border: 1px solid var(--border-color);
+  cursor: pointer;
+  transition:
+    transform 0.2s,
+    border-color 0.2s;
+}
+
+.history-card:hover {
+  transform: translateY(-2px);
+  border-color: var(--primary);
+}
+
+.history-card-header {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 8px;
+  font-size: 12px;
+  color: var(--text-sub);
+  font-weight: 600;
+}
+
+.history-card-score {
+  font-weight: 800;
+  color: var(--primary);
+}
+
+.history-card-preview {
+  font-size: 14px;
+  color: var(--text-main);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  line-height: 1.4;
+}
+
+/* Focus Mode Styles */
+#writing-modal.focus-mode .modal-header {
+  padding: 10px 20px;
+  border-bottom: none;
+}
+
+#writing-modal.focus-mode .modal-header h3,
+#writing-modal.focus-mode #writing-history-btn {
+  display: none;
+}
+
+#writing-modal.focus-mode #writing-task-selector {
+  display: none;
+}
+
+#writing-modal.focus-mode #writing-editor-view {
+  height: 100%;
+}
+
+#writing-modal.focus-mode #writing-question-container {
+  margin-bottom: 0;
+}
+
+/* Растягиваем поле ответа */
+#writing-modal.focus-mode #writing-answer {
+  flex: 1;
+  height: 100% !important;
+}
+
+#writing-modal.focus-mode #writing-focus-btn {
+  background: var(--primary);
+  color: white;
+  box-shadow: 0 0 10px rgba(124, 58, 237, 0.4);
+}
+
+/* Hide scrollbar in focus mode for immersion */
+#writing-modal.focus-mode .modal-body {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+#writing-modal.focus-mode .modal-body::-webkit-scrollbar {
+  display: none;
+}
+
+/* Maximized Mode */
+#writing-modal.maximized .modal-content {
+  width: 100% !important;
+  height: 100% !important;
+  max-width: 100% !important;
+  max-height: 100% !important;
+  border-radius: 0 !important;
+}
+
+/* History Filters */
+.history-filter-btn {
+  background: var(--surface-1);
+  border: 1px solid var(--border-color);
+  padding: 6px 12px;
+  border-radius: 20px;
+  font-size: 13px;
+  color: var(--text-sub);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.history-filter-btn.active {
+  background: var(--primary);
+  color: white;
+  border-color: var(--primary);
+}
+
+/* Font Sizes */
+#writing-modal.font-size-sm #writing-question,
+#writing-modal.font-size-sm #writing-answer {
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+#writing-modal.font-size-md #writing-question,
+#writing-modal.font-size-md #writing-answer {
+  font-size: 16px;
+  line-height: 1.5;
+}
+
+#writing-modal.font-size-lg #writing-question,
+#writing-modal.font-size-lg #writing-answer {
+  font-size: 20px;
+  line-height: 1.6;
+}
+
+#writing-modal.font-size-xl #writing-question,
+#writing-modal.font-size-xl #writing-answer {
+  font-size: 24px;
+  line-height: 1.7;
 }

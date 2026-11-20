@@ -78,6 +78,11 @@ for (const key in DOUBLE_JONG) {
   REVERSE_DOUBLE_JONG[DOUBLE_JONG[key]] = key.split("");
 }
 
+export function isHangul(char: string): boolean {
+  const code = char.charCodeAt(0);
+  return code >= 0xac00 && code <= 0xd7a3;
+}
+
 /**
  * Конвертирует строку английских символов в корейский (Hangul).
  * Простая реализация конечного автомата для сборки слогов.
@@ -98,7 +103,10 @@ export function toKorean(input: string): string {
 
   for (let i = 0; i < chars.length; i++) {
     const char = chars[i];
-    const jamo = KEY_MAP[char];
+    // FIX: Если символ уже Jamo (с виртуальной клавиатуры), используем его. Иначе ищем в карте.
+    const jamo =
+      KEY_MAP[char] ||
+      (CHO.includes(char) || JUNG.includes(char) || JONG.includes(char) ? char : null);
 
     // Если символ не корейская буква (например, пробел или цифра), сбрасываем состояние
     if (!jamo) {
@@ -177,9 +185,7 @@ export function toKorean(input: string): string {
         const prevJongChar = JONG[jong];
 
         // Восстанавливаем предыдущий слог без патчима
-        const prevSyllable = String.fromCharCode(
-          0xac00 + cho * 21 * 28 + jung * 28 + 0,
-        );
+        const prevSyllable = String.fromCharCode(0xac00 + cho * 21 * 28 + jung * 28 + 0);
         result.push(prevSyllable);
 
         // Текущий Jong становится Cho нового слога
@@ -220,11 +226,7 @@ export function toKorean(input: string): string {
           const firstJongIdx = JONG.indexOf(first);
 
           // 1. Commit previous syllable with first part of batchim
-          result.push(
-            String.fromCharCode(
-              0xac00 + cho * 21 * 28 + jung * 28 + firstJongIdx,
-            ),
-          );
+          result.push(String.fromCharCode(0xac00 + cho * 21 * 28 + jung * 28 + firstJongIdx));
 
           // 2. Start new syllable with second part as Cho
           cho = CHO.indexOf(second);
@@ -262,4 +264,33 @@ export function toKorean(input: string): string {
   else if (state === 1) result.push(CHO[cho]);
 
   return result.join("");
+}
+
+/**
+ * Разбирает корейский слог на составляющие Jamo (буквы).
+ * Например: "닭" -> ["ㄷ", "ㅏ", "ㄹ", "ㄱ"] (для корректного продолжения ввода)
+ */
+export function disassemble(char: string): string[] {
+  if (!isHangul(char)) return [char];
+
+  const code = char.charCodeAt(0) - 0xac00;
+  const jongIdx = code % 28;
+  const jungIdx = ((code - jongIdx) / 28) % 21;
+  const choIdx = Math.floor((code - jongIdx) / 28 / 21);
+
+  const res = [CHO[choIdx], JUNG[jungIdx]];
+
+  if (jongIdx > 0) {
+    const jongChar = JONG[jongIdx];
+    // Если патчим составной (например ㄳ), разбиваем его на компоненты (ㄱ, ㅅ),
+    // чтобы при удалении или добавлении гласной логика работала корректно.
+    const complex = REVERSE_DOUBLE_JONG[jongChar];
+    if (complex) {
+      res.push(...complex);
+    } else {
+      res.push(jongChar);
+    }
+  }
+
+  return res;
 }

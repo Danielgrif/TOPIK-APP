@@ -1,56 +1,103 @@
 import { corsHeaders } from "./constants.ts";
 
 /**
+ * Ошибка с явным HTTP-статусом. Используется для валидации и авторизации:
+ * только такие ошибки (со статусом < 500) показываются клиенту как есть.
+ */
+export class HttpError extends Error {
+  readonly status: number;
+
+  constructor(message: string, status = 400) {
+    super(message);
+    this.name = "HttpError";
+    this.status = status;
+  }
+}
+
+/**
  * Creates a standardized JSON error response.
+ *
+ * Важно: во внутренние ошибки (БД, Gemini, storage) клиент не попадает —
+ * они логируются на сервере, а наружу отдаётся обобщённое сообщение.
+ *
  * @param error The error object or message.
- * @param status The HTTP status code.
+ * @param status Optional explicit HTTP status code.
  * @returns A Response object.
  */
-export function createErrorResponse(error: unknown, status = 500): Response {
-  let errorPayload: object;
-  if (error instanceof Error) {
-    errorPayload = { error: error.message };
-  } else if (typeof error === "object" && error !== null) {
-    // Instead of spreading, nest the object to prevent crashes on circular references
-    // and to keep a predictable error structure.
-    // and to keep a predictable error structure. 
-    errorPayload = {
-      error: "An object was thrown. See details.",
-      details: error,
-    };
-  } else {
-    errorPayload = { error: String(error) };
-  }
+export function createErrorResponse(error: unknown, status?: number): Response {
+  const errorStatus =
+    status ??
+    (error instanceof HttpError
+      ? error.status
+      : typeof error === "object" && error !== null && "status" in error &&
+          typeof error.status === "number"
+        ? error.status
+        : 500);
 
-  console.error(`💥 Function Error (${status}):`, errorPayload, error); // Добавлено полное логирование ошибки
+  const rawMessage =
+    error instanceof Error
+      ? error.message
+      : typeof error === "string"
+        ? error
+        : error && typeof error === "object" && "message" in error
+          ? String((error as { message: unknown }).message)
+          : "Unknown error";
 
-  // Свойства `success` и `timestamp` размещены последними, чтобы гарантировать,
-  // что они не будут перезаписаны объектом ошибки.
-  const responsePayload = {
-    ...errorPayload,
-    success: false,
-    timestamp: new Date().toISOString(),
-  };
+  // 4xx — это ошибки ввода/авторизации, их можно показать пользователю.
+  // 5xx — внутренние ошибки: детали остаются только в логах функции.
+  const publicMessage =
+    errorStatus >= 500 ? "Internal server error" : rawMessage.slice(0, 300);
 
-  // Use a replacer to handle potential circular references inside the error object.
-  const getCircularReplacer = () => {
-    const seen = new WeakSet();
-    return (_key: string, value: unknown) => {
-      if (typeof value === "object" && value !== null) {
-        if (seen.has(value)) {
-          return "[Circular]";
-        }
-        seen.add(value);
-      }
-      return value;
-    };
-  };
+  // Полный ответ логируем только на сервере (никогда не отправляем details).
+  console.error(`💥 Function Error (${errorStatus}):`, rawMessage, error);
 
   return new Response(
-    JSON.stringify(responsePayload, getCircularReplacer()),
+    JSON.stringify({
+      error: publicMessage,
+      success: false,
+      timestamp: new Date().toISOString(),
+    }),
     {
-      status,
+      status: errorStatus,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     },
   );
+}
+
+/** Успешный ответ с едиными CORS-заголовками. */
+export function jsonResponse(payload: unknown, status = 200): Response {
+  return new Response(JSON.stringify(payload), {
+    status,
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
+}
+
+/**
+ * Стандартный ответ на preflight-запрос. Все функции должны вызывать его
+ * до чтения тела запроса и проверки авторизации.
+ */
+export function corsPreflightResponse(): Response {
+  return new Response("ok", { headers: corsHeaders });
+}
+
+/**
+ * Ограничение времени ожидания асинхронной операции (AI, внешние API).
+ * Не отменяет сам запрос внутри SDK, но не даёт функции зависнуть.
+ */
+export async function withTimeout<T>(
+  promise: Promise<T>,
+  ms: number,
+  message: string,
+): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new HttpError(message, 504)), ms);
+      }),
+    ]);
+  } finally {
+    if (timer !== undefined) clearTimeout(timer);
+  }
 }

@@ -1,4 +1,59 @@
+# supabase/config.toml — конфиг Edge Functions.
+# Все функции требуют валидный JWT (даже бывшие «публичные»): anon-ключ
+# тоже является JWT, поэтому браузер продолжает работать без входа.
 project_id = "gscnfituczfkrdeanzsw"
 
+[functions]
+
+# --- AI/публичные функции: теперь с JWT ---
 [functions.regenerate-image]
-  verify_jwt = false
+verify_jwt = true
+enabled = true
+
+[functions.generate-word-data]
+verify_jwt = true
+enabled = true
+
+[functions.check-essay]
+verify_jwt = true
+enabled = true
+
+[functions.generate-media-for-word]
+verify_jwt = true
+enabled = true
+
+# --- Пользовательские функции ---
+[functions.delete-user]
+verify_jwt = true
+enabled = true
+
+[functions.process-word-request]
+verify_jwt = true
+enabled = true
+
+[functions.retry-word-request]
+verify_jwt = true
+enabled = true
+
+[functions.submit-feedback]
+verify_jwt = true
+enabled = true
+
+# --- Админские функции ---
+[functions.get-feedback-reports]
+verify_jwt = true
+enabled = true
+
+[functions.update-feedback-status]
+verify_jwt = true
+enabled = true
+
+# --- Внутренние/серверные функции ---
+[functions.background-worker]
+verify_jwt = true
+enabled = true
+
+# OCR изображения через Gemini Vision. Клиент вызывает из ui_writing.ts.
+[functions.ocr-image]
+verify_jwt = true
+enabled = true

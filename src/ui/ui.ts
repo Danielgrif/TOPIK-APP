@@ -39,11 +39,9 @@ export function playAndSpeak(word: Word): Promise<void> {
       } catch {
         // Ignore
       }
-      const text =
-        word && (word.word_kr || word.translation) ? word.word_kr : "";
+      const text = word && (word.word_kr || word.translation) ? word.word_kr : "";
       let url = word.audio_url;
-      if (state.currentVoice === "male" && word.audio_male)
-        url = word.audio_male;
+      if (state.currentVoice === "male" && word.audio_male) url = word.audio_male;
       if (text) speak(text, url).then(resolve);
       else resolve();
     } catch (e) {
@@ -72,12 +70,7 @@ export function toggleViewMode(mode: string) {
 
   document
     .querySelectorAll(".view-btn")
-    .forEach((btn) =>
-      btn.classList.toggle(
-        "active",
-        (btn as HTMLElement).dataset.value === mode,
-      ),
-    );
+    .forEach((btn) => btn.classList.toggle("active", (btn as HTMLElement).dataset.value === mode));
   render();
 
   // Restore relative scroll position
@@ -149,10 +142,7 @@ export function enableQuizKeyboard(container: HTMLElement) {
       update();
       e.preventDefault();
     } else if (e.key === "ArrowLeft" || e.key === "ArrowUp") {
-      idx =
-        idx < 0
-          ? options.length - 1
-          : (idx - 1 + options.length) % options.length;
+      idx = idx < 0 ? options.length - 1 : (idx - 1 + options.length) % options.length;
       update();
       e.preventDefault();
     } else if (e.key === "Enter" || e.key === " ") {
@@ -163,8 +153,7 @@ export function enableQuizKeyboard(container: HTMLElement) {
   // FIX: Не перехватывать пробел, если фокус в поле ввода
   if (
     document.activeElement &&
-    (document.activeElement.tagName === "INPUT" ||
-      document.activeElement.tagName === "TEXTAREA")
+    (document.activeElement.tagName === "INPUT" || document.activeElement.tagName === "TEXTAREA")
   ) {
     return;
   }
@@ -217,8 +206,7 @@ export function sortByDate() {
     const dateA = a.created_at || "";
     const dateB = b.created_at || "";
     // Newest first (descending)
-    if (dateA === dateB)
-      return (a.word_kr || "").localeCompare(b.word_kr || "");
+    if (dateA === dateB) return (a.word_kr || "").localeCompare(b.word_kr || "");
     return dateB.localeCompare(dateA);
   });
   render();

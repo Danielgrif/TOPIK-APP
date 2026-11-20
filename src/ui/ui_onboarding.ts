@@ -222,14 +222,8 @@ const STEPS: Step[] = [
     explanation: "Например, только 'Избранное'.",
     interactive: false, // Just highlight
     cleanup: () => {
-      const btn = document.querySelector(
-        "[data-action='toggle-filter-panel']",
-      ) as HTMLElement;
-      if (
-        btn &&
-        document.getElementById("filter-panel")?.classList.contains("show")
-      )
-        btn.click();
+      const btn = document.querySelector("[data-action='toggle-filter-panel']") as HTMLElement;
+      if (btn && document.getElementById("filter-panel")?.classList.contains("show")) btn.click();
     },
   },
   // --- Header ---
@@ -448,10 +442,8 @@ function setupDrag(el: HTMLElement) {
     hasUserMovedCard = true;
     el.classList.add("dragging");
 
-    const clientX =
-      "touches" in e ? e.touches[0].clientX : (e as MouseEvent).clientX;
-    const clientY =
-      "touches" in e ? e.touches[0].clientY : (e as MouseEvent).clientY;
+    const clientX = "touches" in e ? e.touches[0].clientX : (e as MouseEvent).clientX;
+    const clientY = "touches" in e ? e.touches[0].clientY : (e as MouseEvent).clientY;
 
     startX = clientX;
     startY = clientY;
@@ -471,10 +463,8 @@ function setupDrag(el: HTMLElement) {
     if (!el.classList.contains("dragging")) return;
     e.preventDefault();
 
-    const clientX =
-      "touches" in e ? e.touches[0].clientX : (e as MouseEvent).clientX;
-    const clientY =
-      "touches" in e ? e.touches[0].clientY : (e as MouseEvent).clientY;
+    const clientX = "touches" in e ? e.touches[0].clientX : (e as MouseEvent).clientX;
+    const clientY = "touches" in e ? e.touches[0].clientY : (e as MouseEvent).clientY;
 
     const dx = clientX - startX;
     const dy = clientY - startY;
@@ -596,9 +586,7 @@ async function renderStep() {
   if (step.requiresModal) {
     const modal = document.getElementById(step.requiresModal);
     if (modal && !modal.classList.contains("active")) {
-      console.info(
-        `[Onboarding] Step requires modal '${step.requiresModal}', opening it.`,
-      );
+      console.info(`[Onboarding] Step requires modal '${step.requiresModal}', opening it.`);
       openModal(step.requiresModal);
       if (step.requiresModal === "stats-modal") {
         renderDetailedStats();

@@ -3,6 +3,7 @@ import { state } from "../core/state.ts";
 import { findConfusingWords } from "../core/confusing_words.ts";
 import { showComboEffect, showToast } from "../utils/utils.ts";
 import { addXP, updateStats, checkAchievements } from "../core/stats.ts";
+import confetti from "canvas-confetti";
 
 export interface TickResult {
   gameOver: boolean;
@@ -70,7 +71,7 @@ class BaseQuizConfig implements QuizConfig {
 }
 
 class SprintQuizConfig extends BaseQuizConfig {
-  initialTimer = 60;
+  initialTimer = state.userStats.sprintTimer || 60;
   isTimerCountdown = true;
   private streak = 0;
 
@@ -90,6 +91,7 @@ class SprintQuizConfig extends BaseQuizConfig {
     const next = t - delta;
     const pct = Math.max(0, (next / 60) * 100);
     return {
+      // TODO: update PCT
       gameOver: next <= 0,
       nextTimer: next,
       ui: {
@@ -173,9 +175,23 @@ class SurvivalQuizConfig extends BaseQuizConfig {
   onAnswer(isCorrect: boolean, _t: number, lives: number) {
     if (isCorrect) {
       this.streak++;
-      showComboEffect("+3 сек!");
+      let timeBonus = 3;
+      let msg = "+3 сек!";
+
+      if (this.streak >= 10) {
+        timeBonus = 5;
+        msg = `🔥 КОМБО x${this.streak}! +5 сек`;
+        showComboEffect(msg);
+      } else if (this.streak >= 5) {
+        timeBonus = 4;
+        msg = `⚡ Комбо x${this.streak}! +4 сек`;
+        showToast(msg, 1000);
+      } else {
+        showToast(msg, 800);
+      }
+
       return {
-        timeChange: 3,
+        timeChange: timeBonus,
         livesChange: 0,
         gameOver: false,
         streak: this.streak,
@@ -219,10 +235,7 @@ class DailyQuizConfig extends BaseQuizConfig {
     unlearned.sort(() => Math.random() - 0.5);
     learned.sort(() => Math.random() - 0.5);
 
-    let words = [
-      ...unlearned.slice(0, countNew),
-      ...learned.slice(0, countReview),
-    ];
+    let words = [...unlearned.slice(0, countNew), ...learned.slice(0, countReview)];
 
     if (words.length < total) {
       const currentIds = new Set(words.map((w) => w.id));
@@ -274,18 +287,17 @@ class DailyQuizConfig extends BaseQuizConfig {
     checkAchievements();
 
     state.dailyChallenge = { lastDate: today, completed: true, streak: streak };
-    localStorage.setItem(
-      "daily_challenge_v1",
-      JSON.stringify(state.dailyChallenge),
-    );
+    localStorage.setItem("daily_challenge_v1", JSON.stringify(state.dailyChallenge));
 
-    showComboEffect(
-      `🔥 Вызов пройден!\n+${xpAward} XP | +${totalCoins} 💰\nСерия: ${streak} дн.`,
-    );
+    showComboEffect(`🔥 Вызов пройден!\n+${xpAward} XP | +${totalCoins} 💰\nСерия: ${streak} дн.`);
 
-    if (typeof window.confetti === "function") {
-      window.confetti({ particleCount: 150, spread: 70, origin: { y: 0.6 } });
-    }
+    const isMobile = window.innerWidth < 768;
+    confetti({
+      particleCount: isMobile ? 80 : 150,
+      spread: isMobile ? 50 : 70,
+      origin: { y: 0.6 },
+      disableForReducedMotion: true,
+    });
   }
 }
 
@@ -302,7 +314,8 @@ class ConfusingQuizConfig extends BaseQuizConfig {
 
 class AssociationQuizConfig extends BaseQuizConfig {
   getWords(_pool: Word[]): Word[] {
-    return Array(5).fill({ id: "dummy" } as Word);
+    // Возвращаем 3 раунда ассоциаций вместо 5, чтобы не затягивать
+    return Array(3).fill({ id: "dummy" } as Word);
   }
 }
 
@@ -335,15 +348,13 @@ export function getQuizConfig(mode: string): QuizConfig {
         (w) => !!(w.example_kr && w.example_kr.length > 5 && w.example_ru),
       );
     case "dialogue":
-      return new FilteredQuizConfig((w) => !!(w.example_audio && w.example_kr));
+      return new FilteredQuizConfig(
+        (w) => w.type === "dialogue" && !!(w.example_audio && w.example_kr),
+      );
     case "synonyms":
-      return new FilteredQuizConfig(
-        (w) => !!(w.synonyms && w.synonyms.trim().length > 0),
-      );
+      return new FilteredQuizConfig((w) => !!(w.synonyms && w.synonyms.trim().length > 0));
     case "antonyms":
-      return new FilteredQuizConfig(
-        (w) => !!(w.antonyms && w.antonyms.trim().length > 0),
-      );
+      return new FilteredQuizConfig((w) => !!(w.antonyms && w.antonyms.trim().length > 0));
     default:
       return new BaseQuizConfig();
   }

@@ -1,8 +1,9 @@
 import { state } from "../core/state.ts";
 import { setTypeFilter } from "./ui_filters.ts";
 import { closeModal } from "./ui_modal.ts";
-import { showToast } from "../utils/utils.ts";
+import { escapeHtml, showToast } from "../utils/utils.ts";
 import { LS_KEYS, SW_MESSAGES } from "../core/constants.ts";
+import { uiFeedback } from "./ui_feedback.ts";
 
 export function showUpdateNotification(worker: ServiceWorker) {
   let el = document.getElementById("update-notification");
@@ -18,8 +19,7 @@ export function showUpdateNotification(worker: ServiceWorker) {
 
   // Обновляем обработчик всегда, даже если элемент уже существует
   const btn = document.getElementById("update-btn");
-  if (btn)
-    btn.onclick = () => worker.postMessage({ type: SW_MESSAGES.SKIP_WAITING });
+  if (btn) btn.onclick = () => worker.postMessage({ type: SW_MESSAGES.SKIP_WAITING });
 
   setTimeout(() => el!.classList.add("show"), 100);
 }
@@ -42,8 +42,7 @@ export function setupGestures() {
     (e) => {
       const touchEndX = e.changedTouches[0].screenX;
       const touchEndY = e.changedTouches[0].screenY;
-      if (e.target)
-        handleGesture(touchStartX, touchStartY, touchEndX, touchEndY, e.target);
+      if (e.target) handleGesture(touchStartX, touchStartY, touchEndX, touchEndY, e.target);
     },
     { passive: true },
   );
@@ -76,21 +75,17 @@ function handleGesture(
       content = scrollableChild as HTMLElement;
     }
 
-    if (
-      diffY > minSwipe &&
-      absY > absX * 1.5 &&
-      content &&
-      content.scrollTop <= 0
-    ) {
+    if (diffY > minSwipe && absY > absX * 1.5 && content && content.scrollTop <= 0) {
       closeModal(activeModal.id);
     }
     return;
   }
 
-  if (
-    target instanceof Element &&
-    (target.closest(".stats-strip") || target.closest(".slider"))
-  )
+  // Обработка жестов для открытия обратной связи (например, тройное нажатие или жест, если нужно)
+  // Пока оставим стандартный вызов через кнопку
+
+  // Глобальные жесты свайпа для переключения вкладок
+  if (target instanceof Element && (target.closest(".stats-strip") || target.closest(".slider")))
     return;
 
   if (absX > minSwipe && absX > absY * 1.5) {
@@ -134,8 +129,7 @@ export function setupScrollBehavior() {
       const currentScrollY = scrollContainer.scrollTop;
 
       // Header visibility
-      if (currentScrollY > lastScrollY && currentScrollY > 50)
-        header.classList.add("hidden");
+      if (currentScrollY > lastScrollY && currentScrollY > 50) header.classList.add("hidden");
       else header.classList.remove("hidden");
 
       // Back to Top visibility
@@ -156,12 +150,8 @@ export function saveSearchHistory(query: string) {
 
   state.searchHistory = state.searchHistory.filter((q: string) => q !== query);
   state.searchHistory.unshift(query);
-  if (state.searchHistory.length > 5)
-    state.searchHistory = state.searchHistory.slice(0, 5);
-  localStorage.setItem(
-    LS_KEYS.SEARCH_HISTORY,
-    JSON.stringify(state.searchHistory),
-  );
+  if (state.searchHistory.length > 5) state.searchHistory = state.searchHistory.slice(0, 5);
+  localStorage.setItem(LS_KEYS.SEARCH_HISTORY, JSON.stringify(state.searchHistory));
 }
 
 export function showSearchHistory(inputEl: HTMLInputElement) {
@@ -180,7 +170,7 @@ export function showSearchHistory(inputEl: HTMLInputElement) {
   state.searchHistory.forEach((q: string) => {
     const item = document.createElement("div");
     item.className = "history-item";
-    item.innerHTML = `<span style="opacity:0.5;">🕒</span> ${q}`;
+    item.innerHTML = `<span style="opacity:0.5;">🕒</span> ${escapeHtml(q)}`;
 
     item.onmousedown = (e) => {
       e.preventDefault();
@@ -195,10 +185,7 @@ export function showSearchHistory(inputEl: HTMLInputElement) {
     delBtn.onclick = (e) => {
       e.stopPropagation();
       state.searchHistory = state.searchHistory.filter((x: string) => x !== q);
-      localStorage.setItem(
-        LS_KEYS.SEARCH_HISTORY,
-        JSON.stringify(state.searchHistory),
-      );
+      localStorage.setItem(LS_KEYS.SEARCH_HISTORY, JSON.stringify(state.searchHistory));
       showSearchHistory(inputEl);
       if (state.searchHistory.length === 0) hideSearchHistory();
     };
@@ -231,3 +218,26 @@ export function dismissInstallBanner() {
   if (banner) banner.classList.remove("show");
   localStorage.setItem(LS_KEYS.PWA_BANNER_DISMISSED, "true");
 }
+
+// --- Global Interaction Handlers ---
+
+document.addEventListener("click", (e) => {
+  const target = e.target as HTMLElement;
+  const actionBtn = target.closest("[data-action]") as HTMLElement;
+
+  if (actionBtn) {
+    const action = actionBtn.dataset.action;
+
+    switch (action) {
+      case "open-feedback":
+        uiFeedback.show();
+        break;
+      // Другие глобальные действия можно добавить сюда
+    }
+  }
+
+  const modalTrigger = target.closest("[data-modal]") as HTMLElement;
+  if (modalTrigger && modalTrigger.dataset.modal === "feedback-modal") {
+    uiFeedback.show();
+  }
+});

@@ -1,23 +1,59 @@
 import { client } from "./supabaseClient.ts";
-import { state } from "./state.ts";
+import { state, notify } from "./state.ts";
 import { loadFromSupabase } from "./db.ts";
 import { showToast } from "../utils/utils.ts";
 import { promiseWithTimeout } from "../utils/utils.ts";
 import { saveAndRender } from "../ui/ui.ts";
 import { openModal, closeModal, openConfirm } from "../ui/ui_modal.ts";
-import {
-  applyTheme,
-  updateVoiceUI,
-  updateSettingsUI,
-} from "../ui/ui_settings.ts";
+import { applyTheme, updateVoiceUI, updateSettingsUI } from "../ui/ui_settings.ts";
 import { User } from "../types/index.ts";
 import { LS_KEYS, DB_TABLES } from "./constants.ts";
 import { AuthService } from "./auth_service.ts";
 import { getRole, openRolesModal } from "./stats.ts";
 
+/**
+ * Изящно обрабатывает истечение сессии, показывая пользователю
+ * диалоговое окно вместо внезапного выхода.
+ */
+function handleSessionExpired() {
+  // Закрываем все активные модальные окна, чтобы избежать наложения
+  document.querySelectorAll<HTMLElement>(".modal.active").forEach((modal) => {
+    if (modal.id && modal.id !== "confirm-modal" && modal.id !== "quiz-summary-modal") {
+      closeModal(modal.id); // Close other modals
+    }
+  });
+
+  openConfirm(
+    "Ваша сессия истекла. Для продолжения необходимо снова войти в систему.",
+    () => {
+      // При подтверждении - выходим из системы.
+      // onAuthStateChange автоматически откроет окно входа.
+      client.auth.signOut();
+      // Reset the flag after a short delay
+      setTimeout(() => {
+        window.isSessionExpired = false;
+      }, 2000);
+    },
+    {
+      confirmText: "Войти",
+      showCancel: false, // Не даем пользователю отменить, так как сессия уже невалидна
+    },
+  );
+}
+
+// Добавляем глобальный слушатель события.
+// Это нужно сделать один раз при инициализации приложения.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+if (!(window as any).sessionExpiredListenerAttached) {
+  document.addEventListener("session-expired", handleSessionExpired);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  (window as any).sessionExpiredListenerAttached = true;
+}
+
 export function updateAuthUI(user: User | null) {
   // Keep a reference to the current user in the global state
   state.currentUser = user;
+  notify("auth_changed", user);
 
   const profileBtn = document.getElementById("profile-button");
   const avatar = document.getElementById("profile-avatar");
@@ -28,8 +64,7 @@ export function updateAuthUI(user: User | null) {
 
   if (user) {
     const email = user.email || "";
-    const displayName =
-      user.user_metadata?.full_name || email.split("@")[0] || "Гость";
+    const displayName = user.user_metadata?.full_name || email.split("@")[0] || "Гость";
     const avatarUrl = user.user_metadata?.avatar_url;
 
     if (avatarUrl) {
@@ -53,13 +88,9 @@ export function updateAuthUI(user: User | null) {
 
 export function openLoginModal() {
   openModal("login-modal");
-  const emailInput = document.getElementById(
-    "auth-email",
-  ) as HTMLInputElement | null;
+  const emailInput = document.getElementById("auth-email") as HTMLInputElement | null;
   if (emailInput) emailInput.value = "";
-  const passInput = document.getElementById(
-    "auth-password",
-  ) as HTMLInputElement | null;
+  const passInput = document.getElementById("auth-password") as HTMLInputElement | null;
   const confirmPassInput = document.getElementById(
     "auth-confirm-password",
   ) as HTMLInputElement | null;
@@ -69,9 +100,7 @@ export function openLoginModal() {
   confirmPassInput.value = "";
 
   const bar = document.getElementById("strength-bar");
-  const strengthContainer = document.querySelector(
-    ".password-strength",
-  ) as HTMLElement | null;
+  const strengthContainer = document.querySelector(".password-strength") as HTMLElement | null;
   if (passInput && bar && strengthContainer) {
     bar.style.width = "0%";
     strengthContainer.style.display = "none";
@@ -81,18 +110,12 @@ export function openLoginModal() {
   // Add blur listeners for real-time validation
   const inputsToValidate = [emailInput, passInput, confirmPassInput];
   if (document.getElementById("auth-name")) {
-    inputsToValidate.push(
-      document.getElementById("auth-name") as HTMLInputElement,
-    );
+    inputsToValidate.push(document.getElementById("auth-name") as HTMLInputElement);
   }
   inputsToValidate.forEach((input) => {
     if (input) {
-      input.addEventListener("blur", () =>
-        validateField(input as HTMLInputElement),
-      );
-      input.addEventListener("input", () =>
-        clearFieldError(input as HTMLInputElement),
-      );
+      input.addEventListener("blur", () => validateField(input as HTMLInputElement));
+      input.addEventListener("input", () => clearFieldError(input as HTMLInputElement));
     }
   });
 
@@ -105,9 +128,7 @@ export function openLoginModal() {
 
   const handleEnter = (e: KeyboardEvent) => {
     if (e.key === "Enter") {
-      const submitBtn = document.getElementById(
-        "auth-submit-btn",
-      ) as HTMLElement;
+      const submitBtn = document.getElementById("auth-submit-btn") as HTMLElement;
       if (submitBtn) submitBtn.click();
     }
   };
@@ -123,25 +144,18 @@ export function openProfileModal(focusPassword = false) {
 
   if (state.currentUser) {
     const user = state.currentUser;
-    const displayName =
-      user.user_metadata?.full_name || user.email?.split("@")[0] || "Гость";
+    const displayName = user.user_metadata?.full_name || user.email?.split("@")[0] || "Гость";
 
     const nameDisplay = document.getElementById("profile-name-display");
-    const nameInput = document.getElementById(
-      "profile-name-input",
-    ) as HTMLInputElement;
+    const nameInput = document.getElementById("profile-name-input") as HTMLInputElement;
     const editBtn = document.getElementById("edit-profile-name-btn");
 
     if (nameDisplay) nameDisplay.textContent = displayName;
 
     const avatarEl = document.getElementById("profile-avatar-large");
-    const avatarImg = document.getElementById(
-      "profile-avatar-img",
-    ) as HTMLImageElement;
+    const avatarImg = document.getElementById("profile-avatar-img") as HTMLImageElement;
     const avatarText = document.getElementById("profile-avatar-text");
-    const avatarInput = document.getElementById(
-      "avatar-upload",
-    ) as HTMLInputElement;
+    const avatarInput = document.getElementById("avatar-upload") as HTMLInputElement;
     const deleteAvatarBtn = document.getElementById("delete-avatar-btn");
 
     if (avatarEl && avatarImg && avatarText) {
@@ -172,10 +186,7 @@ export function openProfileModal(focusPassword = false) {
 
           showToast("⏳ Загрузка аватара...");
           try {
-            const { data, error } = await AuthService.uploadAvatar(
-              user.id,
-              file,
-            );
+            const { data, error } = await AuthService.uploadAvatar(user.id, file);
             if (error) throw error;
 
             if (data.user) {
@@ -210,9 +221,7 @@ export function openProfileModal(focusPassword = false) {
               // Мгновенное обновление UI
               avatarImg.style.display = "none";
               avatarText.style.display = "block";
-              avatarText.textContent = (user.email || "U")
-                .charAt(0)
-                .toUpperCase();
+              avatarText.textContent = (user.email || "U").charAt(0).toUpperCase();
               deleteAvatarBtn.style.display = "none";
               showToast("✅ Фото удалено");
             } catch (err: unknown) {
@@ -275,16 +284,12 @@ export function openProfileModal(focusPassword = false) {
       roleEl.onclick = () => openRolesModal();
     }
 
-    const input = document.getElementById(
-      "new-password",
-    ) as HTMLInputElement | null;
+    const input = document.getElementById("new-password") as HTMLInputElement | null;
     const bar = document.getElementById("new-strength-bar");
     const container = document.getElementById("new-strength-container");
 
     // Очистка поля смены email
-    const emailInput = document.getElementById(
-      "new-email",
-    ) as HTMLInputElement | null;
+    const emailInput = document.getElementById("new-email") as HTMLInputElement | null;
     if (emailInput) emailInput.value = "";
 
     if (input && bar && container) {
@@ -328,12 +333,8 @@ export function toggleAuthMode(mode: "login" | "signup" | "reset") {
   const submitBtn = document.getElementById("auth-submit-btn");
   const nameContainer = document.getElementById("auth-name-container");
   const passContainer = document.getElementById("auth-password-container");
-  const confirmPassContainer = document.getElementById(
-    "auth-confirm-password-container",
-  );
-  const strengthContainer = document.querySelector(
-    ".password-strength",
-  ) as HTMLElement;
+  const confirmPassContainer = document.getElementById("auth-confirm-password-container");
+  const strengthContainer = document.querySelector(".password-strength") as HTMLElement;
   const switchContainer = document.getElementById("auth-mode-switch-container");
   const forgotLink = document.getElementById("auth-forgot-link");
   const socialAuth = document.getElementById("auth-social");
@@ -349,8 +350,7 @@ export function toggleAuthMode(mode: "login" | "signup" | "reset") {
   if (mode === "signup") {
     if (title) title.textContent = "Регистрация";
     if (desc)
-      desc.textContent =
-        "Создайте аккаунт, чтобы сохранять прогресс и соревноваться с другими.";
+      desc.textContent = "Создайте аккаунт, чтобы сохранять прогресс и соревноваться с другими.";
     if (submitBtn) {
       submitBtn.textContent = "Создать аккаунт";
       submitBtn.setAttribute("data-value", "signup");
@@ -374,8 +374,7 @@ export function toggleAuthMode(mode: "login" | "signup" | "reset") {
       switchContainer.innerHTML = `Нет аккаунта? <a href="#" data-action="toggle-auth-mode" data-value="signup">Регистрация</a>`;
   } else if (mode === "reset") {
     if (title) title.textContent = "🔑 Сброс пароля";
-    if (desc)
-      desc.textContent = "Введите Email, чтобы получить ссылку для входа.";
+    if (desc) desc.textContent = "Введите Email, чтобы получить ссылку для входа.";
     if (submitBtn) {
       submitBtn.textContent = "Отправить ссылку";
       submitBtn.setAttribute("data-value", "reset");
@@ -421,12 +420,8 @@ function setupPasswordStrengthMeter(
 }
 
 export async function handleAuth(type: string) {
-  const emailInput = document.getElementById(
-    "auth-email",
-  ) as HTMLInputElement | null;
-  const passwordInput = document.getElementById(
-    "auth-password",
-  ) as HTMLInputElement | null;
+  const emailInput = document.getElementById("auth-email") as HTMLInputElement | null;
+  const passwordInput = document.getElementById("auth-password") as HTMLInputElement | null;
   if (!emailInput || !passwordInput) return;
 
   const email = emailInput.value.trim();
@@ -505,10 +500,7 @@ async function performReset(email: string) {
     : window.location.origin + window.location.pathname;
 
   try {
-    const { error } = await AuthService.resetPasswordForEmail(
-      email,
-      redirectTo,
-    );
+    const { error } = await AuthService.resetPasswordForEmail(email, redirectTo);
     if (error) throw error;
     alert(`Ссылка для входа отправлена на ${email}.\nПроверьте почту.`);
     closeModal("login-modal");
@@ -520,10 +512,7 @@ async function performReset(email: string) {
 async function performLogin(email: string, password: string) {
   showToast("⏳ Вход...");
   try {
-    const { data, error } = await AuthService.signInWithPassword(
-      email,
-      password,
-    );
+    const { data, error } = await AuthService.signInWithPassword(email, password);
     if (error) throw error;
     if (data.user) await finalizeAuth(data.user as unknown as User);
   } catch (e) {
@@ -531,11 +520,7 @@ async function performLogin(email: string, password: string) {
   }
 }
 
-async function performSignup(
-  email: string,
-  password: string,
-  fullName?: string,
-) {
+async function performSignup(email: string, password: string, fullName?: string) {
   showToast("⏳ Регистрация...");
   try {
     const { data, error } = await AuthService.signUp(email, password, {
@@ -594,17 +579,11 @@ function handleAuthError(e: unknown) {
     msg = "🌐 Ошибка сети. Проверьте интернет-соединение.";
   } else if (msg.includes("already registered")) {
     msg = "📧 Этот Email уже зарегистрирован. Попробуйте войти.";
-  } else if (
-    msg.includes("Invalid login") ||
-    msg.includes("Invalid credentials")
-  ) {
+  } else if (msg.includes("Invalid login") || msg.includes("Invalid credentials")) {
     msg = "❌ Неверный Email или пароль.";
   } else if (msg.includes("Email not confirmed")) {
     msg = "📩 Email не подтвержден. Проверьте почту.";
-  } else if (
-    msg.includes("Rate limit exceeded") ||
-    msg.includes("Too many requests")
-  ) {
+  } else if (msg.includes("Rate limit exceeded") || msg.includes("Too many requests")) {
     msg = "⏳ Слишком много попыток. Подождите немного.";
   } else if (msg.includes("Password should be at least")) {
     msg = "🔒 Пароль должен быть не менее 6 символов.";
@@ -635,9 +614,7 @@ export async function signInWithGoogle() {
 }
 
 export async function handleChangePassword() {
-  const newPassInput = document.getElementById(
-    "new-password",
-  ) as HTMLInputElement | null;
+  const newPassInput = document.getElementById("new-password") as HTMLInputElement | null;
   if (!newPassInput) return;
   const newPass = newPassInput.value.trim();
   if (!newPass) {
@@ -661,9 +638,7 @@ export async function handleChangePassword() {
 }
 
 export async function handleChangeEmail() {
-  const newEmailInput = document.getElementById(
-    "new-email",
-  ) as HTMLInputElement | null;
+  const newEmailInput = document.getElementById("new-email") as HTMLInputElement | null;
   if (!newEmailInput) return;
   const newEmail = newEmailInput.value.trim();
 
@@ -698,16 +673,10 @@ export async function handleLogout() {
     try {
       // Attempt to sign out from Supabase with a timeout
       // If it takes too long (e.g., network issue), we proceed anyway
-      await promiseWithTimeout(
-        AuthService.signOut(),
-        5000,
-        new Error("Logout request timed out"),
-      );
+      await promiseWithTimeout(AuthService.signOut(), 5000, new Error("Logout request timed out"));
     } catch (e) {
       console.error("Logout error:", e);
-      showToast(
-        "⚠️ Ошибка выхода из аккаунта на сервере или таймаут. Очистка локальных данных.",
-      );
+      showToast("⚠️ Ошибка выхода из аккаунта на сервере или таймаут. Очистка локальных данных.");
     } finally {
       // Итерация по всем известным ключам приложения и их удаление,
       // за исключением кэша словаря для ускорения следующего входа.
@@ -768,10 +737,7 @@ export async function handleDeleteAccount() {
         if (lists && lists.length > 0) {
           const listIds = lists.map((l) => l.id);
           // 3. Delete items from those lists first
-          await client
-            .from(DB_TABLES.LIST_ITEMS)
-            .delete()
-            .in("list_id", listIds);
+          await client.from(DB_TABLES.LIST_ITEMS).delete().in("list_id", listIds);
         }
 
         // 4. Delete all other user-specific data in parallel
@@ -785,8 +751,10 @@ export async function handleDeleteAccount() {
         ]);
 
         // 5. Call the Edge Function to delete the user from auth.users
-        const { data: funcData, error: functionError } =
-          await client.functions.invoke("delete-user");
+        const { data: funcData, error: functionError } = await client.functions.invoke(
+          "delete-user",
+          { method: "DELETE" },
+        );
 
         if (functionError) {
           // Even if the function fails, we proceed with local cleanup.
@@ -819,10 +787,7 @@ export async function handleDeleteAccount() {
               showToast("Введите пароль");
               return false;
             }
-            const { error } = await AuthService.signInWithPassword(
-              session.user.email!,
-              val,
-            );
+            const { error } = await AuthService.signInWithPassword(session.user.email!, val);
             if (error) {
               showToast("❌ Неверный пароль");
               return false;
@@ -852,10 +817,10 @@ export function togglePasswordVisibility(triggerBtn?: HTMLElement) {
   if (!input || !btn) return;
   if (input.type === "password") {
     input.type = "text";
-    btn.textContent = "🙈";
+    btn.textContent = "👁️";
   } else {
     input.type = "password";
-    btn.textContent = "👁️";
+    btn.textContent = "🔒";
   }
 }
 
@@ -866,11 +831,7 @@ export function cleanAuthUrl() {
       window.location.hash.includes("type=recovery") ||
       window.location.hash.includes("error="))
   ) {
-    window.history.replaceState(
-      null,
-      "",
-      window.location.pathname + window.location.search,
-    );
+    window.history.replaceState(null, "", window.location.pathname + window.location.search);
   }
 }
 
@@ -903,18 +864,44 @@ function getPasswordStrength(val: string): {
 
   return { score, text, color };
 }
-function validateField(_arg0: HTMLInputElement): unknown {
-  throw new Error("Function not implemented.");
-}
-
-function clearFieldError(_arg0: HTMLInputElement): unknown {
-  throw new Error("Function not implemented.");
-}
 
 function clearAuthErrors() {
-  throw new Error("Function not implemented.");
+  const errEl = document.getElementById("auth-error");
+  if (errEl) errEl.style.display = "none";
 }
 
-function showInlineAuthError(_arg0: string, _arg1: string) {
-  throw new Error("Function not implemented.");
+function showInlineAuthError(fieldId: string, message: string) {
+  const inputElement = document.getElementById(fieldId) as HTMLInputElement | null;
+  if (!inputElement) return;
+
+  inputElement.classList.add("error");
+  const errorContainer = inputElement.parentElement?.querySelector(
+    ".input-error-msg",
+  ) as HTMLElement | null;
+  if (errorContainer) {
+    errorContainer.textContent = message;
+  }
+}
+
+function validateField(input: HTMLInputElement): boolean {
+  if (!input) return false;
+
+  const val = input.value.trim();
+  if (!val) {
+    input.classList.add("error");
+    const errorMsg = input.parentElement?.querySelector(".input-error-msg");
+    if (errorMsg) {
+      errorMsg.textContent = "Это поле обязательно для заполнения";
+    }
+    return true;
+  }
+  return false;
+}
+
+function clearFieldError(input: HTMLInputElement) {
+  input.classList.remove("error");
+  const errorMsg = input.parentElement?.querySelector(".input-error-msg");
+  if (errorMsg) {
+    errorMsg.textContent = "";
+  }
 }

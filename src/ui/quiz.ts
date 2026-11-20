@@ -6,20 +6,15 @@ import {
   escapeHtml,
   showComboEffect,
 } from "../utils/utils.ts";
-import {
-  ensureSessionStarted,
-  playAndSpeak,
-  saveAndRender,
-  openWritingModal,
-  openListeningModal,
-} from "./ui.ts";
+import { ensureSessionStarted, playAndSpeak, saveAndRender, openListeningModal } from "./ui.ts";
 import { closeModal, openModal, openConfirm } from "./ui_modal.ts";
 import { recordAttempt, scheduleSaveState } from "../core/db.ts";
-import { addXP, checkAchievements } from "../core/stats.ts";
+import { addXP, checkAchievements, invalidateStatsCache } from "../core/stats.ts";
 import { applyBackgroundMusic } from "./ui_settings.ts";
 import { QuizStrategies } from "./quiz_strategies.ts";
 import { Word } from "../types/index.ts";
 import { getQuizConfig, QuizConfig } from "./quiz_modes_config.ts";
+import confetti from "canvas-confetti";
 
 let currentQuizMode: string;
 let quizWords: Word[] = [];
@@ -40,6 +35,7 @@ let currentConfig: QuizConfig | null = null;
 let quizXPGained: number = 0;
 let quizStreak: number = 0;
 let isTimeFrozen: boolean = false;
+let quizMistakes: Word[] = [];
 let freezeTimeout: number | null = null;
 
 export function updateDailyChallengeUI() {
@@ -58,10 +54,7 @@ export function updateDailyChallengeUI() {
 
   const isCompleted = challenge.lastDate === today && challenge.completed;
   // Серия под угрозой, если она > 0, задание на сегодня не выполнено, и последнее выполнение было вчера
-  const isAtRisk =
-    (challenge.streak || 0) > 0 &&
-    !isCompleted &&
-    challenge.lastDate === yesterday;
+  const isAtRisk = (challenge.streak || 0) > 0 && !isCompleted && challenge.lastDate === yesterday;
   const isMaster = (challenge.streak || 0) >= 7;
 
   const isSunday = new Date().getDay() === 0;
@@ -111,9 +104,8 @@ export function checkSuperChallengeNotification() {
 }
 
 export function buildQuizModes() {
-  const header = document.querySelector(
-    "#quiz-modal .modal-header",
-  ) as HTMLElement;
+  populateSprintSettings();
+  const header = document.querySelector("#quiz-modal .modal-header") as HTMLElement;
   if (header) header.style.display = "flex";
   const quizGame = document.getElementById("quiz-game");
   if (quizGame) quizGame.style.display = "none";
@@ -206,13 +198,6 @@ export function buildQuizModes() {
       mode: "essay",
       category: "writing",
     },
-    {
-      id: "writing-ai",
-      emoji: "🤖",
-      label: "AI Письмо",
-      mode: "writing-ai",
-      category: "writing",
-    },
 
     // Audio
     {
@@ -231,8 +216,8 @@ export function buildQuizModes() {
     },
     {
       id: "dialogue",
-      emoji: "🗣️",
-      label: "Диалог",
+      emoji: "💬",
+      label: "Аудирование",
       mode: "dialogue",
       category: "audio",
     },
@@ -288,10 +273,11 @@ export function buildQuizModes() {
   quizStar = state.quizDifficulty || "all";
   quizSearch = "";
 
-  const sInput = document.getElementById(
-    "quiz-search-input",
-  ) as HTMLInputElement;
+  const sInput = document.getElementById("quiz-search-input") as HTMLInputElement;
   if (sInput) {
+    // Hide search in quiz mode as per user feedback
+    if (sInput.parentElement) sInput.parentElement.style.display = "none";
+
     sInput.value = "";
     sInput.oninput = (e) => {
       const target = e.target as HTMLInputElement;
@@ -334,10 +320,7 @@ export function buildQuizModes() {
           btn.innerHTML = `<span class="mode-icon">${m.emoji}</span><span class="mode-label">${m.label}</span>`;
           btn.onclick = (e) => {
             createRipple(e, btn);
-            if (m.mode === "writing-ai") {
-              closeModal("quiz-modal");
-              setTimeout(() => openWritingModal(), 100);
-            } else if (m.mode === "audio") {
+            if (m.mode === "audio") {
               closeModal("quiz-modal");
               setTimeout(() => openListeningModal(), 100);
             } else {
@@ -351,6 +334,44 @@ export function buildQuizModes() {
     });
   }
   updateQuizCount();
+}
+
+function populateSprintSettings() {
+  const sprintTimeSelect = document.getElementById("sprint-time-select") as HTMLSelectElement;
+
+  if (!sprintTimeSelect) return;
+
+  const times = [30, 60, 90];
+
+  sprintTimeSelect.innerHTML = "";
+  times.forEach((t) => {
+    const opt = document.createElement("option");
+    opt.value = String(t);
+    opt.textContent = `${t} сек.`;
+    sprintTimeSelect.appendChild(opt);
+  });
+
+  if (state.userStats.sprintTimer) {
+    sprintTimeSelect.value = String(state.userStats.sprintTimer);
+  } else {
+    sprintTimeSelect.value = "60";
+  }
+
+  sprintTimeSelect.onchange = () => {
+    const val = sprintTimeSelect.value;
+    if (isNaN(Number(val))) return;
+
+    state.userStats.sprintTimer = Number(val);
+    localStorage.setItem("user_stats_v5", JSON.stringify(state.userStats));
+    showToast(`Время в спринте: ${val} сек.`);
+  };
+}
+
+export function updateSprintTimer() {
+  if (!state.userStats.sprintTimer) {
+    state.userStats.sprintTimer = 60;
+    localStorage.setItem("user_stats_v5", JSON.stringify(state.userStats));
+  }
 }
 
 function createRipple(event: MouseEvent, button: HTMLElement) {
@@ -371,9 +392,7 @@ function createRipple(event: MouseEvent, button: HTMLElement) {
 }
 
 function populateQuizFilters() {
-  const tSelect = document.getElementById(
-    "quiz-topic-select",
-  ) as HTMLSelectElement;
+  const tSelect = document.getElementById("quiz-topic-select") as HTMLSelectElement;
   if (!tSelect || !state.dataStore) return;
 
   const topics = new Set<string>();
@@ -417,9 +436,7 @@ function populateQuizFilters() {
 }
 
 function populateQuizCategories() {
-  const cSelect = document.getElementById(
-    "quiz-category-select",
-  ) as HTMLSelectElement;
+  const cSelect = document.getElementById("quiz-category-select") as HTMLSelectElement;
   if (!cSelect || !state.dataStore) return;
   const categories = new Set<string>();
   state.dataStore.forEach((w: Word) => {
@@ -494,8 +511,7 @@ export function startQuizMode(mode: string) {
     const wCat = w.category_ru || w.category_kr;
     const matchCat = quizCategory === "all" || wCat === quizCategory;
     const matchStar = quizStar === "all" || w.level === quizStar;
-    const matchSearch =
-      !quizSearch || (w._searchStr && w._searchStr.includes(quizSearch));
+    const matchSearch = !quizSearch || (w._searchStr && w._searchStr.includes(quizSearch));
     return matchTopic && matchCat && matchStar && matchSearch;
   };
 
@@ -528,6 +544,7 @@ export function startQuizMode(mode: string) {
   quizCorrectCount = 0;
   quizXPGained = 0;
   quizStreak = 0;
+  quizMistakes = [];
   quizTimerValue = currentConfig.initialTimer;
   survivalLives = currentConfig.initialLives;
   isQuizPaused = false;
@@ -544,8 +561,7 @@ export function startQuizMode(mode: string) {
     bar.style.background = "";
   }
   if (currentConfig.isTimerCountdown)
-    if (bar)
-      bar.style.transition = "width 1s linear, background-color 1s linear";
+    if (bar) bar.style.transition = "width 1s linear, background-color 1s linear";
 
   if (quizInterval) {
     clearInterval(quizInterval);
@@ -565,10 +581,7 @@ export function startQuizMode(mode: string) {
     const deltaSeconds = Math.round((now - quizLastTick) / 1000);
     if (deltaSeconds < 1) return; // Ждем накопления полной секунды
 
-    const { gameOver, nextTimer, ui } = currentConfig.onTick(
-      quizTimerValue,
-      deltaSeconds,
-    );
+    const { gameOver, nextTimer, ui } = currentConfig.onTick(quizTimerValue, deltaSeconds);
     quizTimerValue = nextTimer;
     quizLastTick = now;
 
@@ -607,9 +620,7 @@ export function startQuizMode(mode: string) {
 
   const modeSelector = document.getElementById("quiz-mode-selector");
   if (modeSelector) modeSelector.style.display = "none";
-  const header = document.querySelector(
-    "#quiz-modal .modal-header",
-  ) as HTMLElement;
+  const header = document.querySelector("#quiz-modal .modal-header") as HTMLElement;
   if (header) header.style.display = "none";
 
   const controlsWrapper = document.getElementById("quiz-controls-wrapper");
@@ -628,6 +639,16 @@ export function startQuizMode(mode: string) {
 
   nextQuizQuestion();
   renderPowerups();
+
+  if (mode === "pronunciation") {
+    const key = "pronunciation_hint_seen";
+    if (!localStorage.getItem(key)) {
+      setTimeout(() => {
+        showToast("🎙️ Нажмите на микрофон и произнесите слово. Говорите четко!", 5000);
+        localStorage.setItem(key, "true");
+      }, 1000);
+    }
+  }
 }
 
 export function startDailyChallenge() {
@@ -650,9 +671,7 @@ export function startDailyChallenge() {
     quizWords = currentConfig.getWords(state.dataStore);
 
     if (!quizWords || quizWords.length === 0) {
-      showToast(
-        "⚠️ Недостаточно слов для вызова. Добавьте больше слов в словарь.",
-      );
+      showToast("⚠️ Недостаточно слов для вызова. Добавьте больше слов в словарь.");
       return;
     }
 
@@ -661,12 +680,11 @@ export function startDailyChallenge() {
     quizCorrectCount = 0;
     quizXPGained = 0;
     quizStreak = 0;
+    quizMistakes = [];
 
     const modeSelector = document.getElementById("quiz-mode-selector");
     if (modeSelector) modeSelector.style.display = "none";
-    const header = document.querySelector(
-      "#quiz-modal .modal-header",
-    ) as HTMLElement;
+    const header = document.querySelector("#quiz-modal .modal-header") as HTMLElement;
     if (header) header.style.display = "none";
 
     const controlsWrapper = document.getElementById("quiz-controls-wrapper");
@@ -678,11 +696,7 @@ export function startDailyChallenge() {
 
     nextQuizQuestion();
     renderPowerups();
-    showToast(
-      isSunday
-        ? "🌟 СУПЕР-ВЫЗОВ начат! (x2 Награда)"
-        : "🔥 Ежедневный вызов начат!",
-    );
+    showToast(isSunday ? "🌟 СУПЕР-ВЫЗОВ начат! (x2 Награда)" : "🔥 Ежедневный вызов начат!");
   };
 
   // Если модальное окно не активно, открываем его и запускаем квиз
@@ -698,11 +712,7 @@ export function startDailyChallenge() {
 
 function openDailyStatusModal() {
   const now = new Date();
-  const tomorrow = new Date(
-    now.getFullYear(),
-    now.getMonth(),
-    now.getDate() + 1,
-  );
+  const tomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
   const diff = tomorrow.getTime() - now.getTime();
   const h = Math.floor(diff / (1000 * 60 * 60));
   const m = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
@@ -797,8 +807,7 @@ function nextQuizQuestion() {
   renderPowerups(); // Re-render to update states (e.g. 50/50 availability)
   const word = quizWords[quizIndex];
   const scoreEl = document.getElementById("quiz-score");
-  if (scoreEl)
-    scoreEl.innerText = `Вопрос ${quizIndex + 1} / ${quizWords.length}`;
+  if (scoreEl) scoreEl.innerText = `Вопрос ${quizIndex + 1} / ${quizWords.length}`;
   if (currentQuizMode === "survival") {
     if (scoreEl) scoreEl.innerText = `❤️ ${survivalLives}`;
   }
@@ -812,13 +821,7 @@ function nextQuizQuestion() {
     if (word.audio_url || word.audio_male) allowed.push("audio");
     strategyKey = allowed[Math.floor(Math.random() * allowed.length)];
   } else if (currentQuizMode === "mix") {
-    const allowed = [
-      "multiple-choice",
-      "reverse",
-      "typing",
-      "flashcard",
-      "true-false",
-    ];
+    const allowed = ["multiple-choice", "reverse", "typing", "flashcard", "true-false"];
 
     if (word.audio_url || word.audio_male) {
       allowed.push("audio");
@@ -846,8 +849,7 @@ function nextQuizQuestion() {
   if (currentQuizMode === "antonyms") strategyKey = "antonyms";
   if (currentQuizMode === "survival") strategyKey = "multiple-choice";
 
-  const strategy =
-    QuizStrategies[strategyKey] || QuizStrategies["multiple-choice"];
+  const strategy = QuizStrategies[strategyKey] || QuizStrategies["multiple-choice"];
 
   strategy.render(
     word,
@@ -887,17 +889,68 @@ function preloadNextAudio() {
   }
 }
 
+function showMistakeExplanation(word: Word, onContinue: () => void) {
+  let modal = document.getElementById("mistake-explanation-modal");
+  if (!modal) {
+    modal = document.createElement("div");
+    modal.id = "mistake-explanation-modal";
+    modal.className = "modal";
+    modal.setAttribute("role", "dialog");
+    modal.innerHTML = `
+      <div class="modal-content modal-centered" style="text-align: center; max-width: 350px; padding: 25px 20px;">
+        <div style="font-size: 48px; margin-bottom: 15px;">❌</div>
+        <div style="font-size: 20px; font-weight: 800; color: var(--danger); margin-bottom: 15px;">Неверно</div>
+        <div id="mistake-word-info" style="margin-bottom: 25px; text-align: left; background: var(--surface-2); padding: 15px; border-radius: 12px; border: 1px solid var(--border-color);"></div>
+        <button class="btn btn-quiz" id="mistake-continue-btn" style="width: 100%;">Продолжить</button>
+      </div>
+    `;
+    document.body.appendChild(modal);
+  }
+
+  const infoEl = modal.querySelector("#mistake-word-info");
+  if (infoEl) {
+    let html = `
+        <div style="font-size: 18px; font-weight: 700; color: var(--text-main); margin-bottom: 4px;">${escapeHtml(word.word_kr)}</div>
+        <div style="font-size: 15px; color: var(--text-sub);">${escapeHtml(word.translation)}</div>
+      `;
+
+    if (word.example_kr) {
+      html += `
+            <div style="margin-top: 12px; padding-top: 12px; border-top: 1px dashed var(--border-color);">
+                <div style="font-size: 11px; font-weight: 700; color: var(--text-tertiary); margin-bottom: 4px; text-transform: uppercase;">Пример</div>
+                <div style="font-size: 14px; color: var(--text-main); margin-bottom: 4px; line-height: 1.4;">${escapeHtml(word.example_kr)}</div>
+                <div style="font-size: 13px; color: var(--text-sub); line-height: 1.4;">${escapeHtml(word.example_ru || "")}</div>
+            </div>
+          `;
+    }
+    infoEl.innerHTML = html;
+  }
+
+  const btn = modal.querySelector("#mistake-continue-btn") as HTMLElement;
+  const newBtn = btn.cloneNode(true) as HTMLElement;
+  if (btn.parentNode) btn.parentNode.replaceChild(newBtn, btn);
+
+  newBtn.onclick = () => {
+    closeModal("mistake-explanation-modal");
+    onContinue();
+  };
+
+  openModal("mistake-explanation-modal");
+  setTimeout(() => newBtn.focus(), 100);
+}
+
 function recordQuizAnswer(isCorrect: boolean, autoAdvance: boolean = true) {
   const word = quizWords[quizIndex];
   // FIX: Не записываем статистику для фиктивных слов (режим Ассоциации)
   if (word.id !== "dummy") {
     recordAttempt(word.id, isCorrect);
+    invalidateStatsCache();
   }
 
   let hasExtraInfo = false;
   if (
-    (word.synonyms && word.synonyms.trim()) ||
-    (word.antonyms && word.antonyms.trim())
+    state.showQuizExtraInfo &&
+    ((word.synonyms && word.synonyms.trim()) || (word.antonyms && word.antonyms.trim()))
   ) {
     const body = document.querySelector(".quiz-body");
     if (body) {
@@ -912,9 +965,15 @@ function recordQuizAnswer(isCorrect: boolean, autoAdvance: boolean = true) {
 
       let content = "";
       if (word.synonyms && word.synonyms.trim())
-        content += `<div style="margin-bottom:4px;"><span style="font-weight:bold; color:var(--primary);">≈</span> ${escapeHtml(word.synonyms)}</div>`;
+        content += `<div style="margin-bottom:8px;">
+            <div style="font-size:10px; font-weight:800; color:var(--text-tertiary); text-transform:uppercase; letter-spacing:1px; margin-bottom:3px;">Синонимы</div>
+            <div style="font-size:14px; font-weight:600; color:var(--primary); line-height:1.4;">${escapeHtml(word.synonyms)}</div>
+        </div>`;
       if (word.antonyms && word.antonyms.trim())
-        content += `<div><span style="font-weight:bold; color:var(--danger);">≠</span> ${escapeHtml(word.antonyms)}</div>`;
+        content += `<div>
+            <div style="font-size:10px; font-weight:800; color:var(--text-tertiary); text-transform:uppercase; letter-spacing:1px; margin-bottom:3px;">Антонимы</div>
+            <div style="font-size:14px; font-weight:600; color:var(--danger); line-height:1.4;">${escapeHtml(word.antonyms)}</div>
+        </div>`;
 
       infoEl.innerHTML = content;
       hasExtraInfo = true;
@@ -949,6 +1008,9 @@ function recordQuizAnswer(isCorrect: boolean, autoAdvance: boolean = true) {
     setTimeout(() => document.body.classList.remove("correct-flash"), 700);
   } else {
     state.mistakes.add(word.id);
+    if (word.id !== "dummy") {
+      quizMistakes.push(word);
+    }
     quizStreak = 0;
     addXP(-2);
     quizXPGained -= 2;
@@ -970,8 +1032,7 @@ function recordQuizAnswer(isCorrect: boolean, autoAdvance: boolean = true) {
       survivalLives += livesChange;
 
       const scoreEl = document.getElementById("quiz-score");
-      if (scoreEl && currentQuizMode === "survival")
-        scoreEl.innerText = `❤️ ${survivalLives}`;
+      if (scoreEl && currentQuizMode === "survival") scoreEl.innerText = `❤️ ${survivalLives}`;
 
       if (currentQuizMode === "survival" && livesChange < 0) {
         playTone("life-lost");
@@ -1002,7 +1063,22 @@ function recordQuizAnswer(isCorrect: boolean, autoAdvance: boolean = true) {
 
   const advance = () => {
     if (!autoAdvance) return;
-    const delay = hasExtraInfo ? 2500 : 500;
+
+    if (!isCorrect) {
+      isQuizPaused = true;
+      showMistakeExplanation(word, () => {
+        isQuizPaused = false;
+        if (quizIndex < quizWords.length - 1) {
+          quizIndex++;
+          nextQuizQuestion();
+        } else {
+          endQuiz();
+        }
+      });
+      return;
+    }
+
+    const delay = hasExtraInfo ? 3000 : 1500;
     if (advanceTimer) clearTimeout(advanceTimer);
     advanceTimer = window.setTimeout(() => {
       if (quizIndex < quizWords.length - 1) {
@@ -1038,11 +1114,9 @@ function endQuiz(forceEnd: boolean = false) {
   isTimeFrozen = false;
 
   // FIX: Проверяем, был ли квиз действительно завершен для Ежедневного вызова
-  const isDaily =
-    currentQuizMode === "daily" || currentQuizMode === "super-daily";
+  const isDaily = currentQuizMode === "daily" || currentQuizMode === "super-daily";
   // Квиз завершен, если это не принудительный выход И мы дошли до конца
-  const isCompleted =
-    !forceEnd && quizWords.length > 0 && quizIndex >= quizWords.length - 1;
+  const isCompleted = !forceEnd && quizWords.length > 0 && quizIndex >= quizWords.length - 1;
 
   if (isDaily && !isCompleted) {
     showToast("⚠️ Вызов прерван. Награда не получена.");
@@ -1062,7 +1136,7 @@ function endQuiz(forceEnd: boolean = false) {
       date: new Date().toISOString(),
       duration: Math.round((Date.now() - quizStart) / 1000),
       wordsReviewed: count,
-      accuracy: count > 0 ? Math.round((quizCorrectCount / count) * 100) : 0,
+      accuracy: count > 0 ? Math.round((quizCorrectCount / count) * 100) : null, // percentage
     });
     localStorage.setItem("sessions_v5", JSON.stringify(state.sessions));
     scheduleSaveState();
@@ -1077,9 +1151,7 @@ function endQuiz(forceEnd: boolean = false) {
   const modalContent = document.querySelector("#quiz-modal .modal-content");
   if (modalContent) modalContent.classList.remove("game-active");
 
-  const header = document.querySelector(
-    "#quiz-modal .modal-header",
-  ) as HTMLElement;
+  const header = document.querySelector("#quiz-modal .modal-header") as HTMLElement;
   if (header) header.style.display = "flex";
 
   const controlsWrapper = document.getElementById("quiz-controls-wrapper");
@@ -1153,16 +1225,14 @@ function renderPowerups() {
       e.stopPropagation();
       if (count > 0 && !disabled) handler();
     };
+
     return btn;
   };
 
   // 1. Time Freeze (Only for countdown modes)
   if (currentConfig?.isTimerCountdown) {
-    const btn = createBtn(
-      "time_freeze",
-      "⏳",
-      state.userStats.timeFreeze || 0,
-      () => useTimeFreeze(),
+    const btn = createBtn("time_freeze", "⏳", state.userStats.timeFreeze || 0, () =>
+      useTimeFreeze(),
     );
     if (isTimeFrozen) btn.classList.add("active");
     container.appendChild(btn);
@@ -1170,15 +1240,11 @@ function renderPowerups() {
 
   // 2. Skip Question
   container.appendChild(
-    createBtn("skip_question", "⏭️", state.userStats.skipQuestion || 0, () =>
-      useSkipQuestion(),
-    ),
+    createBtn("skip_question", "⏭️", state.userStats.skipQuestion || 0, () => useSkipQuestion()),
   );
 
   // 3. 50/50 (Only for multiple choice with enough options)
-  const optionsCount = document.querySelectorAll(
-    "#quiz-opts .quiz-option",
-  ).length;
+  const optionsCount = document.querySelectorAll("#quiz-opts .quiz-option").length;
   if (
     optionsCount >= 4 &&
     (currentQuizMode === "multiple-choice" ||
@@ -1186,21 +1252,14 @@ function renderPowerups() {
       currentQuizMode === "sprint")
   ) {
     container.appendChild(
-      createBtn("fifty_fifty", "⚖️", state.userStats.fiftyFifty || 0, () =>
-        useFiftyFifty(),
-      ),
+      createBtn("fifty_fifty", "⚖️", state.userStats.fiftyFifty || 0, () => useFiftyFifty()),
     );
   }
 
   // 4. Heal (Only for survival)
   if (currentQuizMode === "survival") {
     container.appendChild(
-      createBtn(
-        "survival_heal",
-        "❤️",
-        state.userStats.survivalHealth || 0,
-        () => useHeal(),
-      ),
+      createBtn("survival_heal", "❤️", state.userStats.survivalHealth || 0, () => useHeal()),
     );
   }
 }
@@ -1252,9 +1311,7 @@ function useFiftyFifty() {
   const options = Array.from(
     document.querySelectorAll("#quiz-opts .quiz-option"),
   ) as HTMLButtonElement[];
-  const incorrectOptions = options.filter(
-    (btn) => btn.dataset.correct !== "true" && !btn.disabled,
-  );
+  const incorrectOptions = options.filter((btn) => btn.dataset.correct !== "true" && !btn.disabled);
 
   if (incorrectOptions.length < 2) {
     showToast("Недостаточно вариантов для 50/50");
@@ -1301,15 +1358,17 @@ export function updateQuizCount() {
     const wCat = w.category || w.category_ru || w.category_kr;
     const matchCat = quizCategory === "all" || wCat === quizCategory;
     const matchStar = quizStar === "all" || w.level === quizStar;
-    const matchSearch =
-      !quizSearch || (w._searchStr && w._searchStr.includes(quizSearch));
+    const matchSearch = !quizSearch || (w._searchStr && w._searchStr.includes(quizSearch));
     return matchTopic && matchCat && matchStar && matchSearch;
   };
   const total = state.dataStore.filter(filterFn).length;
   const notLearned = state.dataStore.filter(
     (w: Word) => filterFn(w) && !state.learned.has(w.id),
   ).length;
-  countEl.textContent = `Неизучено: ${notLearned} / Всего: ${total} (по фильтру)`;
+
+  // FIX: Более понятный текст статистики
+  countEl.innerHTML = `<span style="opacity:0.7">Доступно слов:</span> <b>${total}</b> <span style="margin:0 5px;opacity:0.3">|</span> <span style="color:var(--primary)">Новых: ${notLearned}</span>`;
+
   updateQuizModesAvailability();
   updateResetButton();
 }
@@ -1325,8 +1384,7 @@ function updateQuizModesAvailability() {
     const wCat = w.category || w.category_ru || w.category_kr;
     const matchCat = quizCategory === "all" || wCat === quizCategory;
     const matchStar = quizStar === "all" || w.level === quizStar;
-    const matchSearch =
-      !quizSearch || (w._searchStr && w._searchStr.includes(quizSearch));
+    const matchSearch = !quizSearch || (w._searchStr && w._searchStr.includes(quizSearch));
     return matchTopic && matchCat && matchStar && matchSearch;
   };
   const basePool = state.dataStore.filter(filterFn);
@@ -1346,27 +1404,19 @@ function updateQuizModesAvailability() {
     } else if (mode === "dialogue") {
       minWords = 5;
       count = basePool.filter((w) => w.example_audio && w.example_kr).length;
-      if (count < minWords)
-        reason = `Мало аудио-диалогов (${count}/${minWords})`;
+      if (count < minWords) reason = `Мало аудио-диалогов (${count}/${minWords})`;
     } else if (mode === "synonyms") {
       minWords = 5;
-      count = basePool.filter(
-        (w) => w.synonyms && w.synonyms.trim().length > 0,
-      ).length;
+      count = basePool.filter((w) => w.synonyms && w.synonyms.trim().length > 0).length;
       if (count < minWords) reason = `Мало синонимов (${count}/${minWords})`;
     } else if (mode === "antonyms") {
       minWords = 5;
-      count = basePool.filter(
-        (w) => w.antonyms && w.antonyms.trim().length > 0,
-      ).length;
+      count = basePool.filter((w) => w.antonyms && w.antonyms.trim().length > 0).length;
       if (count < minWords) reason = `Мало антонимов (${count}/${minWords})`;
     } else if (mode === "confusing") {
       count = state.dataStore.length;
     } else if (mode === "association") {
       count = state.dataStore.length;
-    } else if (mode === "writing-ai") {
-      count = 1; // Всегда доступно
-      minWords = 0;
     } else {
       if (count < 1) reason = `Нет слов`;
     }
@@ -1390,10 +1440,7 @@ function updateResetButton() {
 
   let btn = document.getElementById("quiz-reset-btn");
   const hasFilters =
-    quizTopic !== "all" ||
-    quizCategory !== "all" ||
-    quizStar !== "all" ||
-    quizSearch !== "";
+    quizTopic !== "all" || quizCategory !== "all" || quizStar !== "all" || quizSearch !== "";
 
   if (hasFilters) {
     if (!btn) {
@@ -1416,9 +1463,7 @@ function updateResetButton() {
         localStorage.setItem("quiz_difficulty_v1", "all");
 
         quizSearch = "";
-        const sInput = document.getElementById(
-          "quiz-search-input",
-        ) as HTMLInputElement;
+        const sInput = document.getElementById("quiz-search-input") as HTMLInputElement;
         if (sInput) sInput.value = "";
 
         populateQuizFilters();
@@ -1455,14 +1500,14 @@ function showQuizSummaryModal(correct: number, total: number, xp: number) {
     title = "Идеально!";
     emoji = "🏆";
     color = "var(--gold)";
-    if (typeof window.confetti === "function") {
-      window.confetti({
-        particleCount: 150,
-        spread: 70,
-        origin: { y: 0.6 },
-        zIndex: 20005,
-      });
-    }
+    const isMobile = window.innerWidth < 768;
+    confetti({
+      particleCount: isMobile ? 80 : 150,
+      spread: isMobile ? 50 : 70,
+      origin: { y: 0.6 },
+      disableForReducedMotion: true,
+      zIndex: 20005,
+    });
   } else if (accuracy >= 80) {
     title = "Отлично!";
     emoji = "🔥";
@@ -1477,6 +1522,32 @@ function showQuizSummaryModal(correct: number, total: number, xp: number) {
     color = "var(--text-sub)";
   }
 
+  let mistakesHtml = "";
+  if (quizMistakes.length > 0) {
+    const list = quizMistakes
+      .map(
+        (w) => `
+      <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--border-color);">
+        <div style="text-align: left;">
+          <div style="font-weight: 700; color: var(--text-main); font-size: 15px;">${escapeHtml(w.word_kr)}</div>
+          <div style="font-size: 13px; color: var(--text-sub);">${escapeHtml(w.translation)}</div>
+        </div>
+        <div style="font-size: 18px; color: var(--danger);">✕</div>
+      </div>
+    `,
+      )
+      .join("");
+
+    mistakesHtml = `
+      <div style="margin-top: 20px; width: 100%; text-align: left;">
+        <div style="font-size: 14px; font-weight: 700; color: var(--danger); margin-bottom: 10px;">Работа над ошибками (${quizMistakes.length})</div>
+        <div style="background: var(--surface-1); padding: 5px 15px; border-radius: 16px; border: 1px solid var(--border-color); max-height: 200px; overflow-y: auto;">
+          ${list}
+        </div>
+      </div>
+    `;
+  }
+
   modal.innerHTML = `
     <div class="modal-content modal-centered" style="text-align: center; max-width: 350px; padding: 30px 20px;">
         <div style="font-size: 64px; margin-bottom: 15px; animation: bounce 1s;">${emoji}</div>
@@ -1485,7 +1556,7 @@ function showQuizSummaryModal(correct: number, total: number, xp: number) {
         
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 30px;">
             <div style="background: var(--surface-2); padding: 15px; border-radius: 16px; border: 1px solid var(--border-color);">
-                <div style="font-size: 12px; color: var(--text-sub); margin-bottom: 5px; font-weight: 600;">Точность</div>
+                <div style="font-size: 12px; color: var(--text-sub); margin-bottom: 5px; font-weight: 600;">Процент правильных ответов</div>
                 <div style="font-size: 24px; font-weight: 900; color: ${accuracy >= 80 ? "var(--success)" : "var(--text-main)"};">${accuracy}%</div>
             </div>
             <div style="background: var(--surface-2); padding: 15px; border-radius: 16px; border: 1px solid var(--border-color);">
@@ -1497,6 +1568,8 @@ function showQuizSummaryModal(correct: number, total: number, xp: number) {
         <div style="font-size: 15px; color: var(--text-main); margin-bottom: 25px; background: var(--surface-2); padding: 10px; border-radius: 12px;">
             Правильных ответов: <b>${correct}</b> из <b>${total}</b>
         </div>
+        
+        ${mistakesHtml}
         
         <button class="btn btn-quiz" style="width: 100%; padding: 15px; font-size: 16px; border-radius: 16px;" data-action="quiz-summary-continue">Продолжить</button>
     </div>

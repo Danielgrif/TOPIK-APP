@@ -2,11 +2,10 @@
   "deno.enable": true,
   "deno.lint": true,
   "deno.unstable": [],
-  "deno.enablePaths": [
-    "supabase/functions"
-  ],
+  "deno.enablePaths": ["supabase/functions"],
   "json.schemaDownload.enable": true,
-  "json.trustedDomains": [
-    "raw.githubusercontent.com"
-  ]
+  "json.trustedDomains": ["raw.githubusercontent.com"],
+  "[typescript]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  }
 }

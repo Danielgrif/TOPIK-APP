@@ -50,12 +50,8 @@ export function openEditWordModal(id: string | number, onUpdate?: () => void) {
   // (Предполагается, что в HTML шаблоне есть эти ID, или мы их сейчас создадим динамически если их нет)
   // Для простоты используем существующие инпуты как RU, и добавим KR
 
-  const topicInputRu = document.getElementById(
-    "edit-word-topic",
-  ) as HTMLInputElement;
-  const catInputRu = document.getElementById(
-    "edit-word-category",
-  ) as HTMLInputElement;
+  const topicInputRu = document.getElementById("edit-word-topic") as HTMLInputElement;
+  const catInputRu = document.getElementById("edit-word-category") as HTMLInputElement;
 
   if (idInput) idInput.value = String(word.id);
   if (krInput) krInput.value = word.word_kr || "";
@@ -68,9 +64,7 @@ export function openEditWordModal(id: string | number, onUpdate?: () => void) {
   // Но пока сохраним совместимость, используя только RU поля для редактирования
 
   // Inject Level Selector if not present
-  let levelSelect = document.getElementById(
-    "edit-word-level",
-  ) as HTMLSelectElement;
+  let levelSelect = document.getElementById("edit-word-level") as HTMLSelectElement;
   if (!levelSelect && catInputRu) {
     const container = document.createElement("div");
     container.style.marginTop = "15px";
@@ -83,9 +77,7 @@ export function openEditWordModal(id: string | number, onUpdate?: () => void) {
       </select>
     `;
     catInputRu.parentNode?.insertBefore(container, catInputRu.nextSibling);
-    levelSelect = document.getElementById(
-      "edit-word-level",
-    ) as HTMLSelectElement;
+    levelSelect = document.getElementById("edit-word-level") as HTMLSelectElement;
   }
 
   if (levelSelect) {
@@ -95,9 +87,7 @@ export function openEditWordModal(id: string | number, onUpdate?: () => void) {
   }
 
   // Inject Grammar Info if not present
-  let grammarInput = document.getElementById(
-    "edit-word-grammar",
-  ) as HTMLTextAreaElement;
+  let grammarInput = document.getElementById("edit-word-grammar") as HTMLTextAreaElement;
   if (!grammarInput && catInputRu && catInputRu.parentNode) {
     const container = document.createElement("div");
     container.style.marginTop = "15px";
@@ -107,9 +97,7 @@ export function openEditWordModal(id: string | number, onUpdate?: () => void) {
     `;
     const ref = levelSelect ? levelSelect.parentNode : catInputRu;
     if (ref) ref.parentNode?.insertBefore(container, ref.nextSibling);
-    grammarInput = document.getElementById(
-      "edit-word-grammar",
-    ) as HTMLTextAreaElement;
+    grammarInput = document.getElementById("edit-word-grammar") as HTMLTextAreaElement;
   }
 
   if (grammarInput) {
@@ -132,12 +120,8 @@ export function openEditWordModal(id: string | number, onUpdate?: () => void) {
     });
 
     // Скрываем/показываем кнопки действий
-    const saveBtn = modalEl.querySelector(
-      '[data-action="save-word-changes"]',
-    ) as HTMLElement;
-    const deleteBtn = modalEl.querySelector(
-      '[data-action="delete-word"]',
-    ) as HTMLElement;
+    const saveBtn = modalEl.querySelector('[data-action="save-word-changes"]') as HTMLElement;
+    const deleteBtn = modalEl.querySelector('[data-action="delete-word"]') as HTMLElement;
 
     if (saveBtn) saveBtn.style.display = canEdit ? "" : "none";
     if (deleteBtn) deleteBtn.style.display = canEdit ? "" : "none";
@@ -156,26 +140,17 @@ export async function saveWordChanges() {
   const idInput = document.getElementById("edit-word-id") as HTMLInputElement;
   const krInput = document.getElementById("edit-word-kr") as HTMLInputElement;
   const ruInput = document.getElementById("edit-word-ru") as HTMLInputElement;
-  const topicInputRu = document.getElementById(
-    "edit-word-topic",
-  ) as HTMLInputElement;
-  const catInputRu = document.getElementById(
-    "edit-word-category",
-  ) as HTMLInputElement;
-  const levelSelect = document.getElementById(
-    "edit-word-level",
-  ) as HTMLSelectElement;
-  const grammarInput = document.getElementById(
-    "edit-word-grammar",
-  ) as HTMLTextAreaElement;
+  const topicInputRu = document.getElementById("edit-word-topic") as HTMLInputElement;
+  const catInputRu = document.getElementById("edit-word-category") as HTMLInputElement;
+  const levelSelect = document.getElementById("edit-word-level") as HTMLSelectElement;
+  const grammarInput = document.getElementById("edit-word-grammar") as HTMLTextAreaElement;
 
   const id = idInput.value;
   const word = state.dataStore.find((w) => String(w.id) === String(id));
 
   if (
     word &&
-    (!word.created_by ||
-      (state.currentUser && word.created_by !== state.currentUser.id))
+    (!word.created_by || (state.currentUser && word.created_by !== state.currentUser.id))
   ) {
     showToast("⛔ Системные слова нельзя изменять");
     return;
@@ -196,9 +171,7 @@ export async function saveWordChanges() {
   }
 
   // Оптимистичное обновление интерфейса (сразу меняем данные в памяти)
-  const wordIndex = state.dataStore.findIndex(
-    (w) => String(w.id) === String(id),
-  );
+  const wordIndex = state.dataStore.findIndex((w) => String(w.id) === String(id));
   if (wordIndex > -1) {
     state.dataStore[wordIndex] = { ...state.dataStore[wordIndex], ...updates };
   }
@@ -242,8 +215,7 @@ export async function deleteWord() {
   const word = state.dataStore.find((w) => String(w.id) === String(id));
   if (
     word &&
-    (!word.created_by ||
-      (state.currentUser && word.created_by !== state.currentUser.id))
+    (!word.created_by || (state.currentUser && word.created_by !== state.currentUser.id))
   ) {
     showToast("⛔ Системные слова нельзя удалять");
     return;
@@ -251,9 +223,7 @@ export async function deleteWord() {
 
   openConfirm("Переместить это слово в корзину?", async () => {
     // Оптимистичное удаление
-    const wordIndex = state.dataStore.findIndex(
-      (w) => String(w.id) === String(id),
-    );
+    const wordIndex = state.dataStore.findIndex((w) => String(w.id) === String(id));
     if (wordIndex === -1) return;
     const wordBackup = { ...state.dataStore[wordIndex] };
 
@@ -261,9 +231,7 @@ export async function deleteWord() {
       state.dataStore.splice(wordIndex, 1);
     }
     if (state.searchResults) {
-      state.searchResults = state.searchResults.filter(
-        (w) => String(w.id) !== String(id),
-      );
+      state.searchResults = state.searchResults.filter((w) => String(w.id) !== String(id));
     }
 
     const grid = document.getElementById("vocabulary-grid");

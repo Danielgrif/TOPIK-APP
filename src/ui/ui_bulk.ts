@@ -6,8 +6,27 @@ import { openConfirm, openModal, closeModal } from "./ui_modal.ts";
 import { collectionsState, type UserList } from "../core/collections_data.ts";
 import { DB_TABLES } from "../core/constants.ts";
 
+let isPopState = false;
+
+// Обработчик системной кнопки "Назад"
+window.addEventListener("popstate", (e) => {
+  if (state.selectMode && !e.state?.selectMode) {
+    isPopState = true;
+    toggleSelectMode();
+    isPopState = false;
+  }
+});
+
 export function toggleSelectMode() {
   state.selectMode = !state.selectMode;
+
+  // Управление историей браузера (для кнопки Назад)
+  if (state.selectMode) {
+    window.history.pushState({ selectMode: true }, "");
+  } else if (!isPopState && window.history.state?.selectMode) {
+    window.history.back();
+  }
+
   state.selectedWords.clear();
   updateBulkBar();
 
@@ -54,10 +73,23 @@ function updateBulkBar() {
       bar.classList.add("visible");
       countEl.textContent = String(state.selectedWords.size);
 
+      // Инъекция кнопки закрытия (Отмена)
+      if (!bar.querySelector(".bulk-close-btn")) {
+        const closeBtn = document.createElement("button");
+        closeBtn.className = "btn-icon bulk-close-btn";
+        closeBtn.innerHTML = "✕";
+        closeBtn.title = "Отмена выбора";
+        closeBtn.style.cssText =
+          "width: 36px; height: 36px; min-width: 36px; background: var(--surface-3); color: var(--text-sub); border: none; border-radius: 50%; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 14px; margin-left: 8px;";
+        closeBtn.onclick = () => toggleSelectMode();
+
+        const actionsDiv = bar.querySelector(".bulk-actions");
+        if (actionsDiv) actionsDiv.appendChild(closeBtn);
+        else bar.appendChild(closeBtn);
+      }
+
       // Инъекция кнопки "Исключить из списка"
-      let removeBtn = bar.querySelector(
-        '[data-action="bulk-remove-list"]',
-      ) as HTMLElement;
+      let removeBtn = bar.querySelector('[data-action="bulk-remove-list"]') as HTMLElement;
       if (!removeBtn) {
         const actionsDiv = bar.querySelector(".bulk-actions");
         if (actionsDiv) {
@@ -89,8 +121,7 @@ function updateBulkBar() {
         }
       }
       const listId = collectionsState.currentCollectionFilter;
-      const isSpecificList =
-        listId && listId !== "uncategorized" && listId !== "my-custom";
+      const isSpecificList = listId && listId !== "uncategorized" && listId !== "my-custom";
       if (removeBtn) {
         removeBtn.style.display = isSpecificList ? "inline-flex" : "none";
       }
@@ -107,12 +138,7 @@ export function bulkDelete() {
   const allIds = Array.from(state.selectedWords);
   const editableIds = allIds.filter((id) => {
     const w = state.dataStore.find((word) => word.id === id);
-    return (
-      w &&
-      w.created_by &&
-      state.currentUser &&
-      w.created_by === state.currentUser.id
-    );
+    return w && w.created_by && state.currentUser && w.created_by === state.currentUser.id;
   });
 
   if (editableIds.length === 0) {
@@ -121,9 +147,7 @@ export function bulkDelete() {
   }
 
   if (editableIds.length < allIds.length) {
-    showToast(
-      `ℹ️ Пропущено системных слов: ${allIds.length - editableIds.length}`,
-    );
+    showToast(`ℹ️ Пропущено системных слов: ${allIds.length - editableIds.length}`);
   }
 
   const executeDelete = async () => {
@@ -135,9 +159,7 @@ export function bulkDelete() {
     // Оптимистичное удаление из локального стейта
     state.dataStore = state.dataStore.filter((w) => !ids.includes(w.id));
     if (state.searchResults) {
-      state.searchResults = state.searchResults.filter(
-        (w) => !ids.includes(w.id),
-      );
+      state.searchResults = state.searchResults.filter((w) => !ids.includes(w.id));
     }
 
     const grid = document.getElementById("vocabulary-grid");
@@ -181,10 +203,7 @@ export function bulkDelete() {
   if (editableIds.length < 5) {
     executeDelete();
   } else {
-    openConfirm(
-      `Переместить выбранные слова (${editableIds.length}) в корзину?`,
-      executeDelete,
-    );
+    openConfirm(`Переместить выбранные слова (${editableIds.length}) в корзину?`, executeDelete);
   }
 }
 
@@ -200,9 +219,7 @@ export function bulkRemoveFromList() {
       const ids = Array.from(state.selectedWords);
 
       // Оптимистичное обновление
-      ids.forEach((id) =>
-        collectionsState.listItems[listId]?.delete(Number(id)),
-      );
+      ids.forEach((id) => collectionsState.listItems[listId]?.delete(Number(id)));
 
       // Обновляем UI (слова исчезнут из вида, так как фильтр активен)
       const grid = document.getElementById("vocabulary-grid");
@@ -223,9 +240,7 @@ export function bulkRemoveFromList() {
       if (error) {
         showToast("Ошибка: " + error.message);
         // Откат изменений в случае ошибки
-        ids.forEach((id) =>
-          collectionsState.listItems[listId]?.add(Number(id)),
-        );
+        ids.forEach((id) => collectionsState.listItems[listId]?.add(Number(id)));
         document.dispatchEvent(new CustomEvent("state-changed"));
       } else {
         showToast("Слова исключены из списка");
@@ -241,12 +256,7 @@ export function bulkMoveToTopic() {
   const allIds = Array.from(state.selectedWords);
   const editableIds = allIds.filter((id) => {
     const w = state.dataStore.find((word) => word.id === id);
-    return (
-      w &&
-      w.created_by &&
-      state.currentUser &&
-      w.created_by === state.currentUser.id
-    );
+    return w && w.created_by && state.currentUser && w.created_by === state.currentUser.id;
   });
 
   if (editableIds.length === 0) {
@@ -271,10 +281,7 @@ export function bulkMoveToTopic() {
       });
 
       // Обновляем в БД
-      const { error } = await client
-        .from("vocabulary")
-        .update(updates)
-        .in("id", ids);
+      const { error } = await client.from("vocabulary").update(updates).in("id", ids);
 
       if (error) {
         showToast("Ошибка обновления: " + error.message);
@@ -295,15 +302,12 @@ export function bulkAddToList() {
   const content = document.getElementById("add-to-list-content");
   if (!modal || !content) return;
 
-  client.auth.getSession().then(({ data: { session } }) => {
-    const user = session?.user;
+  const proceed = (user: { id: string } | null | undefined) => {
     if (!user) {
       showToast("Войдите в аккаунт");
       return;
     }
-    const myLists = collectionsState.userLists.filter(
-      (l: UserList) => l.user_id === user.id,
-    );
+    const myLists = collectionsState.userLists.filter((l: UserList) => l.user_id === user.id);
 
     content.scrollTop = 0;
     content.innerHTML =
@@ -328,24 +332,27 @@ export function bulkAddToList() {
         .join("");
 
     openModal("add-to-list-modal");
-  });
+  };
+
+  if (state.currentUser) {
+    proceed(state.currentUser);
+  } else {
+    client.auth.getSession().then(({ data: { session } }) => proceed(session?.user));
+  }
 }
 
 export async function handleBulkAddToList(listId: string) {
   const ids = Array.from(state.selectedWords);
   const rows = ids.map((id) => ({ list_id: listId, word_id: id }));
 
-  const { error } = await client
-    .from("list_items")
-    .upsert(rows, { onConflict: "list_id,word_id" });
+  const { error } = await client.from("list_items").upsert(rows, { onConflict: "list_id,word_id" });
 
   if (error) {
     showToast("Ошибка: " + error.message);
   } else {
     showToast(`Добавлено в список!`);
     // Обновляем локальный кэш списков
-    if (!collectionsState.listItems[listId])
-      collectionsState.listItems[listId] = new Set();
+    if (!collectionsState.listItems[listId]) collectionsState.listItems[listId] = new Set();
     ids.forEach((id) => collectionsState.listItems[listId].add(Number(id)));
 
     closeModal("add-to-list-modal");
@@ -362,9 +369,11 @@ export function createNewListForBulk() {
     onValidate: async (title) => {
       if (!title.trim()) return false;
 
-      const {
-        data: { user },
-      } = await client.auth.getUser();
+      let user = state.currentUser;
+      if (!user) {
+        const { data } = await client.auth.getUser();
+        user = data.user as unknown as import("../types/index.ts").User;
+      }
       if (!user) return false;
 
       // 1. Создаем список

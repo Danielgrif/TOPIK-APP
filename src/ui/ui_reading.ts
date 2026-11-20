@@ -3,145 +3,160 @@ import { openModal } from "./ui_modal.ts";
 import { escapeHtml } from "../utils/utils.ts";
 import { DB_TABLES } from "../core/constants.ts";
 import { Article } from "../types/index.ts";
+import { BaseComponent } from "./BaseComponent.ts";
 
-export async function openReadingModal() {
-  openModal("reading-modal");
-  await loadArticles();
-}
-
-async function loadArticles() {
-  const container = document.getElementById("reading-list");
-  const view = document.getElementById("reading-view");
-  if (!container || !view) return;
-
-  // Reset view
-  container.style.display = "grid";
-  view.style.display = "none";
-  container.innerHTML =
-    '<div style="grid-column:1/-1; text-align:center; padding:40px;"><div class="spinner-tiny"></div> Загрузка статей...</div>';
-
-  const { data, error } = await client
-    .from(DB_TABLES.ARTICLES)
-    .select("*")
-    .order("created_at", { ascending: false });
-
-  if (error) {
-    console.error("Error loading articles:", error);
-    container.innerHTML = `<div style="text-align:center; color:var(--danger);">Ошибка загрузки: ${error.message}</div>`;
-    return;
+class ReadingComponent extends BaseComponent {
+  constructor() {
+    super("reading-modal");
   }
 
-  if (!data || data.length === 0) {
-    container.innerHTML = `<div style="text-align:center; color:var(--text-sub);">Нет доступных статей.</div>`;
-    return;
+  public async show() {
+    if (!this.element.id || !document.body.contains(this.element)) {
+      const el = document.getElementById("reading-modal");
+      if (el) this.element = el;
+    }
+
+    openModal("reading-modal");
+    await this.loadArticles();
   }
 
-  renderArticleList(data as Article[]);
-}
+  protected render(): void {
+    // Логика рендеринга реализована в под-функциях (loadArticles/renderArticleList)
+  }
 
-function renderArticleList(articles: Article[]) {
-  const container = document.getElementById("reading-list");
-  if (!container) return;
+  private async loadArticles() {
+    const container = document.getElementById("reading-list");
+    const view = document.getElementById("reading-view");
+    if (!container || !view) return;
 
-  container.innerHTML = articles
-    .map((article) => {
-      const image =
-        article.image_url ||
-        "https://via.placeholder.com/300x150?text=TOPIK+Reading";
-      return `
-      <div class="article-card" data-id="${article.id}" role="button" tabindex="0" aria-label="Открыть статью: ${escapeHtml(article.title)}">
-        <img src="${escapeHtml(image)}" class="article-card-img" alt="Cover" loading="lazy" onerror="this.onerror=null; this.src='https://via.placeholder.com/300x150?text=TOPIK+Reading';">
-        <div class="article-card-body">
-          <div class="article-card-title">${escapeHtml(article.title)}</div>
-          <div class="article-card-meta">
-            <span class="article-level-badge">${escapeHtml(article.level)}</span>
-            <span>${escapeHtml(article.topic)}</span>
+    // Reset view
+    container.style.display = "grid";
+    view.style.display = "none";
+    container.innerHTML =
+      '<div style="grid-column:1/-1; text-align:center; padding:40px;"><div class="spinner-tiny"></div> Загрузка статей...</div>';
+
+    const { data, error } = await client
+      .from(DB_TABLES.ARTICLES)
+      .select("*")
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      console.error("Error loading articles:", error);
+      container.innerHTML = `<div style="text-align:center; color:var(--danger);">Ошибка загрузки: ${escapeHtml(error.message)}</div>`;
+      return;
+    }
+
+    if (!data || data.length === 0) {
+      container.innerHTML = `<div style="text-align:center; color:var(--text-sub);">Нет доступных статей.</div>`;
+      return;
+    }
+
+    this.renderArticleList(data as Article[]);
+  }
+
+  private renderArticleList(articles: Article[]) {
+    const container = document.getElementById("reading-list");
+    if (!container) return;
+
+    container.innerHTML = articles
+      .map((article) => {
+        const image = article.image_url || "https://via.placeholder.com/300x150?text=TOPIK+Reading";
+        return `
+        <div class="article-card" data-id="${escapeHtml(article.id)}" role="button" tabindex="0" aria-label="Открыть статью: ${escapeHtml(article.title)}">
+          <img src="${escapeHtml(image)}" class="article-card-img" alt="Cover" loading="lazy" onerror="this.onerror=null; this.src='https://via.placeholder.com/300x150?text=TOPIK+Reading';">
+          <div class="article-card-body">
+            <div class="article-card-title">${escapeHtml(article.title)}</div>
+            <div class="article-card-meta">
+              <span class="article-level-badge">${escapeHtml(article.level)}</span>
+              <span>${escapeHtml(article.topic)}</span>
+            </div>
           </div>
         </div>
-      </div>
-    `;
-    })
-    .join("");
+      `;
+      })
+      .join("");
 
-  // Add click listeners
-  container.querySelectorAll(".article-card").forEach((card) => {
-    const open = () => {
-      const id = (card as HTMLElement).dataset.id;
-      const article = articles.find((a) => a.id === id);
-      if (article) openArticle(article);
-    };
+    // Add click listeners
+    container.querySelectorAll(".article-card").forEach((card) => {
+      const open = () => {
+        const id = (card as HTMLElement).dataset.id;
+        const article = articles.find((a) => a.id === id);
+        if (article) this.openArticle(article);
+      };
 
-    card.addEventListener("click", open);
-    card.addEventListener("keydown", (e) => {
-      if (
-        (e as KeyboardEvent).key === "Enter" ||
-        (e as KeyboardEvent).key === " "
-      ) {
-        open();
-      }
+      card.addEventListener("click", open);
+      card.addEventListener("keydown", (e) => {
+        if ((e as KeyboardEvent).key === "Enter" || (e as KeyboardEvent).key === " ") {
+          open();
+        }
+      });
     });
-  });
-}
-
-function openArticle(article: Article) {
-  const list = document.getElementById("reading-list");
-  const view = document.getElementById("reading-view");
-  const container = document.getElementById("article-container");
-  const backBtn = document.getElementById("back-to-articles");
-
-  if (!list || !view || !container || !backBtn) return;
-
-  list.style.display = "none";
-  view.style.display = "block";
-
-  // Scroll to top
-  const modalBody = view.closest(".modal-body");
-  if (modalBody) modalBody.scrollTop = 0;
-
-  const imageHtml = article.image_url
-    ? `<img src="${escapeHtml(article.image_url)}" style="width:100%; max-height:300px; object-fit:cover; border-radius:12px; margin-bottom:20px;">`
-    : "";
-
-  const translationHtml = article.translation
-    ? `<div id="article-trans-content" class="article-translation-box" style="display:none;">
-         <strong>Перевод:</strong><br>${escapeHtml(article.translation).replace(/\n/g, "<br>")}
-       </div>
-       <button class="btn btn-quiz" id="toggle-trans-btn" style="width:100%; margin-top:20px;">Показать перевод</button>`
-    : "";
-
-  container.innerHTML = `
-    <div class="article-content-wrapper">
-      ${imageHtml}
-      <div class="article-header">
-        <div class="article-title-large">${escapeHtml(article.title)}</div>
-        <div style="display:flex; gap:10px; font-size:13px; color:var(--text-sub);">
-            <span class="article-level-badge">${escapeHtml(article.level)}</span>
-            <span>${escapeHtml(article.topic)}</span>
-            <span>${new Date(article.created_at).toLocaleDateString()}</span>
-        </div>
-      </div>
-      <div class="article-text">${escapeHtml(article.content).replace(/\n/g, "<br>")}</div>
-      ${translationHtml}
-    </div>
-  `;
-
-  // Setup translation toggle
-  const toggleBtn = document.getElementById("toggle-trans-btn");
-  if (toggleBtn) {
-    toggleBtn.onclick = () => {
-      const box = document.getElementById("article-trans-content");
-      if (box) {
-        const isHidden = box.style.display === "none";
-        box.style.display = isHidden ? "block" : "none";
-        toggleBtn.textContent = isHidden
-          ? "Скрыть перевод"
-          : "Показать перевод";
-      }
-    };
   }
 
-  backBtn.onclick = () => {
-    view.style.display = "none";
-    list.style.display = "grid";
-  };
+  private openArticle(article: Article) {
+    const list = document.getElementById("reading-list");
+    const view = document.getElementById("reading-view");
+    const container = document.getElementById("article-container");
+    const backBtn = document.getElementById("back-to-articles");
+
+    if (!list || !view || !container || !backBtn) return;
+
+    list.style.display = "none";
+    view.style.display = "block";
+
+    // Scroll to top
+    const modalBody = view.closest(".modal-body");
+    if (modalBody) modalBody.scrollTop = 0;
+
+    const imageHtml = article.image_url
+      ? `<img src="${escapeHtml(article.image_url)}" style="width:100%; max-height:300px; object-fit:cover; border-radius:12px; margin-bottom:20px;">`
+      : "";
+
+    const translationHtml = article.translation
+      ? `<div id="article-trans-content" class="article-translation-box" style="display:none;">
+           <strong>Перевод:</strong><br>${escapeHtml(article.translation).replace(/\n/g, "<br>")}
+         </div>
+         <button class="btn btn-quiz" id="toggle-trans-btn" style="width:100%; margin-top:20px;">Показать перевод</button>`
+      : "";
+
+    container.innerHTML = `
+      <div class="article-content-wrapper">
+        ${imageHtml}
+        <div class="article-header">
+          <div class="article-title-large">${escapeHtml(article.title)}</div>
+          <div style="display:flex; gap:10px; font-size:13px; color:var(--text-sub);">
+              <span class="article-level-badge">${escapeHtml(article.level)}</span>
+              <span>${escapeHtml(article.topic)}</span>
+              <span>${new Date(article.created_at).toLocaleDateString()}</span>
+          </div>
+        </div>
+        <div class="article-text">${escapeHtml(article.content).replace(/\n/g, "<br>")}</div>
+        ${translationHtml}
+      </div>
+    `;
+
+    // Setup translation toggle
+    const toggleBtn = document.getElementById("toggle-trans-btn");
+    if (toggleBtn) {
+      toggleBtn.onclick = () => {
+        const box = document.getElementById("article-trans-content");
+        if (box) {
+          const isHidden = box.style.display === "none";
+          box.style.display = isHidden ? "block" : "none";
+          toggleBtn.textContent = isHidden ? "Скрыть перевод" : "Показать перевод";
+        }
+      };
+    }
+
+    backBtn.onclick = () => {
+      view.style.display = "none";
+      list.style.display = "grid";
+    };
+  }
+}
+
+const readingView = new ReadingComponent();
+
+export async function openReadingModal() {
+  await readingView.show();
 }

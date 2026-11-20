@@ -122,10 +122,7 @@ export const ICONS_MAP: Record<string, string> = {
   междометие: "❗",
 };
 
-export function getIconForValue(
-  value: string,
-  defaultIcon: string = "🔹",
-): string {
+export function getIconForValue(value: string, defaultIcon: string = "🔹"): string {
   if (!value || value === "all") return "🌍";
   const lower = value.toLowerCase();
   for (const key in ICONS_MAP) {
@@ -170,7 +167,7 @@ export function showUndoToast(
   el.style.paddingRight = "10px"; // Немного меньше паддинг справа для кнопки
 
   el.innerHTML = `
-    <span>${msg}</span>
+    <span>${escapeHtml(msg)}</span>
     <button class="toast-undo-btn">↩ Отмена</button>
     <div class="toast-undo-bar" style="transition: width ${timeout}ms linear;"></div>
   `;
@@ -201,6 +198,8 @@ export function showUndoToast(
     el.classList.add("toast-hide");
     setTimeout(() => el.remove(), 300);
   };
+
+  setupToastSwipe(el);
 }
 
 /**
@@ -213,6 +212,9 @@ export function showToast(msg: string, timeout: number = 3500): void {
     const el = document.createElement("div");
     el.className = "toast-item";
     el.textContent = msg;
+
+    setupToastSwipe(el);
+
     container.appendChild(el);
     setTimeout(
       () => {
@@ -230,6 +232,49 @@ export function showToast(msg: string, timeout: number = 3500): void {
   } catch (_e) {
     console.warn("showToast error", _e);
   }
+}
+
+/**
+ * Adds swipe-to-dismiss functionality to a toast element.
+ */
+function setupToastSwipe(el: HTMLElement) {
+  let startX = 0;
+  let currentX = 0;
+  let isDragging = false;
+
+  const onTouchStart = (e: TouchEvent) => {
+    startX = e.touches[0].clientX;
+    isDragging = true;
+    el.style.transition = "none"; // Disable transition for direct control
+  };
+
+  const onTouchMove = (e: TouchEvent) => {
+    if (!isDragging) return;
+    const x = e.touches[0].clientX;
+    const diff = x - startX;
+    currentX = diff;
+    el.style.transform = `translateX(${diff}px)`;
+    el.style.opacity = `${1 - Math.abs(diff) / 200}`; // Fade out as you swipe
+  };
+
+  const onTouchEnd = () => {
+    isDragging = false;
+    el.style.transition = "transform 0.3s ease, opacity 0.3s ease";
+    if (Math.abs(currentX) > 100) {
+      // Swipe threshold met
+      el.style.transform = `translateX(${currentX > 0 ? 500 : -500}px)`;
+      el.style.opacity = "0";
+      setTimeout(() => el.remove(), 300);
+    } else {
+      // Reset
+      el.style.transform = "";
+      el.style.opacity = "1";
+    }
+  };
+
+  el.addEventListener("touchstart", onTouchStart, { passive: true });
+  el.addEventListener("touchmove", onTouchMove, { passive: true });
+  el.addEventListener("touchend", onTouchEnd, { passive: true });
 }
 
 /**
@@ -291,6 +336,7 @@ export function levenshtein(a: string, b: string): number {
 
 /**
  * Generates HTML showing differences between user input and correct answer.
+ * Символы экранируются внутри функции — передавайте сырые строки (не escapeHtml).
  */
 export function generateDiffHtml(user: string, correct: string): string {
   let html: string = "";
@@ -299,10 +345,10 @@ export function generateDiffHtml(user: string, correct: string): string {
     const u = user[i];
     const c = correct[i];
     if (u === c) {
-      html += `<span class="diff-same">${u}</span>`;
+      html += `<span class="diff-same">${escapeHtml(u)}</span>`;
     } else {
-      if (u !== undefined) html += `<span class="diff-del">${u}</span>`;
-      if (c !== undefined) html += `<span class="diff-ins">${c}</span>`;
+      if (u !== undefined) html += `<span class="diff-del">${escapeHtml(u)}</span>`;
+      if (c !== undefined) html += `<span class="diff-ins">${escapeHtml(c)}</span>`;
     }
   }
   return html;
@@ -337,8 +383,7 @@ const MAX_AUDIO_CACHE = 50;
 let _osc: OscillatorNode | null = null;
 function _ensureAudio(): AudioContext | null {
   try {
-    if (!_audioCtx)
-      _audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    if (!_audioCtx) _audioCtx = new (window.AudioContext || window.webkitAudioContext)();
     if (_audioCtx.state === "suspended") _audioCtx.resume();
     return _audioCtx;
   } catch {
@@ -372,10 +417,7 @@ type ToneType =
   | "flip"
   | "tick";
 
-export function playTone(
-  type: ToneType = "success",
-  duration: number = 120,
-): Promise<void> {
+export function playTone(type: ToneType = "success", duration: number = 120): Promise<void> {
   return new Promise<void>((resolve) => {
     try {
       const ctx = _ensureAudio();
@@ -392,11 +434,21 @@ export function playTone(
 
       const now = ctx.currentTime;
       if (type === "success") {
-        o.type = "sine";
-        o.frequency.setValueAtTime(587, now);
-        o.frequency.exponentialRampToValueAtTime(1174, now + 0.1);
-        g.gain.setValueAtTime(0.1, now);
-        g.gain.exponentialRampToValueAtTime(0.01, now + 0.1);
+        // Улучшенный: приятный "дзынь" (треугольная волна)
+        o.type = "triangle";
+        o.frequency.setValueAtTime(587, now); // D5
+        o.frequency.exponentialRampToValueAtTime(1174, now + 0.15); // D6
+        g.gain.setValueAtTime(0.15, now);
+        g.gain.exponentialRampToValueAtTime(0.001, now + 0.3);
+        duration = 300; // Даем звуку время на затухание
+      } else if (type === "failure") {
+        // Улучшенный: короткий низкий "бонк"
+        o.type = "sawtooth";
+        o.frequency.setValueAtTime(150, now);
+        o.frequency.linearRampToValueAtTime(80, now + 0.15);
+        g.gain.setValueAtTime(0.15, now);
+        g.gain.exponentialRampToValueAtTime(0.001, now + 0.15);
+        duration = 150;
       } else if (type === "cash-register") {
         o.type = "square";
         o.frequency.setValueAtTime(800, now);
@@ -530,11 +582,7 @@ export function playComboSound(streak: number): Promise<void> {
 /**
  * Simulates a typewriter effect on an element.
  */
-export function typeText(
-  element: HTMLElement,
-  text: string,
-  speed: number = 40,
-): Promise<void> {
+export function typeText(element: HTMLElement, text: string, speed: number = 40): Promise<void> {
   return new Promise((resolve) => {
     element.textContent = "";
     element.classList.add("typing-effect");
@@ -558,14 +606,9 @@ export function typeText(
 /**
  * Speaks text using TTS (Audio URL or SpeechSynthesis).
  */
-export function speak(
-  t: string | null,
-  url: string | null | undefined,
-): Promise<void> {
+export function speak(t: string | null, url: string | null | undefined): Promise<void> {
   // Приглушаем музыку в начале
-  document.dispatchEvent(
-    new CustomEvent("duck-music", { detail: { duck: true } }),
-  );
+  document.dispatchEvent(new CustomEvent("duck-music", { detail: { duck: true } }));
 
   // FIX: Останавливаем любое предыдущее аудио перед запуском нового
   if (_currentAudio) {
@@ -616,9 +659,7 @@ export function speak(
 
         const isAutoplayBlock = e.name === "NotAllowedError";
         if (isAutoplayBlock) {
-          console.warn(
-            "🔊 Autoplay blocked (Audio). Attempting TTS fallback...",
-          );
+          console.warn("🔊 Autoplay blocked (Audio). Attempting TTS fallback...");
           // Если нет текста для фоллбэка, ставим аудио в очередь на клик
           if (!t) {
             // FIX: Не резолвим промис сразу, а ждем взаимодействия
@@ -664,13 +705,9 @@ export function speak(
       if (koreanVoices.length > 0) {
         let targetVoice = null;
         if (state.currentVoice === "male") {
-          targetVoice = koreanVoices.find((v) =>
-            v.name.toLowerCase().includes("male"),
-          );
+          targetVoice = koreanVoices.find((v) => v.name.toLowerCase().includes("male"));
         } else {
-          targetVoice = koreanVoices.find((v) =>
-            v.name.toLowerCase().includes("female"),
-          );
+          targetVoice = koreanVoices.find((v) => v.name.toLowerCase().includes("female"));
         }
         if (targetVoice) u.voice = targetVoice;
       }
@@ -681,9 +718,7 @@ export function speak(
       u.onerror = (e) => {
         // FIX: Игнорируем ошибку автовоспроизведения для TTS
         if (e.error === "not-allowed") {
-          console.warn(
-            "🔊 TTS Autoplay blocked. Queuing retry on interaction.",
-          );
+          console.warn("🔊 TTS Autoplay blocked. Queuing retry on interaction.");
           // FIX: Ждем взаимодействия
           onUserInteraction(() => speak(t, null).then(resolve));
           return;
@@ -701,9 +736,7 @@ export function speak(
 
   // Когда озвучка завершена (успешно или с ошибкой), восстанавливаем громкость
   promise.finally(() => {
-    document.dispatchEvent(
-      new CustomEvent("duck-music", { detail: { duck: false } }),
-    );
+    document.dispatchEvent(new CustomEvent("duck-music", { detail: { duck: false } }));
   });
 
   return promise;

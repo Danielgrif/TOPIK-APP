@@ -1,9 +1,10 @@
-import { state } from "./state.ts";
+import { state, notify } from "./state.ts";
 import { showToast, playTone, showComboEffect } from "../utils/utils.ts";
-import { showLevelUpAnimation } from "../ui/ui_animations.ts";
+import { showLevelUpAnimation, showAchievementUnlocked } from "../ui/ui_animations.ts";
 import { Scheduler } from "./scheduler.ts";
 import { scheduleSaveState } from "./db.ts";
-
+import confetti from "canvas-confetti";
+import { Chart, TooltipItem, ScriptableContext } from "chart.js";
 export const LEAGUES = [
   "Bronze",
   "Silver",
@@ -14,84 +15,64 @@ export const LEAGUES = [
   "Grandmaster",
   "Challenger",
 ];
-
-export function getXPForNextLevel(lvl: number): number {
+export function getXPForNextLevel(lvl: number) {
   // Было: 100 + lvl * 50 (Линейная)
   // Стало: 100 * (lvl ^ 1.2) (Слегка экспоненциальная, сложнее на высоких уровнях)
-  return Math.floor(100 * Math.pow(lvl, 1.2));
+  // level = 0 давал порог 0 и бесконечный цикл в addXP — жёстко клампим минимум.
+  return Math.floor(100 * Math.pow(Math.max(1, lvl), 1.2));
 }
-
-export function getTotalXP(level: number, currentXP: number): number {
+export function getTotalXP(level: number, currentXP: number) {
   let total = currentXP;
   for (let i = 1; i < level; i++) {
     total += getXPForNextLevel(i);
   }
   return total;
 }
-
 function getCurrentWeekId() {
   const d = new Date();
   d.setHours(0, 0, 0, 0);
   d.setDate(d.getDate() + 4 - (d.getDay() || 7));
   const yearStart = new Date(d.getFullYear(), 0, 1);
-  const weekNo = Math.ceil(
-    ((d.getTime() - yearStart.getTime()) / 86400000 + 1) / 7,
-  );
+  const weekNo = Math.ceil(((d.getTime() - yearStart.getTime()) / 86400000 + 1) / 7);
   return `${d.getFullYear()}-W${weekNo}`;
 }
-
 export function checkWeeklyReset() {
   const currentWeek = getCurrentWeekId();
-
   // Инициализация, если запускается впервые
   if (!state.userStats.lastWeekId) {
     state.userStats.lastWeekId = currentWeek;
     return null;
   }
-
   if (state.userStats.lastWeekId !== currentWeek) {
     const prevXp = state.userStats.weeklyXp || 0;
     const oldLeague = state.userStats.league || "Bronze";
     let newLeague = oldLeague;
-
     const idx = LEAGUES.indexOf(oldLeague);
     if (idx !== -1) {
       // Пороги повышения (XP за неделю для перехода на уровень выше)
-      const promoThresholds = [
-        300,
-        600,
-        1000,
-        1500,
-        2000,
-        3000,
-        5000,
-        Infinity,
-      ];
+      const promoThresholds = [300, 600, 1000, 1500, 2000, 3000, 5000, Infinity];
       // Пороги понижения (Если XP меньше этого, падаем вниз)
       const demoThresholds = [0, 50, 150, 300, 500, 800, 1200, 2000];
-
       if (idx < LEAGUES.length - 1 && prevXp >= promoThresholds[idx]) {
         newLeague = LEAGUES[idx + 1];
       } else if (idx > 0 && prevXp < demoThresholds[idx]) {
         newLeague = LEAGUES[idx - 1];
       }
     }
-
     state.userStats.weeklyXp = 0;
     state.userStats.lastWeekId = currentWeek;
     state.userStats.league = newLeague;
     scheduleSaveState();
-
+    notify("stats_updated", state.userStats);
     return { oldLeague, newLeague, prevXp };
   }
   return null;
 }
-
 export function processWeeklyResetUI() {
   const result = checkWeeklyReset();
   if (result) {
     const { oldLeague, newLeague, prevXp } = result;
-    setTimeout(() => {
+    window.setTimeout(() => {
       if (newLeague !== oldLeague) {
         const isPromo = LEAGUES.indexOf(newLeague) > LEAGUES.indexOf(oldLeague);
         const msg = isPromo
@@ -99,11 +80,13 @@ export function processWeeklyResetUI() {
           : `📉 Понижение лиги...\n${oldLeague} ➡ ${newLeague}`;
         showComboEffect(msg);
         playTone(isPromo ? "achievement-unlock" : "failure");
-        if (isPromo && typeof window.confetti === "function") {
-          window.confetti({
-            particleCount: 100,
-            spread: 70,
+        if (isPromo && typeof confetti === "function") {
+          const isMobile = window.innerWidth < 768;
+          confetti({
+            particleCount: isMobile ? 60 : 100,
+            spread: isMobile ? 50 : 70,
             origin: { y: 0.6 },
+            disableForReducedMotion: true,
           });
         }
       } else {
@@ -112,72 +95,69 @@ export function processWeeklyResetUI() {
     }, 1500); // Задержка, чтобы интерфейс успел загрузиться
   }
 }
-
 export function addXP(val: number) {
   const resetResult = checkWeeklyReset();
-
   // Если сброс произошел во время начисления опыта (например, сессия через полночь)
   if (resetResult) {
     const { oldLeague, newLeague } = resetResult;
     if (newLeague !== oldLeague) {
       const isPromo = LEAGUES.indexOf(newLeague) > LEAGUES.indexOf(oldLeague);
-      showComboEffect(
-        isPromo ? `🎉 Лига: ${newLeague}!` : `📉 Лига: ${newLeague}`,
-      );
+      showComboEffect(isPromo ? `🎉 Лига: ${newLeague}!` : `📉 Лига: ${newLeague}`);
     }
   }
-
   state.userStats.xp = (state.userStats.xp || 0) + val;
   if (val > 0) {
     state.userStats.weeklyXp = (state.userStats.weeklyXp || 0) + val;
   }
   if (val > 0) state.userStats.coins = (state.userStats.coins || 0) + val;
-
-  let currentLevel = Number(state.userStats.level || 1);
+  // Защита от повреждённого/облачного level = 0: раньше getXPForNextLevel(0) === 0
+  // и цикл никогда не завершался.
+  let currentLevel = Math.max(1, Math.floor(Number(state.userStats.level) || 1));
   const oldRole = getRole(currentLevel);
   let requiredForCurrentLevel = getXPForNextLevel(currentLevel);
   let leveledUp = false;
-
-  while (state.userStats.xp >= requiredForCurrentLevel) {
+  let guard = 0;
+  while (
+    state.userStats.xp >= requiredForCurrentLevel &&
+    requiredForCurrentLevel > 0 &&
+    guard++ < 1000
+  ) {
     state.userStats.xp -= requiredForCurrentLevel;
     currentLevel++;
     showLevelUpAnimation(currentLevel);
     leveledUp = true;
-
     requiredForCurrentLevel = getXPForNextLevel(currentLevel);
   }
-
   state.userStats.level = currentLevel;
   updateXPUI();
-
+  notify("stats_updated", state.userStats);
   const newRole = getRole(currentLevel);
   if (newRole.name !== oldRole.name) {
-    setTimeout(() => {
+    window.setTimeout(() => {
       showComboEffect(`🏆 Новое звание: ${newRole.name}!`);
       playTone("achievement-unlock");
-      if (typeof window.confetti === "function") {
-        window.confetti({
-          particleCount: 200,
-          spread: 100,
+      if (typeof confetti === "function") {
+        const isMobile = window.innerWidth < 768;
+        confetti({
+          particleCount: isMobile ? 100 : 200,
+          spread: isMobile ? 60 : 100,
           origin: { y: 0.6 },
+          disableForReducedMotion: true,
         });
       }
     }, 1000); // Show after level up animation
   }
-
   if (leveledUp) {
     const bar = document.getElementById("xp-fill");
     if (bar) {
       bar.classList.remove("level-up-shine");
       void bar.offsetWidth; // Force reflow для перезапуска анимации
       bar.classList.add("level-up-shine");
-      setTimeout(() => bar.classList.remove("level-up-shine"), 1500);
+      window.setTimeout(() => bar.classList.remove("level-up-shine"), 1500);
     }
   }
-
   scheduleSaveState();
 }
-
 export function updateXPUI() {
   const lvl = state.userStats.level;
   const xp = state.userStats.xp;
@@ -186,13 +166,11 @@ export function updateXPUI() {
   if (userLevel) userLevel.innerText = String(lvl);
   const xpText = document.getElementById("xp-text");
   if (xpText) xpText.innerText = `${xp}/${denom}`;
-
   const role = getRole(lvl);
   const xpLabel = document.querySelector("#xp-level-widget .xp-label");
   if (xpLabel) {
     xpLabel.textContent = `${role.icon} LVL`;
   }
-
   const bar = document.getElementById("xp-fill");
   if (bar) {
     const pct = Math.min(100, Math.max(0, (xp / denom) * 100));
@@ -205,11 +183,9 @@ export function updateXPUI() {
     }
   }
 }
-
 export function updateStats() {
   const headerCoins = document.getElementById("coins-count-header");
   if (headerCoins) headerCoins.innerText = String(state.userStats.coins);
-
   const strip = document.getElementById("stats-strip");
   if (strip) {
     const accuracy = calculateOverallAccuracy();
@@ -229,7 +205,7 @@ export function updateStats() {
         isChart: false,
       },
       {
-        label: "Точность",
+        label: "Процент правильных ответов",
         value: accuracy,
         icon: "🎯",
         color: "var(--primary)",
@@ -250,7 +226,6 @@ export function updateStats() {
         isChart: false,
       },
     ];
-
     strip.innerHTML = stats
       .map((s) => {
         if (s.isChart) {
@@ -280,7 +255,6 @@ export function updateStats() {
       .join("");
   }
 }
-
 export function updateSRSBadge() {
   try {
     Scheduler.init({
@@ -289,24 +263,18 @@ export function updateSRSBadge() {
     });
     const q = Scheduler.getQueue({ limit: 999 });
     const badge = document.getElementById("srs-badge");
-
     if (badge) {
       const currentCount = parseInt(badge.textContent || "0");
       const newCount = q.length;
-
       badge.textContent = String(q.length);
       badge.style.display = q.length > 0 ? "inline-block" : "none";
-
       if (newCount > 0 && newCount !== currentCount) {
         badge.classList.remove("badge-pop");
         void badge.offsetWidth; // Force reflow
         badge.classList.add("badge-pop");
       }
     }
-
-    const reviewBtn = document.querySelector(
-      '.nav-btn[onclick="openReviewMode()"]',
-    );
+    const reviewBtn = document.querySelector('.nav-btn[onclick="openReviewMode()"]');
     if (reviewBtn) {
       if (q.length > 0) {
         reviewBtn.classList.add("has-reviews");
@@ -318,8 +286,9 @@ export function updateSRSBadge() {
     console.warn("SRS Badge update failed:", e);
   }
 }
+export function calculateOverallAccuracy() {
+  if (cachedAccuracy !== null) return cachedAccuracy;
 
-export function calculateOverallAccuracy(): number {
   let totalAttempts = 0,
     totalCorrect = 0;
   const history = Object.values(state.wordHistory);
@@ -332,16 +301,27 @@ export function calculateOverallAccuracy(): number {
   }
   if (totalAttempts === 0) return 0;
   return Math.round((totalCorrect / totalAttempts) * 100);
+  if (totalAttempts === 0) {
+    cachedAccuracy = 0;
+    return 0;
+  }
+  cachedAccuracy = Math.round((totalCorrect / totalAttempts) * 100);
+  return cachedAccuracy;
 }
-
 export function getAchievementDefinitions() {
   // Optimization: Calculate mastered count once to avoid iterating wordHistory multiple times
-  const masteredCount = Object.values(state.wordHistory).filter(
-    (h) => h.attempts >= 3 && h.correct / h.attempts >= 0.9,
-  ).length;
-
-  const getMasteredCount = () => masteredCount;
-
+  // Lazy evaluation: only calculate if needed (e.g. not called if achievement already unlocked)
+  let masteredCount: number | null = null;
+  const getMasteredCount = () => {
+    if (masteredCount !== null) return masteredCount;
+    masteredCount = 0;
+    const history = state.wordHistory;
+    for (const id in history) {
+      const h = history[id];
+      if (h.attempts >= 3 && h.correct / h.attempts >= 0.9) masteredCount++;
+    }
+    return masteredCount;
+  };
   return [
     {
       id: "first_10",
@@ -396,8 +376,7 @@ export function getAchievementDefinitions() {
       title: "Перфекционист",
       description: "Выучить 5 слов без единой ошибки",
       emoji: "✨",
-      progress: () =>
-        state.mistakes.size === 0 && state.learned.size >= 5 ? 1 : 0,
+      progress: () => (state.mistakes.size === 0 && state.learned.size >= 5 ? 1 : 0),
       max: 1,
     },
     {
@@ -494,47 +473,35 @@ export function getAchievementDefinitions() {
     },
   ];
 }
-
 export function checkAchievements(showAlert = true) {
   const defs = getAchievementDefinitions();
+  // Optimization: Create a Set for O(1) lookup to avoid repeatedly searching the array
+  const unlockedIds = new Set(state.achievements.map((a) => a.id));
+
   defs.forEach((ach) => {
-    if (state.achievements.find((a) => a.id === ach.id)) return;
-    if (ach.progress() >= ach.max) {
+    if (unlockedIds.has(ach.id)) return;
+
+    const currentProgress = ach.progress();
+    if (currentProgress >= ach.max) {
       state.achievements.push({ id: ach.id, date: Date.now() });
+      unlockedIds.add(ach.id); // Update set to prevent duplicates in same run
       if (showAlert) {
-        showToast(`🎉 Новое достижение: ${ach.emoji} ${ach.title}`);
-        playTone("achievement-unlock");
-        if (typeof window.confetti !== "function") {
-          // Ленивая загрузка confetti только при разблокировке достижения
-          const s = document.createElement("script");
-          s.src = "https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js";
-          s.onload = () => {
-            if (typeof window.confetti === "function") {
-              window.confetti({ particleCount: 150, spread: 70, origin: { y: 0.6 }, zIndex: 20005 });
-            }
-          };
-          document.head.appendChild(s);
-        } else {
-          window.confetti({ particleCount: 150, spread: 70, origin: { y: 0.6 }, zIndex: 20005 });
-        }
+        showAchievementUnlocked(ach.title, ach.emoji, currentProgress, ach.max);
       }
     }
   });
   localStorage.setItem("achievements_v5", JSON.stringify(state.achievements));
 }
-
 export function renderAchievements() {
   const container = document.getElementById("achievements-list");
   const header = document.getElementById("achievements-header");
   if (!container) return;
   container.scrollTop = 0;
-
   container.innerHTML = "";
   const defs = getAchievementDefinitions();
   const unlockedIds = new Set(state.achievements.map((a) => a.id));
   const unlockedCount = unlockedIds.size;
   const totalCount = defs.length;
-
   if (header) {
     header.innerHTML = `
             <div style="font-size: 14px; color: var(--text-sub); margin-bottom: 10px; font-weight: 500; text-align: center;">Открыто ${unlockedCount} из ${totalCount}</div>
@@ -542,14 +509,12 @@ export function renderAchievements() {
                 <div id="ach-progress-fill" class="xp-bar-fill" style="width: 0%; background: var(--gold); height: 100%; transition: width 1s cubic-bezier(0.4, 0, 0.2, 1); box-shadow: 0 0 10px rgba(255, 215, 0, 0.3);"></div>
             </div>
         `;
-
     // Trigger animation after a brief delay
     requestAnimationFrame(() => {
       const fill = document.getElementById("ach-progress-fill");
       if (fill) fill.style.width = `${(unlockedCount / totalCount) * 100}%`;
     });
   }
-
   defs.forEach((ach, index) => {
     const isUnlocked = unlockedIds.has(ach.id);
     const card = document.createElement("div");
@@ -557,33 +522,29 @@ export function renderAchievements() {
     card.style.animation = `fadeInUpList 0.3s ease-out ${index * 0.05}s backwards`;
     if (isUnlocked) card.classList.add("unlocked");
     else card.classList.add("locked");
-
     let icon = ach.emoji,
       title = ach.title,
       desc = ach.description;
-    if (!isUnlocked && (ach as { secret?: boolean }).secret) {
+    if (!isUnlocked && ach.secret) {
       card.classList.add("secret");
       icon = "❓";
       title = "Секретное достижение";
       desc = "Выполните особое условие";
     }
-
     const currentProgress = ach.progress();
     const progressPercent = Math.min(100, (currentProgress / ach.max) * 100);
-
     let progressBar = "";
     if (!isUnlocked && ach.max > 1) {
       progressBar = `<div class="ach-progress-bar"><div class="ach-progress-fill" style="width: ${progressPercent}%"></div></div><div class="ach-progress-text">${currentProgress} / ${ach.max}</div>`;
     }
-
     card.innerHTML = `<div class="achievement-icon">${icon}</div><div class="achievement-info"><div class="achievement-title">${title}</div><div class="achievement-desc">${desc}</div></div>${progressBar}`;
     container.appendChild(card);
   });
 }
-
 let cachedTopicMasteryHtml: string | null = null;
-let cachedLearnedSize: number = -1;
+let cachedLearnedSize = -1;
 let cachedCurrentType: string | null = null;
+let cachedAccuracy: number | null = null;
 
 export function invalidateTopicMasteryCache() {
   cachedTopicMasteryHtml = null;
@@ -591,10 +552,12 @@ export function invalidateTopicMasteryCache() {
   cachedCurrentType = null;
 }
 
+export function invalidateStatsCache() {
+  cachedAccuracy = null;
+}
 export function renderTopicMastery() {
   const container = document.getElementById("topic-mastery-list");
   if (!container) return;
-
   // Optimization: Use cached HTML if learned count and type haven't changed
   if (
     cachedTopicMasteryHtml &&
@@ -604,14 +567,10 @@ export function renderTopicMastery() {
     container.innerHTML = cachedTopicMasteryHtml;
     return;
   }
-
-  const topics: Record<string, { total: number; learned: number }> =
-    Object.create(null);
-
+  const topics: Record<string, { total: number; learned: number }> = Object.create(null);
   const data = state.dataStore;
   const len = data.length;
   const currentType = state.currentType;
-
   for (let i = 0; i < len; i++) {
     const w = data[i];
     if (w.type !== currentType) continue;
@@ -620,7 +579,6 @@ export function renderTopicMastery() {
     topics[t].total++;
     if (state.learned.has(w.id)) topics[t].learned++;
   }
-
   let html = "";
   Object.entries(topics).forEach(([topic, stats]) => {
     const pct = Math.round((stats.learned / stats.total) * 100);
@@ -633,24 +591,12 @@ export function renderTopicMastery() {
             <div class="topic-stats">${stats.learned} из ${stats.total} слов</div>
         </div>`;
   });
-
   container.innerHTML = html;
   cachedTopicMasteryHtml = html;
   cachedLearnedSize = state.learned.size;
   cachedCurrentType = currentType;
 }
-
-interface ChartInstance {
-  destroy: () => void;
-}
-const chartInstances: Record<string, ChartInstance> = {};
-
-interface ChartTooltipContext {
-  raw: number;
-  label: string;
-  dataset: { label: string; data: number[] };
-}
-
+const chartInstances: Record<string, Chart> = {};
 // Helper for chart styling
 function getChartTheme() {
   const isDark = document.body.classList.contains("dark-mode");
@@ -665,13 +611,16 @@ function getChartTheme() {
   };
 }
 
+function getAnimationDuration(ms: number) {
+  return window.matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : ms;
+}
+
 function destroyChart(key: string) {
   const instance = chartInstances[key];
   if (instance && typeof instance.destroy === "function") {
     instance.destroy();
   }
 }
-
 function getLast7DaysActivity() {
   const days = [];
   const today = new Date();
@@ -692,21 +641,21 @@ function getLast7DaysActivity() {
   }
   return days;
 }
-
 export async function renderDetailedStats() {
   const container = document.getElementById("stats-details");
   if (!container) return;
-
   // Reset scroll on the parent container (modal body)
   const scrollParent = container.closest(".modal-body-container");
   if (scrollParent) {
     scrollParent.scrollTop = 0;
   }
-
   // Ленивая загрузка Chart.js только при открытии статистики
-  if (typeof window.Chart === "undefined") {
+  if (typeof Chart === "undefined") {
     await new Promise<void>((resolve, reject) => {
-      if (document.getElementById("chartjs-cdn")) { resolve(); return; }
+      if (document.getElementById("chartjs-cdn")) {
+        resolve();
+        return;
+      }
       const s = document.createElement("script");
       s.id = "chartjs-cdn";
       s.src = "https://cdn.jsdelivr.net/npm/chart.js";
@@ -718,15 +667,12 @@ export async function renderDetailedStats() {
       return;
     });
   }
-
-  if (typeof window.Chart === "undefined") {
+  if (typeof Chart === "undefined") {
     container.innerHTML = `<div style="padding: 20px; text-align: center; color: var(--text-sub);">Графики недоступны (Chart.js не загружен)</div>`;
     return;
   }
-
   const days = getLast7DaysActivity();
   const additionalHtml = ""; // Define additionalHtml to prevent error
-
   let streakHtml = `
     <div id="streak-calendar-card" class="streak-calendar-card">
       <div class="streak-info">
@@ -752,7 +698,6 @@ export async function renderDetailedStats() {
       </div>
     </div>
   `;
-
   // Add Mistake Analysis Button if there are mistakes
   if (state.mistakes.size > 0) {
     streakHtml += `
@@ -761,7 +706,6 @@ export async function renderDetailedStats() {
       </button>
     `;
   }
-
   const existingStreak = document.getElementById("streak-calendar-card");
   if (existingStreak && existingStreak.parentElement) {
     existingStreak.outerHTML = streakHtml + additionalHtml;
@@ -817,7 +761,6 @@ export async function renderDetailedStats() {
   } else {
     container.insertAdjacentHTML("afterbegin", streakHtml + additionalHtml);
   }
-
   // FIX: Явно вызываем рендеринг графиков после вставки HTML
   requestAnimationFrame(() => {
     renderActivityChart();
@@ -829,21 +772,16 @@ export async function renderDetailedStats() {
     renderForgettingCurve();
   });
 }
-
 export function renderActivityChart() {
-  const ctx = (
-    document.getElementById("activityChart") as HTMLCanvasElement
-  )?.getContext("2d");
+  const ctx = (document.getElementById("activityChart") as HTMLCanvasElement)?.getContext("2d");
   if (!ctx) return;
   destroyChart("activity");
-
   const labels = [];
   const dataPoints = [];
   const now = new Date();
   const theme = getChartTheme();
-
   // Optimization: Pre-calculate activity map to avoid iterating wordHistory 7 times
-  const activityMap = new Map<string, number>();
+  const activityMap = new Map();
   Object.values(state.wordHistory).forEach((h) => {
     if (h.learnedDate) {
       const d = new Date(h.learnedDate);
@@ -853,17 +791,14 @@ export function renderActivityChart() {
       }
     }
   });
-
   for (let i = 6; i >= 0; i--) {
     const d = new Date();
     d.setDate(now.getDate() - i);
     const localDateStr = d.toLocaleDateString("en-CA");
     labels.push(d.toLocaleDateString("ru-RU", { weekday: "short" }));
-
     // Hybrid approach:
     // 1. Count newly learned words (precise)
     let learnedCount = activityMap.get(localDateStr) || 0;
-
     // 2. If learned count is 0 (likely past days before migration), fallback to session activity
     // This ensures the chart isn't empty for past active days
     if (learnedCount === 0 && i > 0) {
@@ -871,25 +806,19 @@ export function renderActivityChart() {
         .filter((s) => {
           if (!s.date) return false;
           const sd = new Date(s.date);
-          return (
-            !isNaN(sd.getTime()) &&
-            sd.toLocaleDateString("en-CA") === localDateStr
-          );
+          return !isNaN(sd.getTime()) && sd.toLocaleDateString("en-CA") === localDateStr;
         })
         .reduce((acc, s) => acc + (s.wordsReviewed || 0), 0);
       // Use session activity but scale it down slightly to approximate "learned" vs "reviewed"
       learnedCount = Math.ceil(sessionActivity * 0.5);
     }
-
     dataPoints.push(learnedCount);
   }
-
   // Gradient
   const gradient = ctx.createLinearGradient(0, 0, 0, 200);
   gradient.addColorStop(0, "rgba(124, 58, 237, 0.9)");
   gradient.addColorStop(1, "rgba(124, 58, 237, 0.2)");
-
-  chartInstances["activity"] = new window.Chart(ctx, {
+  chartInstances["activity"] = new Chart(ctx, {
     type: "bar",
     data: {
       labels,
@@ -908,11 +837,27 @@ export function renderActivityChart() {
     options: {
       responsive: true,
       maintainAspectRatio: false,
-      plugins: { legend: { display: false } },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: theme.tooltipBg,
+          titleColor: theme.tooltipText,
+          bodyColor: theme.tooltipText,
+          borderColor: theme.gridColor,
+          borderWidth: 1,
+          padding: 10,
+          cornerRadius: 8,
+          displayColors: false,
+          callbacks: {
+            label: (context: TooltipItem<"bar">) => `📝 ~${context.raw} слов`,
+          },
+        },
+      },
       scales: {
         y: {
           beginAtZero: true,
-          grid: { color: theme.gridColor, drawBorder: false },
+          grid: { color: theme.gridColor },
+          border: { display: false },
           ticks: {
             color: theme.textColor,
             font: { family: theme.fontFamily },
@@ -925,14 +870,9 @@ export function renderActivityChart() {
         },
       },
       animation: {
-        duration: 2000,
+        duration: getAnimationDuration(2000),
         easing: "easeOutQuart",
-        delay: (context: {
-          type: string;
-          mode: string;
-          dataIndex: number;
-          datasetIndex: number;
-        }) => {
+        delay: (context) => {
           let delay = 0;
           if (context.type === "data" && context.mode === "default") {
             delay = context.dataIndex * 100 + context.datasetIndex * 100;
@@ -940,50 +880,28 @@ export function renderActivityChart() {
           return delay;
         },
       },
-      tooltip: {
-        backgroundColor: theme.tooltipBg,
-        titleColor: theme.tooltipText,
-        bodyColor: theme.tooltipText,
-        borderColor: theme.gridColor,
-        borderWidth: 1,
-        padding: 10,
-        cornerRadius: 8,
-        displayColors: false,
-        callbacks: {
-          label: (context: ChartTooltipContext) => `📝 ~${context.raw} слов`,
-        },
-      },
     },
   });
 }
-
 export function renderLearnedChart() {
-  const ctx = (
-    document.getElementById("learnedChart") as HTMLCanvasElement
-  )?.getContext("2d");
+  const ctx = (document.getElementById("learnedChart") as HTMLCanvasElement)?.getContext("2d");
   if (!ctx) return;
   destroyChart("learned");
-
   const theme = getChartTheme();
-
   // Group learned words by level
-  const levels = { "★☆☆": 0, "★★☆": 0, "★★★": 0 };
-  const totals = { "★☆☆": 0, "★★☆": 0, "★★★": 0 };
-
+  const levels: Record<string, number> = { "★☆☆": 0, "★★☆": 0, "★★★": 0 };
+  const totals: Record<string, number> = { "★☆☆": 0, "★★☆": 0, "★★★": 0 };
   const data = state.dataStore;
   for (let i = 0; i < data.length; i++) {
     const w = data[i];
     if (w.level && w.level in totals) {
-      // @ts-expect-error Index signature mismatch
-      totals[w.level]++;
+      totals[w.level as keyof typeof totals]++;
       if (state.learned.has(w.id)) {
-        // @ts-expect-error Index signature mismatch
-        levels[w.level]++;
+        levels[w.level as keyof typeof levels]++;
       }
     }
   }
-
-  chartInstances["learned"] = new window.Chart(ctx, {
+  chartInstances["learned"] = new Chart(ctx, {
     type: "bar",
     data: {
       labels: Object.keys(levels),
@@ -1002,9 +920,9 @@ export function renderLearnedChart() {
       responsive: true,
       maintainAspectRatio: false,
       animation: {
-        duration: 1500,
+        duration: getAnimationDuration(1500),
         easing: "easeOutBounce",
-        delay: (context: { type: string; mode: string; dataIndex: number }) => {
+        delay: (context) => {
           let delay = 0;
           if (context.type === "data" && context.mode === "default") {
             delay = context.dataIndex * 150;
@@ -1023,10 +941,10 @@ export function renderLearnedChart() {
           padding: 10,
           cornerRadius: 8,
           callbacks: {
-            label: (context: ChartTooltipContext) => {
-              const lvl = context.label as keyof typeof totals;
+            label: (context: TooltipItem<"bar">) => {
+              const lvl = context.label;
               const total = totals[lvl] || 0;
-              const val = context.raw;
+              const val = context.raw as number;
               const pct = total > 0 ? Math.round((val / total) * 100) : 0;
               return `📚 ${val} из ${total} (${pct}%)`;
             },
@@ -1036,7 +954,8 @@ export function renderLearnedChart() {
       scales: {
         y: {
           beginAtZero: true,
-          grid: { color: theme.gridColor, drawBorder: false },
+          grid: { color: theme.gridColor },
+          border: { display: false },
           ticks: {
             color: theme.textColor,
             font: { family: theme.fontFamily },
@@ -1051,35 +970,27 @@ export function renderLearnedChart() {
     },
   });
 }
-
 export function renderAccuracyChart() {
-  const ctx = (
-    document.getElementById("accuracyChart") as HTMLCanvasElement
-  )?.getContext("2d");
+  const ctx = (document.getElementById("accuracyChart") as HTMLCanvasElement)?.getContext("2d");
   if (!ctx) return;
   destroyChart("accuracy");
-
   const theme = getChartTheme();
   const recentSessions = state.sessions.slice(-10);
-
   if (recentSessions.length === 0) {
     // Если нет данных, можно очистить канвас или нарисовать "Нет данных"
     // В данном случае просто выходим, оставляя пустой канвас (или старый график, если он был, но destroyChart его удалил)
     return;
   }
-
   // Format dates for labels
   const labels = recentSessions.map((s) => {
     const d = new Date(s.date);
     return `${d.getDate()}.${d.getMonth() + 1}`;
   });
   const data = recentSessions.map((s) => s.accuracy || 0);
-
   const gradient = ctx.createLinearGradient(0, 0, 0, 200);
   gradient.addColorStop(0, "rgba(0, 184, 148, 0.4)");
   gradient.addColorStop(1, "rgba(0, 184, 148, 0.0)");
-
-  chartInstances["accuracy"] = new window.Chart(ctx, {
+  chartInstances["accuracy"] = new Chart(ctx, {
     type: "line",
     data: {
       labels,
@@ -1102,11 +1013,11 @@ export function renderAccuracyChart() {
     options: {
       responsive: true,
       maintainAspectRatio: false,
-      animation: {
-        duration: 2000,
-        easing: "easeOutCubic",
+      animations: {
         y: {
-          from: (ctx: { type: string }) => (ctx.type === "data" ? 0 : null),
+          duration: getAnimationDuration(2000),
+          easing: "easeOutCubic",
+          from: (ctx: ScriptableContext<"line">) => (ctx.type === "data" ? 0 : undefined),
         },
       },
       plugins: {
@@ -1120,7 +1031,7 @@ export function renderAccuracyChart() {
           padding: 10,
           cornerRadius: 8,
           callbacks: {
-            label: (context: ChartTooltipContext) => `🎯 ${context.raw}%`,
+            label: (context: TooltipItem<"line">) => `🎯 ${context.raw}%`,
           },
         },
       },
@@ -1128,7 +1039,8 @@ export function renderAccuracyChart() {
         y: {
           beginAtZero: true,
           max: 100,
-          grid: { color: theme.gridColor, drawBorder: false },
+          grid: { color: theme.gridColor },
+          border: { display: false },
           ticks: { color: theme.textColor, font: { family: theme.fontFamily } },
         },
         x: {
@@ -1144,16 +1056,11 @@ export function renderAccuracyChart() {
     },
   });
 }
-
 export function renderForgettingCurve() {
-  const ctx = (
-    document.getElementById("forgettingChart") as HTMLCanvasElement
-  )?.getContext("2d");
+  const ctx = (document.getElementById("forgettingChart") as HTMLCanvasElement)?.getContext("2d");
   if (!ctx) return;
   destroyChart("forgetting");
-
   const theme = getChartTheme();
-
   // --- Calculate User's Average Stability ---
   let totalInterval = 0;
   let reviewedCount = 0;
@@ -1164,9 +1071,7 @@ export function renderForgettingCurve() {
       reviewedCount++;
     }
   });
-  const averageStability =
-    reviewedCount > 0 ? totalInterval / reviewedCount : 2.5;
-
+  const averageStability = reviewedCount > 0 ? totalInterval / reviewedCount : 2.5;
   const labels = [];
   const theoreticalData = [];
   const userData = [];
@@ -1176,12 +1081,10 @@ export function renderForgettingCurve() {
     theoreticalData.push(Math.exp(-t / 2.5) * 100);
     userData.push(Math.exp(-t / averageStability) * 100);
   }
-
   const gradientUser = ctx.createLinearGradient(0, 0, 0, 200);
   gradientUser.addColorStop(0, "rgba(52, 211, 153, 0.5)");
   gradientUser.addColorStop(1, "rgba(52, 211, 153, 0.0)");
-
-  chartInstances["forgetting"] = new window.Chart(ctx, {
+  chartInstances["forgetting"] = new Chart(ctx, {
     type: "line",
     data: {
       labels,
@@ -1215,7 +1118,7 @@ export function renderForgettingCurve() {
       responsive: true,
       maintainAspectRatio: false,
       animation: {
-        duration: 2500,
+        duration: getAnimationDuration(2500),
         easing: "easeInOutQuart",
         loop: false,
       },
@@ -1235,8 +1138,8 @@ export function renderForgettingCurve() {
           borderColor: theme.gridColor,
           borderWidth: 1,
           callbacks: {
-            label: (context: ChartTooltipContext) =>
-              `🧠 ${context.dataset.label}: ${Math.round(context.raw)}%`,
+            label: (context: TooltipItem<"line">) =>
+              `🧠 ${context.dataset.label}: ${Math.round(context.raw as number)}%`,
           },
         },
       },
@@ -1244,7 +1147,8 @@ export function renderForgettingCurve() {
         y: {
           beginAtZero: true,
           max: 100,
-          grid: { color: theme.gridColor, drawBorder: false },
+          grid: { color: theme.gridColor },
+          border: { display: false },
           ticks: { color: theme.textColor, font: { family: theme.fontFamily } },
         },
         x: {
@@ -1255,14 +1159,10 @@ export function renderForgettingCurve() {
     },
   });
 }
-
 export function renderSRSDistributionChart() {
-  const ctx = (
-    document.getElementById("srsChart") as HTMLCanvasElement
-  )?.getContext("2d");
+  const ctx = (document.getElementById("srsChart") as HTMLCanvasElement)?.getContext("2d");
   if (!ctx) return;
   destroyChart("srs");
-
   const theme = getChartTheme();
   const counts = [0, 0, 0, 0];
   const data = state.dataStore;
@@ -1274,10 +1174,8 @@ export function renderSRSDistributionChart() {
     else if (h.sm2.interval < 21) counts[2]++;
     else counts[3]++;
   }
-
-  const totalWords = counts.reduce((a, b) => a + b, 0);
-
-  chartInstances["srs"] = new window.Chart(ctx, {
+  const totalWords = counts.reduce((a: number, b: number) => a + b, 0);
+  chartInstances["srs"] = new Chart<"doughnut", number[], string>(ctx, {
     type: "doughnut",
     data: {
       labels: ["Новые", "Изучаю", "Закрепляю", "Выучено"],
@@ -1300,9 +1198,7 @@ export function renderSRSDistributionChart() {
       responsive: true,
       maintainAspectRatio: false,
       animation: {
-        animateRotate: true,
-        animateScale: true,
-        duration: 1500,
+        duration: getAnimationDuration(1500),
         easing: "easeOutCirc",
       },
       cutout: "75%",
@@ -1325,9 +1221,9 @@ export function renderSRSDistributionChart() {
           padding: 10,
           cornerRadius: 8,
           callbacks: {
-            label: (context: ChartTooltipContext) => {
+            label: (context: TooltipItem<"doughnut">) => {
               const val = context.raw as number;
-              const total = (context.dataset.data || []).reduce(
+              const total = (context.dataset.data as number[]).reduce(
                 (a: number, b: number) => a + b,
                 0,
               );
@@ -1341,51 +1237,36 @@ export function renderSRSDistributionChart() {
     plugins: [
       {
         id: "centerText",
-        afterDraw: (chart: {
-          ctx: CanvasRenderingContext2D;
-          width: number;
-          height: number;
-        }) => {
+        afterDraw: (chart: Chart) => {
           const ctx = chart.ctx;
           const { width, height } = chart;
-
           ctx.restore();
           const fontSize = (height / 115).toFixed(2);
           ctx.font = `bold ${fontSize}em ${theme.fontFamily}`;
           ctx.textBaseline = "middle";
           ctx.textAlign = "center";
-
           const text = `${totalWords}`;
           const textX = width / 2;
           const textY = height / 2;
-
           const label = "слов";
           const labelFontSize = (height / 250).toFixed(2);
-
           ctx.fillStyle = theme.textColor;
           ctx.fillText(text, textX, textY - height * 0.05);
-
           ctx.font = `600 ${labelFontSize}em ${theme.fontFamily}`;
           ctx.fillStyle = theme.textColor.replace(")", ", 0.7)");
           ctx.fillText(label, textX, textY + height * 0.08);
-
           ctx.save();
         },
       },
     ],
   });
 }
-
 export function renderWordTypesChart() {
-  const ctx = (
-    document.getElementById("typesChart") as HTMLCanvasElement
-  )?.getContext("2d");
+  const ctx = (document.getElementById("typesChart") as HTMLCanvasElement)?.getContext("2d");
   if (!ctx) return;
   destroyChart("types");
-
   const theme = getChartTheme();
   const counts: Record<string, number> = {};
-
   state.dataStore.forEach((w) => {
     // Пытаемся определить категорию/часть речи
     // Часто это хранится в category_ru, например "Глаголы", "Существительные"
@@ -1395,17 +1276,16 @@ export function renderWordTypesChart() {
     cat = cat.split("(")[0].trim();
     counts[cat] = (counts[cat] || 0) + 1;
   });
-
   // Сортируем и берем топ-6, остальные в "Другое"
   const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]);
   const top = sorted.slice(0, 6);
-  const otherCount = sorted.slice(6).reduce((acc, curr) => acc + curr[1], 0);
+  const otherCount = sorted
+    .slice(6)
+    .reduce((acc: number, curr: [string, number]) => acc + curr[1], 0);
   if (otherCount > 0) top.push(["Другое", otherCount]);
-
   const labels = top.map((x) => x[0]);
   const data = top.map((x) => x[1]);
-
-  chartInstances["types"] = new window.Chart(ctx, {
+  chartInstances["types"] = new Chart(ctx, {
     type: "polarArea",
     data: {
       labels,
@@ -1448,17 +1328,12 @@ export function renderWordTypesChart() {
     },
   });
 }
-
 export function renderHourlyActivityChart() {
-  const ctx = (
-    document.getElementById("hourlyChart") as HTMLCanvasElement
-  )?.getContext("2d");
+  const ctx = (document.getElementById("hourlyChart") as HTMLCanvasElement)?.getContext("2d");
   if (!ctx) return;
   destroyChart("hourly");
-
   const theme = getChartTheme();
   const hours = new Array(24).fill(0);
-
   state.sessions.forEach((s) => {
     if (s.date) {
       const d = new Date(s.date);
@@ -1468,12 +1343,10 @@ export function renderHourlyActivityChart() {
       }
     }
   });
-
   const gradient = ctx.createLinearGradient(0, 0, 0, 200);
   gradient.addColorStop(0, "rgba(245, 158, 11, 0.8)"); // Amber
   gradient.addColorStop(1, "rgba(245, 158, 11, 0.1)");
-
-  chartInstances["hourly"] = new window.Chart(ctx, {
+  chartInstances["hourly"] = new Chart(ctx, {
     type: "bar",
     data: {
       labels: hours.map((_, i) => String(i)),
@@ -1509,7 +1382,6 @@ export function renderHourlyActivityChart() {
     },
   });
 }
-
 export const ROLES = [
   { minLevel: 100, name: "Божество", icon: "👑", color: "#FFD700" },
   { minLevel: 75, name: "Титан", icon: "⚡", color: "#E11D48" },
@@ -1523,11 +1395,9 @@ export const ROLES = [
   { minLevel: 3, name: "Ученик", icon: "📝", color: "#64748B" },
   { minLevel: 0, name: "Новичок", icon: "🌱", color: "#94A3B8" },
 ];
-
 export function getRole(lvl: number) {
   return ROLES.find((r) => lvl >= r.minLevel) || ROLES[ROLES.length - 1];
 }
-
 export function openRolesModal() {
   let modal = document.getElementById("roles-modal");
   if (!modal) {
@@ -1537,24 +1407,18 @@ export function openRolesModal() {
     modal.setAttribute("data-close-modal", "roles-modal");
     document.body.appendChild(modal);
   }
-
   const currentLevel = state.userStats.level;
   const currentRole = getRole(currentLevel);
   const currentRoleIndex = ROLES.indexOf(currentRole);
   const nextRole = currentRoleIndex > 0 ? ROLES[currentRoleIndex - 1] : null;
-
   let progressHtml = "";
   if (nextRole) {
     const prevRoleMinLevel = currentRole.minLevel;
     const nextRoleMinLevel = nextRole.minLevel;
     const totalLevels = nextRoleMinLevel - prevRoleMinLevel;
     const gainedLevels = currentLevel - prevRoleMinLevel;
-    const percent = Math.min(
-      100,
-      Math.max(0, (gainedLevels / totalLevels) * 100),
-    );
+    const percent = Math.min(100, Math.max(0, (gainedLevels / totalLevels) * 100));
     const levelsLeft = nextRoleMinLevel - currentLevel;
-
     progressHtml = `
       <div style="margin-bottom: 20px; padding: 15px; background: var(--surface-2); border-radius: 16px; text-align: center; border: 1px solid var(--border-color);">
         <div style="font-size: 13px; color: var(--text-sub); margin-bottom: 10px;">
@@ -1578,17 +1442,13 @@ export function openRolesModal() {
       </div>
     `;
   }
-
   // Отображаем от меньшего к большему, чтобы был виден путь
   const rolesList = [...ROLES].reverse();
-
   const rolesHtml = rolesList
     .map((role) => {
       const isCurrent =
-        currentLevel >= role.minLevel &&
-        ROLES.find((r) => currentLevel >= r.minLevel) === role;
+        currentLevel >= role.minLevel && ROLES.find((r) => currentLevel >= r.minLevel) === role;
       const isUnlocked = currentLevel >= role.minLevel;
-
       return `
             <div class="role-item" style="
                 display: flex; 
@@ -1612,7 +1472,6 @@ export function openRolesModal() {
         `;
     })
     .join("");
-
   modal.innerHTML = `
         <div class="modal-content" style="max-width: 400px;">
             <div class="modal-header">
@@ -1625,8 +1484,5 @@ export function openRolesModal() {
             </div>
         </div>
     `;
-
-  document.dispatchEvent(
-    new CustomEvent("open-modal", { detail: { id: "roles-modal" } }),
-  );
+  document.dispatchEvent(new CustomEvent("open-modal", { detail: { id: "roles-modal" } }));
 }

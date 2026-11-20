@@ -27,8 +27,8 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
-          cache: 'npm'
+          node-version: "20"
+          cache: "npm"
 
       - name: Install Node dependencies
         run: npm ci
@@ -38,8 +38,13 @@ jobs:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           VITE_SUPABASE_KEY: ${{ secrets.VITE_SUPABASE_KEY }}
         run: |
-          echo "VITE_SUPABASE_URL=${{ env.VITE_SUPABASE_URL }}" >> .env
-          echo "VITE_SUPABASE_KEY=${{ env.VITE_SUPABASE_KEY }}" >> .env
+          printf 'VITE_SUPABASE_URL=%s\nVITE_SUPABASE_KEY=%s\n' "$VITE_SUPABASE_URL" "$VITE_SUPABASE_KEY" > .env
+
+      - name: Check TypeScript types
+        run: npm run check
+
+      - name: Lint frontend
+        run: npm run lint
 
       - name: Build Frontend
         run: npm run build
@@ -57,18 +62,26 @@ jobs:
       - name: Setup Deno
         uses: denoland/setup-deno@v1
         with:
-          deno-version: v1.x
+          deno-version: v2.9.6
 
-      - name: Check Deno formatting
-        run: deno fmt --check
+      - name: Cache Deno dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.deno
+          key: ${{ runner.os }}-deno-${{ hashFiles('**/deno.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-deno-
 
-      - name: Run Deno linter
-        run: deno lint
+      - name: Run Deno formatter check for Edge Functions
+        run: deno fmt --check supabase/functions
+
+      - name: Run Deno linter for Edge Functions
+        run: deno lint supabase/functions
 
       - name: Run Deno tests for Edge Functions
         env:
-          SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
-          SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_KEY }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: deno task test
@@ -86,6 +99,7 @@ jobs:
         with:
           version: latest
       - name: Deploy Edge Functions
-        run: supabase functions deploy --project-ref ${{ secrets.SUPABASE_PROJECT_ID }} --no-verify-jwt
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_PROJECT_ID: ${{ secrets.SUPABASE_PROJECT_ID }}
+        run: supabase functions deploy --project-ref "$SUPABASE_PROJECT_ID"

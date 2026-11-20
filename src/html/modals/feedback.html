@@ -1,0 +1,102 @@
+<!-- Feedback Modal -->
+<div id="feedback-modal" class="modal">
+  <div class="modal-content" style="max-width: 500px">
+    <div class="modal-header">
+      <h3>📢 Сообщить о проблеме</h3>
+      <button
+        class="btn-icon close-modal-btn"
+        data-close-modal="feedback-modal"
+        aria-label="Закрыть"
+      >
+        ✕
+      </button>
+    </div>
+    <div class="modal-body">
+      <form id="feedback-form" onsubmit="return false;">
+        <div class="input-group">
+          <label class="form-label">Тип обращения</label>
+          <div class="segment-control" id="feedback-type-selector">
+            <button class="segment-btn active" data-value="bug">🐛 Баг</button>
+            <button class="segment-btn" data-value="feature">💡 Идея</button>
+            <button class="segment-btn" data-value="question">❓ Вопрос</button>
+          </div>
+        </div>
+
+        <div class="input-group">
+          <label for="feedback-title" class="form-label">Тема</label>
+          <input
+            type="text"
+            id="feedback-title"
+            class="auth-input"
+            placeholder="Кратко о проблеме..."
+            required
+          />
+        </div>
+
+        <div class="input-group">
+          <label for="feedback-desc" class="form-label">Описание</label>
+          <textarea
+            id="feedback-desc"
+            class="auth-input"
+            rows="4"
+            placeholder="Подробности, шаги воспроизведения..."
+            required
+            style="resize: vertical"
+          ></textarea>
+        </div>
+
+        <div class="input-group">
+          <label class="form-label">Вложения (макс 3 файла, до 10MB)</label>
+          <div id="feedback-drop-zone" class="drop-zone">
+            <div class="drop-zone-content">
+              <span style="font-size: 24px; margin-bottom: 8px">📎</span>
+              <span style="font-size: 13px; color: var(--text-sub)"
+                >Перетащите файлы сюда или
+                <span style="color: var(--primary); font-weight: 600; cursor: pointer"
+                  >выберите</span
+                ></span
+              >
+              <button
+                id="feedback-screenshot-btn"
+                class="btn-text"
+                style="margin-top: 8px; font-size: 12px"
+              >
+                📸 Сделать скриншот
+              </button>
+            </div>
+            <input
+              type="file"
+              id="feedback-file-input"
+              multiple
+              accept="image/*,video/*"
+              style="display: none"
+            />
+          </div>
+          <div id="feedback-attachments-list" class="attachments-grid"></div>
+        </div>
+
+        <div class="input-group">
+          <label class="form-label">Приоритет</label>
+          <div class="priority-selector" id="feedback-priority-selector">
+            <button class="priority-btn" data-value="low" style="--p-color: var(--success)">
+              🟢 Низкий
+            </button>
+            <button class="priority-btn active" data-value="medium" style="--p-color: var(--info)">
+              🔵 Средний
+            </button>
+            <button class="priority-btn" data-value="high" style="--p-color: var(--warning)">
+              🟠 Высокий
+            </button>
+            <button class="priority-btn" data-value="urgent" style="--p-color: var(--danger)">
+              🔴 Срочно
+            </button>
+          </div>
+        </div>
+
+        <button id="submit-feedback-btn" class="btn btn-quiz" style="width: 100%; margin-top: 10px">
+          🚀 Отправить
+        </button>
+      </form>
+    </div>
+  </div>
+</div>

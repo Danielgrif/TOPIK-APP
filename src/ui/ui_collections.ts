@@ -1,4 +1,4 @@
-import { state } from "../core/state.ts";
+import { state, notify } from "../core/state.ts";
 import { client } from "../core/supabaseClient.ts";
 import { showToast, showUndoToast, escapeHtml } from "../utils/utils.ts";
 import { render } from "./ui_card.ts";
@@ -6,22 +6,26 @@ import { openModal, closeModal, openConfirm } from "./ui_modal.ts";
 import {
   collectionsState,
   setCollectionFilter as setStateFilter,
-  UserList,
+  type UserList,
 } from "../core/collections_data.ts";
 import { DB_TABLES } from "../core/constants.ts";
-import { Word } from "../types/index.ts";
+import type { Word } from "../types/index.ts";
+import { BaseComponent } from "./BaseComponent.ts";
 
 export async function loadCollections() {
-  const {
-    data: { user },
-  } = await client.auth.getUser();
-  if (!user) return;
+  let userId = state.currentUser?.id;
+
+  if (!userId) {
+    const { data } = await client.auth.getSession();
+    if (!data.session?.user) return;
+    userId = data.session.user.id;
+  }
 
   // 1. Загружаем списки (свои + публичные)
   const { data: lists, error } = await client
     .from(DB_TABLES.USER_LISTS)
     .select("*")
-    .or(`user_id.eq.${user.id},is_public.eq.true`)
+    .or(`user_id.eq.${userId},is_public.eq.true`)
     .order("created_at", { ascending: false });
 
   if (error) {
@@ -37,10 +41,7 @@ export async function loadCollections() {
       const order = JSON.parse(savedOrder);
 
       // Валидация: убеждаемся, что это массив строк
-      if (
-        Array.isArray(order) &&
-        order.every((item) => typeof item === "string")
-      ) {
+      if (Array.isArray(order) && order.every((item) => typeof item === "string")) {
         const orderMap = new Map<string, number>(
           (order as string[]).map((id, index) => [id, index]),
         );
@@ -61,9 +62,7 @@ export async function loadCollections() {
 
   // 2. Загружаем содержимое списков
   // Оптимизация: загружаем только для видимых списков, но пока загрузим всё для простоты
-  const { data: items, error: itemsError } = await client
-    .from(DB_TABLES.LIST_ITEMS)
-    .select("*");
+  const { data: items, error: itemsError } = await client.from(DB_TABLES.LIST_ITEMS).select("*");
 
   if (itemsError) {
     console.error("Error loading list items:", itemsError);
@@ -80,19 +79,13 @@ export async function loadCollections() {
     }
   }
 
-  updateCollectionUI();
+  notify("collections_updated");
 }
 
 export async function createList() {
-  const titleInput = document.getElementById(
-    "new-list-title",
-  ) as HTMLInputElement;
-  const iconInput = document.getElementById(
-    "new-list-icon",
-  ) as HTMLInputElement;
-  const publicCheck = document.getElementById(
-    "new-list-public",
-  ) as HTMLInputElement;
+  const titleInput = document.getElementById("new-list-title") as HTMLInputElement;
+  const iconInput = document.getElementById("new-list-icon") as HTMLInputElement;
+  const publicCheck = document.getElementById("new-list-public") as HTMLInputElement;
   const title = titleInput.value.trim();
   const icon = iconInput.value.trim() || "📁";
 
@@ -101,18 +94,18 @@ export async function createList() {
     return;
   }
 
-  const {
-    data: { user },
-  } = await client.auth.getUser();
+  let user = state.currentUser;
+  if (!user) {
+    const { data } = await client.auth.getUser();
+    user = data.user as unknown as import("../types/index.ts").User;
+  }
   if (!user) {
     showToast("⚠️ Войдите в аккаунт, чтобы создавать списки");
     return;
   }
 
   // UI: Показываем загрузку
-  const btn = document.querySelector(
-    '[data-action="create-list"]',
-  ) as HTMLButtonElement;
+  const btn = document.querySelector('[data-action="create-list"]') as HTMLButtonElement;
   let originalContent = "";
   if (btn) {
     originalContent = btn.innerHTML;
@@ -150,15 +143,13 @@ export async function createList() {
   publicCheck.checked = false;
 
   showToast("Список создан!");
-  updateCollectionUI();
+  notify("collections_updated");
 
   // UX: Если мы находимся в процессе добавления слова, выбираем новый список и возвращаемся
   const addWordModal = document.getElementById("add-word-modal");
   if (addWordModal && addWordModal.classList.contains("active")) {
     setTimeout(() => {
-      const select = document.getElementById(
-        "new-word-target-list",
-      ) as HTMLSelectElement;
+      const select = document.getElementById("new-word-target-list") as HTMLSelectElement;
       if (select) select.value = data.id;
       closeModal("collections-modal");
     }, 100); // Небольшая задержка, чтобы updateCollectionUI успел обновить DOM
@@ -195,7 +186,7 @@ export function deleteList(listId: string, btn?: HTMLElement) {
       setStateFilter(null);
       render();
     }
-    updateCollectionUI();
+    notify("collections_updated");
 
     showUndoToast(
       "Список удален",
@@ -207,35 +198,24 @@ export function deleteList(listId: string, btn?: HTMLElement) {
           setStateFilter(listId);
           render();
         }
-        updateCollectionUI();
+        notify("collections_updated");
       },
       async () => {
         // Commit
         // Ручная очистка элементов списка перед удалением самого списка (для надежности)
         await client.from(DB_TABLES.LIST_ITEMS).delete().eq("list_id", listId);
 
-        const { error } = await client
-          .from(DB_TABLES.USER_LISTS)
-          .delete()
-          .eq("id", listId);
+        const { error } = await client.from(DB_TABLES.USER_LISTS).delete().eq("id", listId);
         if (error) showToast("Ошибка удаления на сервере");
       },
     );
   });
 }
 
-export function openEditListModal(
-  listId: string,
-  currentTitle: string,
-  currentIcon: string,
-) {
+export function openEditListModal(listId: string, currentTitle: string, currentIcon: string) {
   const idInput = document.getElementById("edit-list-id") as HTMLInputElement;
-  const titleInput = document.getElementById(
-    "edit-list-title",
-  ) as HTMLInputElement;
-  const iconInput = document.getElementById(
-    "edit-list-icon",
-  ) as HTMLInputElement;
+  const titleInput = document.getElementById("edit-list-title") as HTMLInputElement;
+  const iconInput = document.getElementById("edit-list-icon") as HTMLInputElement;
 
   if (idInput && titleInput && iconInput) {
     idInput.value = listId;
@@ -254,12 +234,8 @@ export function openEditListModal(
 
 export async function saveListChanges() {
   const idInput = document.getElementById("edit-list-id") as HTMLInputElement;
-  const titleInput = document.getElementById(
-    "edit-list-title",
-  ) as HTMLInputElement;
-  const iconInput = document.getElementById(
-    "edit-list-icon",
-  ) as HTMLInputElement;
+  const titleInput = document.getElementById("edit-list-title") as HTMLInputElement;
+  const iconInput = document.getElementById("edit-list-icon") as HTMLInputElement;
 
   const listId = idInput.value;
   const newTitle = titleInput.value.trim();
@@ -279,50 +255,69 @@ export async function saveListChanges() {
     return;
   }
 
-  const list = collectionsState.userLists.find(
-    (l: UserList) => l.id === listId,
-  );
+  const list = collectionsState.userLists.find((l: UserList) => l.id === listId);
   if (list) {
     list.title = newTitle;
     list.icon = newIcon;
   }
 
-  updateCollectionUI();
+  notify("collections_updated");
   if (collectionsState.currentCollectionFilter === listId) {
     const filterBtn = document.getElementById("collection-filter-btn");
-    if (filterBtn)
-      filterBtn.innerHTML = `<span>${newIcon} ${newTitle}</span> <span>✕</span>`;
+    if (filterBtn) {
+      filterBtn.innerHTML = `<span>${escapeHtml(newIcon)} ${escapeHtml(newTitle)}</span> <span>✕</span>`;
+    }
   }
   closeModal("edit-list-modal");
   showToast("Список обновлен");
 }
 
-export function updateCollectionUI() {
-  // 1. Обновляем список в модальном окне управления
-  const container = document.getElementById("collections-list");
-  if (container) {
-    // FIX: Используем getSession для мгновенного доступа к ID пользователя (без запроса к серверу)
-    client.auth.getSession().then(({ data: { session } }) => {
-      const myId = session?.user?.id;
-      const lists = collectionsState.userLists || [];
+class CollectionsComponent extends BaseComponent {
+  constructor() {
+    super("collections-modal");
+  }
 
-      // Filter lists
-      const myLists = lists.filter((l: UserList) => l.user_id === myId);
-      const publicLists = lists.filter((l: UserList) => l.user_id !== myId);
+  protected setupStateSubscriptions(): void {
+    this.listen("collections_updated", () => this.render());
+    // Также обновляем при изменении глобального состояния (например, переключение фильтра),
+    // чтобы подсветить активный список
+    this.listen("state_changed", () => this.render());
+  }
 
-      // Count custom words
-      const myCustomWordsCount = state.dataStore.filter(
-        (w: Word) => w.created_by === myId,
-      ).length;
+  public render() {
+    this.renderCollectionsList();
+    this.updateAddWordSelect();
+    this.updateFilterButton();
+  }
 
-      let html = "";
+  private renderCollectionsList() {
+    // 1. Обновляем список в модальном окне управления
+    const container = document.getElementById("collections-list");
+    if (container) {
+      // NOTE: Используем getSession внутри, либо state.currentUser
+      // FIX: Используем getSession для мгновенного доступа к ID пользователя (без запроса к серверу)
+      // OPTIMIZATION: Use state.currentUser directly to avoid lock
+      const proceed = (user: { id: string } | null | undefined) => {
+        const myId = user?.id;
+        const lists = collectionsState.userLists || [];
 
-      // --- Section: My Content ---
-      html += `<div class="section-title-sm" style="margin-top: 10px; margin-bottom: 12px;">👤 Мои материалы</div>`;
+        // Filter lists
+        const myLists = lists.filter((l: UserList) => l.user_id === myId);
+        const publicLists = lists.filter((l: UserList) => l.user_id !== myId);
 
-      // 1. My Custom Words (Virtual List)
-      if (myCustomWordsCount > 0) {
-        html += `
+        // Count custom words
+        const myCustomWordsCount = state.dataStore.filter(
+          (w: Word) => w.created_by === myId,
+        ).length;
+
+        let html = "";
+
+        // --- Section: My Content ---
+        html += `<div class="section-title-sm" style="margin-top: 10px; margin-bottom: 12px;">👤 Мои материалы</div>`;
+
+        // 1. My Custom Words (Virtual List)
+        if (myCustomWordsCount > 0) {
+          html += `
         <div class="collection-item-card special" role="group">
             <div class="collection-word-count">${myCustomWordsCount} слов</div>
             <div class="collection-info" data-action="set-collection-filter" data-value="my-custom" title="Показать мои слова">
@@ -337,30 +332,30 @@ export function updateCollectionUI() {
             </div>
         </div>
         `;
-      }
+        }
 
-      // 2. My Lists
-      if (myLists.length === 0) {
-        html += `<div style="text-align:center; padding: 40px 20px; color:var(--text-sub); background: var(--surface-2); border-radius: 20px; border: 1px dashed var(--border-color); margin-bottom: 15px;">
+        // 2. My Lists
+        if (myLists.length === 0) {
+          html += `<div style="text-align:center; padding: 40px 20px; color:var(--text-sub); background: var(--surface-2); border-radius: 20px; border: 1px dashed var(--border-color); margin-bottom: 15px;">
             <div style="font-size: 40px; margin-bottom: 10px; opacity: 0.6;">📭</div>
             <div style="font-weight: 700; font-size: 15px; margin-bottom: 4px;">У вас нет личных списков</div>
             <div style="font-size: 13px; opacity: 0.8;">Создайте первый список выше!</div>
           </div>`;
-      } else {
-        html += '<div id="my-lists-container">';
-        html += myLists
-          .map((list: UserList, index: number) => {
-            // Safe escaping for onclick handlers
-            const safeTitle = list.title
-              .replace(/\\/g, "\\\\")
-              .replace(/'/g, "\\'")
-              .replace(/"/g, "&quot;");
-            const safeIcon = (list.icon || "📁")
-              .replace(/\\/g, "\\\\")
-              .replace(/'/g, "\\'")
-              .replace(/"/g, "&quot;");
+        } else {
+          html += '<div id="my-lists-container">';
+          html += myLists
+            .map((list: UserList, index: number) => {
+              // Safe escaping for onclick handlers
+              const safeTitle = list.title
+                .replace(/\\/g, "\\\\")
+                .replace(/'/g, "\\'")
+                .replace(/"/g, "&quot;");
+              const safeIcon = (list.icon || "📁")
+                .replace(/\\/g, "\\\\")
+                .replace(/'/g, "\\'")
+                .replace(/"/g, "&quot;");
 
-            return `
+              return `
                 <div class="collection-item-card" draggable="true" data-list-id="${list.id}" style="animation: fadeInUpList 0.3s ease-out ${index * 0.05}s backwards" role="group">
                     <div class="collection-word-count">${collectionsState.listItems[list.id]?.size || 0} слов</div>
                     <div class="collection-info" data-action="set-collection-filter" data-value="${list.id}" title="Открыть список" role="button" tabindex="0">
@@ -378,18 +373,18 @@ export function updateCollectionUI() {
                     </div>
                 </div>
                 `;
-          })
-          .join("");
-        html += "</div>";
-      }
+            })
+            .join("");
+          html += "</div>";
+        }
 
-      // --- Section: Public Lists ---
-      if (publicLists.length > 0) {
-        html += `<div class="section-title-sm" style="margin-top: 20px;">🌐 Общие списки</div>`;
-        html += publicLists
-          .map((list: UserList, index: number) => {
-            // For public lists, we might not allow editing/deleting, just viewing
-            return `
+        // --- Section: Public Lists ---
+        if (publicLists.length > 0) {
+          html += `<div class="section-title-sm" style="margin-top: 20px;">🌐 Общие списки</div>`;
+          html += publicLists
+            .map((list: UserList, index: number) => {
+              // For public lists, we might not allow editing/deleting, just viewing
+              return `
                 <div class="collection-item-card" style="animation: fadeInUpList 0.3s ease-out ${index * 0.05}s backwards" role="group">
                     <div class="collection-word-count">${collectionsState.listItems[list.id]?.size || 0} слов</div>
                     <div class="collection-info" data-action="set-collection-filter" data-value="${list.id}" role="button" tabindex="0">
@@ -404,60 +399,65 @@ export function updateCollectionUI() {
                     </div>
                 </div>
                 `;
-          })
-          .join("");
-      }
+            })
+            .join("");
+        }
 
-      container.innerHTML = html;
+        container.innerHTML = html;
 
-      // Add keyboard accessibility for collection items
-      if (!container.dataset.keyboardListener) {
-        container.addEventListener("keydown", (e) => {
-          if (e.key === "Enter" || e.key === " ") {
-            const target = e.target as HTMLElement;
-            if (
-              target.matches(
-                '.collection-info[data-action="set-collection-filter"]',
-              )
-            ) {
-              e.preventDefault();
-              target.click(); // Simulate a click to trigger the global listener
+        // Add keyboard accessibility for collection items
+        if (!container.dataset.keyboardListener) {
+          container.addEventListener("keydown", (e) => {
+            if (e.key === "Enter" || e.key === " ") {
+              const target = e.target as HTMLElement;
+              if (target.matches('.collection-info[data-action="set-collection-filter"]')) {
+                e.preventDefault();
+                target.click(); // Simulate a click to trigger the global listener
+              }
             }
-          }
+          });
+          container.dataset.keyboardListener = "true";
+        }
+        this.setupCollectionDragAndDrop(container);
+      };
+
+      if (state.currentUser) {
+        proceed(state.currentUser);
+      } else {
+        client.auth.getSession().then(({ data: { session } }) => {
+          proceed(session?.user);
         });
-        container.dataset.keyboardListener = "true";
       }
-      setupCollectionDragAndDrop(container);
-    });
+    }
   }
 
-  // 2. Обновляем селект в модальном окне добавления слова
-  const select = document.getElementById(
-    "new-word-target-list",
-  ) as HTMLSelectElement;
-  if (select) {
-    client.auth.getSession().then(({ data: { session } }) => {
-      const myLists = collectionsState.userLists.filter(
-        (l: UserList) => l.user_id === session?.user?.id,
-      );
-      select.innerHTML =
-        '<option value="" disabled selected>-- Выберите список --</option>' +
-        '<option value="create-new-list" style="font-weight:bold; color:var(--primary);">➕ Создать новый список...</option>' +
-        myLists
-          .map(
-            (l: UserList) =>
-              `<option value="${l.id}">${escapeHtml(l.title)}</option>`,
-          )
-          .join("");
-    });
+  private updateAddWordSelect() {
+    const select = document.getElementById("new-word-target-list") as HTMLSelectElement;
+    if (select) {
+      const proceed = (user: { id: string } | null | undefined) => {
+        const myLists = collectionsState.userLists.filter((l: UserList) => l.user_id === user?.id);
+        select.innerHTML =
+          '<option value="" disabled selected>-- Выберите список --</option>' +
+          '<option value="create-new-list" style="font-weight:bold; color:var(--primary);">➕ Создать новый список...</option>' +
+          myLists
+            .map((l: UserList) => `<option value="${l.id}">${escapeHtml(l.title)}</option>`)
+            .join("");
+      };
+
+      if (state.currentUser) {
+        proceed(state.currentUser);
+      } else {
+        client.auth.getSession().then(({ data: { session } }) => proceed(session?.user));
+      }
+    }
   }
 
-  // 3. Обновляем кнопку фильтра
-  const filterBtn = document.getElementById("collection-filter-btn");
-  if (filterBtn) {
-    if (collectionsState.currentCollectionFilter) {
-      filterBtn.style.display = "inline-flex";
-      const backBtnStyle = `
+  private updateFilterButton() {
+    const filterBtn = document.getElementById("collection-filter-btn");
+    if (filterBtn) {
+      if (collectionsState.currentCollectionFilter) {
+        filterBtn.style.display = "inline-flex";
+        const backBtnStyle = `
         display: inline-flex; 
         align-items: center; 
         justify-content: center; 
@@ -473,63 +473,111 @@ export function updateCollectionUI() {
         transition: all 0.2s;
         box-shadow: 0 1px 2px rgba(0,0,0,0.1);
       `;
-      const backIcon = `<span class="filter-back-btn" style="${backBtnStyle}" title="Назад">‹</span>`;
+        const backIcon = `<span class="filter-back-btn" style="${backBtnStyle}" title="Назад">‹</span>`;
 
-      if (collectionsState.currentCollectionFilter === "uncategorized") {
-        filterBtn.innerHTML = `${backIcon}<span>📦 Без списка</span>`;
-        filterBtn.onclick = (e) => {
-          e.stopPropagation();
-          setCollectionFilter(null);
-        };
-      } else if (collectionsState.currentCollectionFilter === "my-custom") {
-        filterBtn.innerHTML = `${backIcon}<span>✍️ Мои слова</span>`;
-        filterBtn.onclick = (e) => {
-          e.stopPropagation();
-          setCollectionFilter(null);
-        };
-      } else {
-        const list = collectionsState.userLists.find(
-          (l: UserList) => l.id === collectionsState.currentCollectionFilter,
-        );
-        const isOwner =
-          list && state.currentUser && list.user_id === state.currentUser.id;
-
-        if (isOwner && list) {
-          filterBtn.innerHTML = `
-            <span data-action="clear-collection-filter" class="filter-back-btn" style="${backBtnStyle}" title="Назад">‹</span>
-            <span data-action="edit-list-title-inline" data-value="${list.id}" style="cursor: text; border-bottom: 1px dashed var(--text-tertiary); padding-bottom: 2px; font-weight: 600; display: inline-flex; align-items: center; gap: 6px;" title="Нажмите для переименования">
-                ${escapeHtml(list.icon || "📁")} ${escapeHtml(list.title)}
-            </span>`;
-          filterBtn.onclick = null;
-        } else {
-          filterBtn.innerHTML = `${backIcon}<span>${escapeHtml(list?.icon || "📁")} ${escapeHtml(list?.title || "Список")}</span>`;
+        if (collectionsState.currentCollectionFilter === "uncategorized") {
+          filterBtn.innerHTML = `${backIcon}<span>📦 Без списка</span>`;
           filterBtn.onclick = (e) => {
             e.stopPropagation();
             setCollectionFilter(null);
           };
-        }
-      }
+        } else if (collectionsState.currentCollectionFilter === "my-custom") {
+          filterBtn.innerHTML = `${backIcon}<span>✍️ Мои слова</span>`;
+          filterBtn.onclick = (e) => {
+            e.stopPropagation();
+            setCollectionFilter(null);
+          };
+        } else {
+          const list = collectionsState.userLists.find(
+            (l: UserList) => l.id === collectionsState.currentCollectionFilter,
+          );
+          const isOwner = list && state.currentUser && list.user_id === state.currentUser.id;
 
-      // Add hover/active effect logic for back button
-      const backBtns = filterBtn.querySelectorAll(".filter-back-btn");
-      backBtns.forEach((btn) => {
-        const el = btn as HTMLElement;
-        el.onmousedown = () => (el.style.transform = "scale(0.9)");
-        el.onmouseup = () => (el.style.transform = "scale(1)");
-        el.onmouseleave = () => (el.style.transform = "scale(1)");
-        el.onmouseenter = () => (el.style.background = "var(--surface-3)");
-        el.onmouseout = () => (el.style.background = "var(--surface-2)");
-      });
-    } else {
-      filterBtn.style.display = "none";
+          if (isOwner && list) {
+            filterBtn.innerHTML = `
+            <span data-action="clear-collection-filter" class="filter-back-btn" style="${backBtnStyle}" title="Назад">‹</span>
+            <span data-action="edit-list-title-inline" data-value="${list.id}" style="cursor: text; border-bottom: 1px dashed var(--text-tertiary); padding-bottom: 2px; font-weight: 600; display: inline-flex; align-items: center; gap: 6px;" title="Нажмите для переименования">
+                ${escapeHtml(list.icon || "📁")} ${escapeHtml(list.title)}
+            </span>`;
+            filterBtn.onclick = null;
+          } else {
+            filterBtn.innerHTML = `${backIcon}<span>${escapeHtml(list?.icon || "📁")} ${escapeHtml(list?.title || "Список")}</span>`;
+            filterBtn.onclick = (e) => {
+              e.stopPropagation();
+              setCollectionFilter(null);
+            };
+          }
+        }
+
+        // Add hover/active effect logic for back button
+        const backBtns = filterBtn.querySelectorAll(".filter-back-btn");
+        backBtns.forEach((btn) => {
+          const el = btn as HTMLElement;
+          el.onmousedown = () => (el.style.transform = "scale(0.9)");
+          el.onmouseup = () => (el.style.transform = "scale(1)");
+          el.onmouseleave = () => (el.style.transform = "scale(1)");
+          el.onmouseenter = () => (el.style.background = "var(--surface-3)");
+          el.onmouseout = () => (el.style.background = "var(--surface-2)");
+        });
+      } else {
+        filterBtn.style.display = "none";
+      }
     }
   }
+
+  private setupCollectionDragAndDrop(container: HTMLElement) {
+    const items = container.querySelectorAll('.collection-item-card[draggable="true"]');
+    items.forEach((item) => {
+      item.addEventListener("dragstart", handleDragStart);
+      item.addEventListener("dragover", handleDragOver);
+      item.addEventListener("drop", (e) => this.handleDrop(e));
+      item.addEventListener("dragenter", handleDragEnter);
+      item.addEventListener("dragleave", handleDragLeave);
+      item.addEventListener("dragend", handleDragEnd);
+    });
+  }
+
+  private handleDrop(e: Event) {
+    e.stopPropagation();
+    const target = (e.target as HTMLElement).closest(".collection-item-card") as HTMLElement;
+
+    if (draggedItem && target && target !== draggedItem) {
+      const listId1 = draggedItem.dataset.listId;
+      const listId2 = target.dataset.listId;
+
+      if (listId1 && listId2) {
+        const idx1 = collectionsState.userLists.findIndex((l) => l.id === listId1);
+        const idx2 = collectionsState.userLists.findIndex((l) => l.id === listId2);
+
+        if (idx1 > -1 && idx2 > -1) {
+          const [moved] = collectionsState.userLists.splice(idx1, 1);
+          collectionsState.userLists.splice(idx2, 0, moved);
+
+          // Сохраняем порядок
+          const ids = collectionsState.userLists.map((l) => l.id);
+          localStorage.setItem("user_lists_order", JSON.stringify(ids));
+
+          notify("collections_updated");
+        }
+      }
+    }
+    return false;
+  }
+}
+
+const collectionsView = new CollectionsComponent();
+collectionsView.init();
+
+// Backward compatibility wrapper
+export function updateCollectionUI() {
+  // No-op, handled by reactions, but we can force render if needed manually
+  collectionsView.render();
 }
 
 export function setCollectionFilter(listId: string | null, e?: Event) {
   const execute = () => {
     setStateFilter(listId);
-    updateCollectionUI();
+    notify("collections_updated");
     render();
     closeModal("collections-modal");
 
@@ -544,9 +592,7 @@ export function setCollectionFilter(listId: string | null, e?: Event) {
   };
 
   if (e) {
-    const card = (e.currentTarget as HTMLElement).closest(
-      ".collection-item-card",
-    );
+    const card = (e.currentTarget as HTMLElement).closest(".collection-item-card");
     if (card) {
       card.classList.add("active-selection");
       // Небольшая задержка для отображения анимации перед закрытием
@@ -604,7 +650,7 @@ export function editListTitleInline(listId: string, el: HTMLElement, e: Event) {
     const newTitle = input.value.trim();
     if (newTitle && newTitle !== currentTitle) {
       list.title = newTitle;
-      updateCollectionUI();
+      notify("collections_updated");
 
       const { error } = await client
         .from(DB_TABLES.USER_LISTS)
@@ -614,12 +660,12 @@ export function editListTitleInline(listId: string, el: HTMLElement, e: Event) {
       if (error) {
         showToast("Ошибка: " + error.message);
         list.title = currentTitle;
-        updateCollectionUI();
+        notify("collections_updated");
       } else {
         showToast("Список переименован");
       }
     } else {
-      updateCollectionUI();
+      notify("collections_updated");
     }
   };
 
@@ -634,20 +680,6 @@ export function editListTitleInline(listId: string, el: HTMLElement, e: Event) {
 
 // --- Drag and Drop Logic ---
 let draggedItem: HTMLElement | null = null;
-
-function setupCollectionDragAndDrop(container: HTMLElement) {
-  const items = container.querySelectorAll(
-    '.collection-item-card[draggable="true"]',
-  );
-  items.forEach((item) => {
-    item.addEventListener("dragstart", handleDragStart);
-    item.addEventListener("dragover", handleDragOver);
-    item.addEventListener("drop", handleDrop);
-    item.addEventListener("dragenter", handleDragEnter);
-    item.addEventListener("dragleave", handleDragLeave);
-    item.addEventListener("dragend", handleDragEnd);
-  });
-}
 
 function handleDragStart(e: Event) {
   const target = e.target as HTMLElement;
@@ -677,39 +709,6 @@ function handleDragLeave(e: Event) {
   }
 }
 
-function handleDrop(e: Event) {
-  e.stopPropagation();
-  const target = (e.target as HTMLElement).closest(
-    ".collection-item-card",
-  ) as HTMLElement;
-
-  if (draggedItem && target && target !== draggedItem) {
-    const listId1 = draggedItem.dataset.listId;
-    const listId2 = target.dataset.listId;
-
-    if (listId1 && listId2) {
-      const idx1 = collectionsState.userLists.findIndex(
-        (l) => l.id === listId1,
-      );
-      const idx2 = collectionsState.userLists.findIndex(
-        (l) => l.id === listId2,
-      );
-
-      if (idx1 > -1 && idx2 > -1) {
-        const [moved] = collectionsState.userLists.splice(idx1, 1);
-        collectionsState.userLists.splice(idx2, 0, moved);
-
-        // Сохраняем порядок
-        const ids = collectionsState.userLists.map((l) => l.id);
-        localStorage.setItem("user_lists_order", JSON.stringify(ids));
-
-        updateCollectionUI();
-      }
-    }
-  }
-  return false;
-}
-
 function handleDragEnd(e: Event) {
   const target = e.target as HTMLElement;
   target.classList.remove("dragging");
@@ -734,10 +733,7 @@ export function removeWordFromCurrentList(wordId: string | number) {
     },
     async () => {
       // Commit action
-      await client
-        .from(DB_TABLES.LIST_ITEMS)
-        .delete()
-        .match({ list_id: listId, word_id: wordId });
+      await client.from(DB_TABLES.LIST_ITEMS).delete().match({ list_id: listId, word_id: wordId });
     },
   );
   document.dispatchEvent(new CustomEvent("state-changed"));
@@ -748,17 +744,17 @@ export async function openAddToListModal(wordId: number) {
   const content = document.getElementById("add-to-list-content");
   if (!modal || !content) return;
 
-  const {
-    data: { user },
-  } = await client.auth.getUser();
+  let user = state.currentUser;
+  if (!user) {
+    const { data } = await client.auth.getUser();
+    user = data.user as unknown as import("../types/index.ts").User;
+  }
   if (!user) {
     showToast("Войдите в аккаунт");
     return;
   }
 
-  const myLists = collectionsState.userLists.filter(
-    (l) => l.user_id === user.id,
-  );
+  const myLists = collectionsState.userLists.filter((l) => l.user_id === user.id);
 
   content.scrollTop = 0;
   content.innerHTML = myLists
@@ -776,27 +772,17 @@ export async function openAddToListModal(wordId: number) {
   openModal("add-to-list-modal");
 }
 
-export async function toggleWordInList(
-  listId: string,
-  wId: number,
-  el: HTMLElement,
-) {
+export async function toggleWordInList(listId: string, wId: number, el: HTMLElement) {
   const checkbox = el.querySelector("input") as HTMLInputElement;
   const isAdding = !checkbox.checked;
   checkbox.checked = isAdding;
 
   if (isAdding) {
-    await client
-      .from(DB_TABLES.LIST_ITEMS)
-      .insert({ list_id: listId, word_id: wId });
-    if (!collectionsState.listItems[listId])
-      collectionsState.listItems[listId] = new Set();
+    await client.from(DB_TABLES.LIST_ITEMS).insert({ list_id: listId, word_id: wId });
+    if (!collectionsState.listItems[listId]) collectionsState.listItems[listId] = new Set();
     collectionsState.listItems[listId].add(wId);
   } else {
-    await client
-      .from(DB_TABLES.LIST_ITEMS)
-      .delete()
-      .match({ list_id: listId, word_id: wId });
+    await client.from(DB_TABLES.LIST_ITEMS).delete().match({ list_id: listId, word_id: wId });
     collectionsState.listItems[listId]?.delete(wId);
   }
 }

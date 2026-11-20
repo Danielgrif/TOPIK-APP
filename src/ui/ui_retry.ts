@@ -15,8 +15,7 @@ export function addFailedRequest(
   },
 ) {
   // Avoid duplicates
-  if (state.wordRequests.some((r) => r.word === word && r.status === "error"))
-    return;
+  if (state.wordRequests.some((r) => r.word === word && r.status === "error")) return;
 
   // Deduplication: Check if word is already in the dictionary
   if (state.dataStore.some((w) => w.word_kr === word)) {
@@ -79,9 +78,7 @@ export function renderRequestErrors() {
 
     const retryBtn = div.querySelector(".retry-btn") as HTMLButtonElement;
     retryBtn.onclick = () => {
-      const input = document.getElementById(
-        "new-word-input",
-      ) as HTMLTextAreaElement;
+      const input = document.getElementById("new-word-input") as HTMLTextAreaElement;
       const btn = document.querySelector(
         '[data-action="submit-word-request"]',
       ) as HTMLButtonElement;
@@ -95,9 +92,7 @@ export function renderRequestErrors() {
       }
     };
 
-    const cancelBtn = div.querySelector(
-      ".btn-icon-tiny-cancel",
-    ) as HTMLButtonElement;
+    const cancelBtn = div.querySelector(".btn-icon-tiny-cancel") as HTMLButtonElement;
     cancelBtn.onclick = () => {
       state.wordRequests = state.wordRequests.filter((r) => r.id !== req.id);
       renderRequestErrors();
@@ -111,14 +106,15 @@ export async function syncOfflineRequests() {
   if (!navigator.onLine) return;
 
   // Фильтруем заявки, у которых есть необходимые данные для авто-отправки
-  const offlineRequests = state.wordRequests.filter(
-    (r) => r.status === "error" && r.targetListId,
-  );
+  const offlineRequests = state.wordRequests.filter((r) => r.status === "error" && r.targetListId);
 
   if (offlineRequests.length === 0) return;
 
-  const { data } = await client.auth.getSession();
-  const user = data?.session?.user;
+  let user = state.currentUser;
+  if (!user) {
+    const { data } = await client.auth.getSession();
+    user = data?.session?.user as unknown as import("../types/index.ts").User;
+  }
   if (!user) return;
 
   showToast(`🔄 Синхронизация ${offlineRequests.length} офлайн-заявок...`);
@@ -134,9 +130,7 @@ export async function syncOfflineRequests() {
   }));
 
   try {
-    const { error } = await client
-      .from(DB_TABLES.WORD_REQUESTS)
-      .insert(payload);
+    const { error } = await client.from(DB_TABLES.WORD_REQUESTS).insert(payload);
 
     if (error) throw error;
 

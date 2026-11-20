@@ -1,71 +1,123 @@
-import { createClient } from "@supabase/supabase-js";
-import { GoogleGenerativeAI } from "@google/generative-ai";
-import type { SupabaseClient } from "@supabase/supabase-js";
+// supabase/functions/_shared/clients.ts
+// Shared Supabase client factories for Edge Functions
+import {
+  createClient,
+  type SupabaseClient,
+  type SupabaseClientOptions,
+} from "npm:@supabase/supabase-js@2";
+import { GoogleGenerativeAI } from "npm:@google/generative-ai@0.22.0";
 
-let supabaseAdminClient: SupabaseClient;
+declare const Deno: unknown & {
+  env: {
+    get(key: string): string | undefined;
+  };
+};
+
 let geminiClient: GoogleGenerativeAI;
 
 /**
- * Returns a memoized Supabase admin client.
- * This client is intended for server-side use and requires the service_role key.
+ * Read environment var with fallback aliases.
+ * - prefer primary name
+ * - then try common aliases
+ * - finally, use default value if provided
  */
-export function getSupabaseAdmin(): SupabaseClient {
-  if (!supabaseAdminClient) {
-    // --- 1. Get Supabase URL ---
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")?.replace(/["']/g, "") ??
-      Deno.env.get("VITE_SUPABASE_URL")?.replace(/["']/g, "");
-    if (!supabaseUrl) {
-      throw new Error("Supabase URL is missing. Please set SUPABASE_URL or VITE_SUPABASE_URL in your .env file.");
-    }
-
-    // --- 2. Get Publishable Key (formerly Anon Key) ---
-    // This key is safe to expose in the browser and is sent as the `apikey` header.
-    // It identifies your project and enforces Row Level Security (RLS).
-    const anonKey = Deno.env.get("SUPABASE_ANON_KEY")?.replace(/["']/g, "") ??
-      Deno.env.get("VITE_SUPABASE_KEY")?.replace(/["']/g, "");
-    if (!anonKey) {
-      throw new Error(
-        "Supabase public anon key is missing. Please set VITE_SUPABASE_KEY or SUPABASE_ANON_KEY in your .env file."
-      );
-    }
-
-    // --- 3. Get Secret Key (formerly Service Role Key) ---
-    // This key has admin privileges and can bypass RLS. It must be kept secret.
-    // It is sent as the `Authorization: Bearer <key>` header for elevated access.
-    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")?.replace(/["']/g, "") ??
-      Deno.env.get("SUPABASE_SERVICE_KEY")?.replace(/["']/g, "") ??
-      Deno.env.get("SUPABASE_KEY")?.replace(/["']/g, "");
-    if (!serviceRoleKey) {
-      throw new Error(
-        "Supabase service role key is missing. Please set SUPABASE_SERVICE_ROLE_KEY (or SUPABASE_SERVICE_KEY) in your .env file. " +
-          "This key is required for admin access in tests."
-      );
-    }
-
-    // --- 4. Create Admin Client (for server-side use) ---
-    // The `createClient` function uses the publishable/anon key for the `apikey` header.
-    // The secret/service_role key is passed in the `Authorization` header to bypass RLS.
-    supabaseAdminClient = createClient(supabaseUrl, anonKey, {
-      auth: { persistSession: false, autoRefreshToken: false },
-      global: {
-        headers: { Authorization: `Bearer ${serviceRoleKey}` },
-      },
-    });
+function getEnv(primary: string, aliases: string[], defaultValue: string): string;
+function getEnv(primary: string, aliases?: string[]): string | undefined;
+function getEnv(
+  primary: string,
+  aliases: string[] = [],
+  defaultValue?: string,
+): string | undefined {
+  for (const k of [primary, ...aliases]) {
+    const v = Deno.env.get(k);
+    if (v) return v;
   }
-  return supabaseAdminClient;
+  return defaultValue;
+}
+
+const SUPABASE_URL = getEnv("SUPABASE_URL", ["VITE_SUPABASE_URL"]);
+const SUPABASE_PUBLISHABLE_KEY = getEnv("SUPABASE_PUBLISHABLE_KEY", [
+  "VITE_SUPABASE_KEY",
+  "SUPABASE_ANON_KEY",
+  "ANON_KEY",
+]);
+
+/**
+ * NOTE:
+ * Add common server secret aliases here — include SUPABASE_SERVICE_ROLE_KEY which
+ * is the canonical name used by Supabase dashboard/CLI for the service role.
+ */
+const SUPABASE_SECRET_KEY = getEnv("SUPABASE_SECRET_KEY", [
+  "SUPABASE_SERVICE_KEY",
+  "SB_SECRET_KEY",
+  "SERVICE_ROLE_KEY",
+  "SUPABASE_SERVICE_ROLE_KEY", // <-- added alias
+]);
+
+/**
+ * Returns a Supabase client for end-user-scoped requests.
+ * - Uses publishable key (safe for client)
+ * - Optionally sets Authorization header to pass the user JWT
+ */
+export function getSupabaseClientForUser(authorizationBearer?: string): SupabaseClient {
+  if (!SUPABASE_URL) throw new Error("Missing SUPABASE_URL in environment");
+  if (!SUPABASE_PUBLISHABLE_KEY)
+    throw new Error(
+      "Missing SUPABASE_PUBLISHABLE_KEY / VITE_SUPABASE_KEY / SUPABASE_ANON_KEY in environment",
+    );
+
+  const opts: SupabaseClientOptions<"public"> = {};
+  if (authorizationBearer) {
+    opts.global = { headers: { Authorization: authorizationBearer } };
+  }
+
+  return createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, opts);
 }
 
 /**
- * Returns a memoized GoogleGenerativeAI client.
- * Throws an error if the API key is not found.
+ * Returns a Supabase admin client using the server-only secret key.
+ * This client bypasses RLS and can perform admin actions.
+ * Only use this in secure server / function environment variables (do NOT expose to client).
  */
+export function getSupabaseAdmin(): SupabaseClient {
+  if (!SUPABASE_URL) throw new Error("Missing SUPABASE_URL in environment");
+
+  // More descriptive error message listing the names we try
+  if (!SUPABASE_SECRET_KEY) {
+    throw new Error(
+      "Missing server secret in environment. Expected one of: SUPABASE_SERVICE_ROLE_KEY, SUPABASE_SECRET_KEY, SUPABASE_SERVICE_KEY, SB_SECRET_KEY, SERVICE_ROLE_KEY",
+    );
+  }
+
+  return createClient(SUPABASE_URL, SUPABASE_SECRET_KEY, {
+    auth: {
+      persistSession: false,
+      autoRefreshToken: false,
+      detectSessionInUrl: false,
+    },
+  });
+}
+
 export function getGeminiClient(): GoogleGenerativeAI {
   if (!geminiClient) {
-    const apiKey = Deno.env.get("GEMINI_API_KEY");
-    if (!apiKey) {
-      throw new Error("GEMINI_API_KEY is missing in Supabase environment variables");
-    }
+    const apiKey = Deno.env.get("GEMINI_API_KEY") || "";
     geminiClient = new GoogleGenerativeAI(apiKey);
   }
   return geminiClient;
+}
+
+// Optional: safe runtime check helper (do not log secrets themselves)
+// Use only during debugging; remove in production.
+export function debugEnvPresence(): void {
+  try {
+    // eslint-disable-next-line no-console
+    console.info(
+      "env presence:",
+      "SUPABASE_SERVICE_ROLE_KEY=" + (!!Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")).toString(),
+      "SUPABASE_SECRET_KEY=" + (!!Deno.env.get("SUPABASE_SECRET_KEY")).toString(),
+      "SUPABASE_SERVICE_KEY=" + (!!Deno.env.get("SUPABASE_SERVICE_KEY")).toString(),
+    );
+  } catch (_e) {
+    // ignore in environments without Deno.env access
+  }
 }

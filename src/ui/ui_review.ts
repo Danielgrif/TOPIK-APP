@@ -3,9 +3,10 @@ import { Scheduler } from "../core/scheduler.ts";
 import { showToast, playTone } from "../utils/utils.ts";
 import { openModal, closeModal } from "./ui_modal.ts";
 import { ensureSessionStarted } from "./ui.ts";
-import { updateSRSBadge, checkAchievements } from "../core/stats.ts";
+import { updateSRSBadge, checkAchievements, invalidateStatsCache } from "../core/stats.ts";
 import { scheduleSaveState } from "../core/db.ts";
 import { Word } from "../types/index.ts";
+import confetti from "canvas-confetti";
 
 export function openReviewMode() {
   try {
@@ -44,8 +45,7 @@ function buildReviewModal(queue: Word[]) {
     if (header) {
       counter = document.createElement("span");
       counter.id = "review-counter";
-      (counter as HTMLElement).style.cssText =
-        "font-size:0.6em; opacity:0.7; margin-left:10px;";
+      (counter as HTMLElement).style.cssText = "font-size:0.6em; opacity:0.7; margin-left:10px;";
       const btn = header.querySelector(".close-modal-btn");
       if (btn) header.insertBefore(counter, btn);
       else header.appendChild(counter);
@@ -87,6 +87,7 @@ function buildReviewModal(queue: Word[]) {
     const handleReview = (grade: number) => {
       ensureSessionStarted();
       const res = Scheduler.submitReview(w.id, grade);
+      invalidateStatsCache();
 
       state.dirtyWordIds.add(w.id);
 
@@ -121,9 +122,7 @@ function buildReviewModal(queue: Word[]) {
     };
     actions.appendChild(mkBtn("Знаю", fmt(previews.easy), "btn btn-quiz", 5));
     actions.appendChild(mkBtn("Сомневаюсь", fmt(previews.hard), "btn", 3));
-    actions.appendChild(
-      mkBtn("Забыл", fmt(previews.fail), "btn action-mistake", 0),
-    );
+    actions.appendChild(mkBtn("Забыл", fmt(previews.fail), "btn action-mistake", 0));
     if (container) {
       container.appendChild(title);
       container.appendChild(info);
@@ -160,16 +159,16 @@ function buildReviewModal(queue: Word[]) {
         (summaryClose as HTMLElement).onclick = () => closeModal(modalId);
       }
     }
-    if (
-      stats.remembered > stats.forgotten &&
-      typeof window.confetti === "function"
-    )
-      window.confetti({
-        particleCount: 100,
-        spread: 70,
+    if (stats.remembered > stats.forgotten) {
+      const isMobile = window.innerWidth < 768;
+      confetti({
+        particleCount: isMobile ? 60 : 100,
+        spread: isMobile ? 50 : 70,
         origin: { y: 0.6 },
+        disableForReducedMotion: true,
         zIndex: 20005,
       });
+    }
   }
 
   renderOne();

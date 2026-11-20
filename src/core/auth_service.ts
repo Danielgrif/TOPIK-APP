@@ -1,11 +1,6 @@
 import { client } from "./supabaseClient.ts";
 import { DB_TABLES, DB_BUCKETS } from "./constants.ts";
-import type {
-  Session,
-  User,
-  Subscription,
-  AuthError,
-} from "@supabase/supabase-js";
+import type { Session, User, Subscription, AuthError } from "@supabase/supabase-js";
 
 export const AuthService = {
   async getSession(): Promise<{
@@ -38,9 +33,7 @@ export const AuthService = {
 
     if (uploadError) throw uploadError;
 
-    const { data } = client.storage
-      .from(DB_BUCKETS.IMAGES)
-      .getPublicUrl(fileName);
+    const { data } = client.storage.from(DB_BUCKETS.IMAGES).getPublicUrl(fileName);
     return await client.auth.updateUser({
       data: { avatar_url: data.publicUrl },
     });
@@ -49,11 +42,9 @@ export const AuthService = {
   async deleteAvatar(userId: string) {
     // Пытаемся найти и удалить старые файлы аватара, чтобы не засорять хранилище
     try {
-      const { data: list } = await client.storage
-        .from(DB_BUCKETS.IMAGES)
-        .list("avatars", {
-          search: userId,
-        });
+      const { data: list } = await client.storage.from(DB_BUCKETS.IMAGES).list("avatars", {
+        search: userId,
+      });
       if (list && list.length > 0) {
         const filesToRemove = list.map((f) => `avatars/${f.name}`);
         await client.storage.from(DB_BUCKETS.IMAGES).remove(filesToRemove);
@@ -84,19 +75,13 @@ export const AuthService = {
     });
   },
 
-  async signUp(
-    email: string,
-    password: string,
-    options?: { data: { [key: string]: unknown } },
-  ) {
+  async signUp(email: string, password: string, options?: { data: { [key: string]: unknown } }) {
     return await client.auth.signUp({ email, password, options });
   },
 
   async initUserStats(userId: string) {
     try {
-      await client
-        .from(DB_TABLES.USER_GLOBAL_STATS)
-        .insert([{ user_id: userId, xp: 0, level: 1 }]);
+      await client.from(DB_TABLES.USER_GLOBAL_STATS).insert([{ user_id: userId, xp: 0, level: 1 }]);
     } catch (e) {
       // Игнорируем, если статистика уже существует
       console.warn("Stats init warning:", e);
@@ -114,9 +99,9 @@ export const AuthService = {
     return await client.auth.signOut();
   },
 
-  onAuthStateChange(
-    callback: (event: string, session: Session | null) => void,
-  ): { data: { subscription: Subscription } } {
+  onAuthStateChange(callback: (event: string, session: Session | null) => void): {
+    data: { subscription: Subscription };
+  } {
     return client.auth.onAuthStateChange(callback);
   },
 };

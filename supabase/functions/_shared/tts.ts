@@ -1,5 +1,15 @@
 import { API_URLS, TTS_VOICES } from "./constants.ts";
 
+/** Экранирование пользовательского текста перед вставкой в SSML/XML. */
+export function escapeSsml(text: string): string {
+  return text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&apos;");
+}
+
 /**
  * Generates high-quality, natural-sounding audio using the Microsoft Edge TTS service.
  * This is the core logic, communicating via WebSocket.
@@ -7,7 +17,7 @@ import { API_URLS, TTS_VOICES } from "./constants.ts";
  * @param voice The voice to use ('female' or 'male').
  * @returns An ArrayBuffer containing the MP3 audio data.
  */
-export async function generateSpeech(text: string, voice: "female" | "male"): Promise<ArrayBuffer> {
+export function generateSpeech(text: string, voice: "female" | "male"): Promise<ArrayBuffer> {
   const voiceName = voice === "male" ? TTS_VOICES.MALE : TTS_VOICES.FEMALE;
   const audioFormat = "audio-24khz-48kbitrate-mono-mp3";
 
@@ -19,6 +29,8 @@ export async function generateSpeech(text: string, voice: "female" | "male"): Pr
     const timeout = setTimeout(() => {
       if (!hasResolved) {
         hasResolved = true;
+        console.log("TTS WebSocket connection timed out.");
+
         ws.close();
         reject(new Error("TTS WebSocket connection timed out after 15 seconds."));
       }
@@ -27,15 +39,13 @@ export async function generateSpeech(text: string, voice: "female" | "male"): Pr
     ws.binaryType = "arraybuffer";
 
     ws.onopen = () => {
-      const configMessage =
-        `X-Timestamp:${Date.now()}\r\nContent-Type:application/json; charset=utf-8\r\nPath:speech.config\r\n\r\n{"context":{"synthesis":{"audio":{"metadataoptions":{"sentenceBoundaryEnabled":false,"wordBoundaryEnabled":false},"outputFormat":"${audioFormat}"}}}}`;
+      const configMessage = `X-Timestamp:${Date.now()}\r\nContent-Type:application/json; charset=utf-8\r\nPath:speech.config\r\n\r\n{"context":{"synthesis":{"audio":{"metadataoptions":{"sentenceBoundaryEnabled":false,"wordBoundaryEnabled":false},"outputFormat":"${audioFormat}"}}}}`;
       ws.send(configMessage);
 
       const requestId = crypto.randomUUID().replaceAll("-", "");
-      const ssml =
-        `<speak version='1.0' xmlns='http://www.w3.org/2001/10/synthesis' xml:lang='ko-KR'><voice name='${voiceName}'><prosody rate='-4.00%'>${text}</prosody></voice></speak>`;
-      const ssmlMessage =
-        `X-Timestamp:${Date.now()}\r\nX-RequestId:${requestId}\r\nContent-Type:application/ssml+xml\r\nPath:ssml\r\n\r\n${ssml}`;
+      const safeText = escapeSsml(text);
+      const ssml = `<speak version='1.0' xmlns='http://www.w3.org/2001/10/synthesis' xml:lang='ko-KR'><voice name='${voiceName}'><prosody rate='-4.00%'>${safeText}</prosody></voice></speak>`;
+      const ssmlMessage = `X-Timestamp:${Date.now()}\r\nX-RequestId:${requestId}\r\nContent-Type:application/ssml+xml\r\nPath:ssml\r\n\r\n${ssml}`;
       ws.send(ssmlMessage);
     };
 
@@ -81,6 +91,7 @@ export async function generateSpeech(text: string, voice: "female" | "male"): Pr
         hasResolved = true;
         clearTimeout(timeout);
         console.error("TTS WebSocket error:", event);
+        console.error("TTS WebSocket error:", event);
         reject(new Error("TTS WebSocket connection failed."));
       }
     };
@@ -88,6 +99,7 @@ export async function generateSpeech(text: string, voice: "female" | "male"): Pr
     ws.onclose = () => {
       if (!hasResolved) {
         hasResolved = true;
+        console.warn("TTS WebSocket closed unexpectedly.");
         clearTimeout(timeout);
         reject(new Error("TTS WebSocket closed unexpectedly."));
       }

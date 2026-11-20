@@ -25,9 +25,7 @@ ctx.onmessage = (e: MessageEvent) => {
 
     const lowerQuery = (query as string).toLowerCase();
     // Фильтрация по заранее подготовленной строке _searchStr
-    const results = ctx.dataStore.filter(
-      (w) => w._searchStr && w._searchStr.includes(lowerQuery),
-    );
+    const results = ctx.dataStore.filter((w) => w._searchStr && w._searchStr.includes(lowerQuery));
     ctx.postMessage({ results, requestId });
   }
 };

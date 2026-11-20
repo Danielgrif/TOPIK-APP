@@ -1,11 +1,20 @@
 import { state } from "./state.ts";
-import { Word } from "../types/index.ts";
+import type { Word } from "../types/index.ts";
 import { escapeHtml, getIconForValue } from "../utils/utils.ts";
 import { collectionsState } from "./collections_data.ts";
+// ui_card и ui_modal уже попали в основной чанк через статические импорты,
+// поэтому импортируем их напрямую. Цикл безопасен: все обращения к этим
+// функциям происходят из обработчиков событий, а не на верхнем уровне.
+import {
+  markLearned,
+  markMistake,
+  openImagePicker,
+  resetProgress,
+  showFullScreenImage,
+} from "../ui/ui_card.ts";
 import { openConfirm } from "../ui/ui_modal.ts";
 
-// Helper to avoid circular dependencies
-const getUiCard = () => import("../ui/ui_card.ts");
+// Ленивая загрузка только тех модулей, которые остаются в отдельных чанках
 const getUiBulk = () => import("../ui/ui_bulk.ts");
 const getUiEditWord = () => import("../ui/ui_edit_word.ts");
 const getUiCustomWords = () => import("../ui/ui_custom_words.ts");
@@ -21,11 +30,7 @@ function setupLongPress(el: HTMLElement, itemId: string | number) {
   const duration = 600;
 
   const start = (e: Event) => {
-    if (
-      state.selectMode ||
-      (e.target as HTMLElement).closest("button, input, textarea")
-    )
-      return;
+    if (state.selectMode || (e.target as HTMLElement).closest("button, input, textarea")) return;
 
     timer = window.setTimeout(() => {
       getUiBulk().then((m) => {
@@ -75,6 +80,11 @@ export function createCardElement(item: Word, index: number): HTMLElement {
   if (item.type === "grammar") el.classList.add("grammar-card");
   if (state.learned.has(item.id)) el.classList.add("learned");
   if (state.mistakes.has(item.id)) el.classList.add("has-mistake");
+
+  // Визуальное выделение пользовательских слов (чтобы не смешивались с системными)
+  const isCustomWord =
+    item.created_by && state.currentUser && item.created_by === state.currentUser.id;
+  if (isCustomWord) el.classList.add("custom-word");
 
   const inner = document.createElement("div");
   inner.className = "card-inner";
@@ -278,19 +288,32 @@ function createCardFront(item: Word, _index: number): HTMLElement {
   const catRu = item.category_ru || "Общее";
   const catKr = item.category_kr || "기타";
 
-  const topicDisplay =
-    topicRu === topicKr ? topicRu : `${topicRu} (${topicKr})`;
+  const topicDisplay = topicRu === topicKr ? topicRu : `${topicRu} (${topicKr})`;
   const catDisplay = catRu === catKr ? catRu : `${catRu} (${catKr})`;
+
+  // Hide default tags to reduce clutter
+  const isDefaultTopic = topicRu === "Общее" && topicKr === "기타";
+  const isDefaultCat = catRu === "Общее" && catKr === "기타";
 
   const topicIcon = getIconForValue(topicRu, "🏷");
   const catIcon = getIconForValue(catRu, "🔹");
 
   const tagsDiv = document.createElement("div");
   tagsDiv.className = "card-tags";
-  tagsDiv.innerHTML = `
-      <span class="tag-pill topic">${topicIcon} ${escapeHtml(topicDisplay)}</span>
-      <span class="tag-pill category">${catIcon} ${escapeHtml(catDisplay)}</span>
-  `;
+  let tagsHtml = "";
+  if (!isDefaultTopic)
+    tagsHtml += `<span class="tag-pill topic">${topicIcon} ${escapeHtml(topicDisplay)}</span>`;
+  if (!isDefaultCat)
+    tagsHtml += `<span class="tag-pill category">${catIcon} ${escapeHtml(catDisplay)}</span>`;
+
+  tagsDiv.innerHTML = tagsHtml;
+
+  const isCustomWord =
+    item.created_by && state.currentUser && item.created_by === state.currentUser.id;
+  if (isCustomWord) {
+    tagsDiv.innerHTML += `<span class="tag-pill" style="background: var(--primary); color: white;">🌟 Моё слово</span>`;
+  }
+
   if (item.isLocal) {
     tagsDiv.innerHTML += `<span class="tag-pill ai">⏳ AI</span>`;
   }
@@ -319,17 +342,11 @@ function createCardBack(item: Word): HTMLElement {
   const showImgBtn = document.createElement("button");
   showImgBtn.className = "btn-text";
   showImgBtn.style.width = "100%";
-  showImgBtn.style.background = item.image
-    ? "var(--surface-3)"
-    : "var(--surface-1)";
-  showImgBtn.style.border = item.image
-    ? "none"
-    : "1px dashed var(--border-color)";
+  showImgBtn.style.background = item.image ? "var(--surface-3)" : "var(--surface-1)";
+  showImgBtn.style.border = item.image ? "none" : "1px dashed var(--border-color)";
   showImgBtn.style.borderRadius = "12px";
   showImgBtn.style.padding = "12px";
-  showImgBtn.innerHTML = item.image
-    ? "📷 Показать изображение"
-    : "🖼️ Добавить изображение";
+  showImgBtn.innerHTML = item.image ? "📷 Показать изображение" : "🖼️ Добавить изображение";
 
   const imgContainer = document.createElement("div");
   imgContainer.className = "back-image-container";
@@ -352,18 +369,13 @@ function createCardBack(item: Word): HTMLElement {
       showImgBtn.style.display = "none";
       imgContainer.style.display = "block";
     } else {
-      getUiCard().then((m) =>
-        m.openImagePicker(item, showImgBtn as HTMLButtonElement),
-      );
+      openImagePicker(item, showImgBtn as HTMLButtonElement);
     }
   };
 
   imgContainer.onclick = (e) => {
     e.stopPropagation();
-    if (
-      (e.target as HTMLElement).closest("button") ||
-      (e.target as HTMLElement).closest("input")
-    )
+    if ((e.target as HTMLElement).closest("button") || (e.target as HTMLElement).closest("input"))
       return;
     if (item.image) {
       imgContainer.style.display = "none";
@@ -382,7 +394,7 @@ function createCardBack(item: Word): HTMLElement {
   zoomBtn.style.zIndex = "20";
   zoomBtn.onclick = (e) => {
     e.stopPropagation();
-    getUiCard().then((m) => m.showFullScreenImage(img.src, item.word_kr));
+    showFullScreenImage(img.src, item.word_kr);
   };
 
   const regenBtn = document.createElement("button");
@@ -393,7 +405,7 @@ function createCardBack(item: Word): HTMLElement {
     e.stopPropagation();
     // Capture the button element before the async call
     const buttonElement = e.currentTarget as HTMLButtonElement;
-    getUiCard().then((m) => m.openImagePicker(item, buttonElement));
+    openImagePicker(item, buttonElement);
   };
 
   imgContainer.appendChild(img);
@@ -420,10 +432,7 @@ function createCardBack(item: Word): HTMLElement {
     const safeKr = escapeHtml(item.example_kr);
     const safeWord = escapeHtml(item.word_kr || "");
     const highlightedKr = safeWord
-      ? safeKr.replace(
-          new RegExp(escapeHtml(safeWord), "gi"),
-          `<span class="highlight">$&</span>`,
-        )
+      ? safeKr.replace(new RegExp(escapeHtml(safeWord), "gi"), `<span class="highlight">$&</span>`)
       : safeKr;
 
     exBox.innerHTML = `
@@ -501,7 +510,7 @@ function createCardBack(item: Word): HTMLElement {
     resetBtn.textContent = "Сброс";
     resetBtn.onclick = (e) => {
       e.stopPropagation();
-      getUiCard().then((m) => m.resetProgress(item.id));
+      resetProgress(item.id);
     };
     actions.appendChild(resetBtn);
   } else {
@@ -510,14 +519,14 @@ function createCardBack(item: Word): HTMLElement {
     mistakeBtn.textContent = "Забыл";
     mistakeBtn.onclick = (e) => {
       e.stopPropagation();
-      getUiCard().then((m) => m.markMistake(item.id));
+      markMistake(item.id);
     };
     const learnedBtn = document.createElement("button");
     learnedBtn.className = "action-btn action-learned";
     learnedBtn.textContent = "Знаю";
     learnedBtn.onclick = (e) => {
       e.stopPropagation();
-      getUiCard().then((m) => m.markLearned(item.id));
+      markLearned(item.id);
     };
     actions.appendChild(mistakeBtn);
     actions.appendChild(learnedBtn);

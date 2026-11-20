@@ -1,6 +1,7 @@
 import { state } from "../core/state.ts";
 import { showToast, getIconForValue, escapeHtml } from "../utils/utils.ts";
 import { Word } from "../types/index.ts";
+import { BaseComponent } from "./BaseComponent.ts";
 
 const VIRTUAL_ITEM_HEIGHT = 36;
 const VIRTUAL_BUFFER = 10;
@@ -22,6 +23,128 @@ function getWordsByType(type: string): Word[] {
     cachedDataStoreRef = state.dataStore;
   }
   return cachedWordsByType[type] || [];
+}
+
+class FiltersComponent extends BaseComponent {
+  constructor() {
+    super("filter-panel");
+    console.info("FiltersComponent created", this.element);
+  }
+
+  public init() {
+    console.info("FiltersComponent.init() called");
+    if (!this.element.id || !document.body.contains(this.element)) {
+      const el = document.getElementById("filter-panel");
+      if (el) this.element = el;
+    }
+    this.rebindElement();
+    super.init();
+  }
+
+  protected setupStateSubscriptions(): void {
+    // Обновляем счетчики, если словарь изменился (синхронизация, добавление слова)
+    this.listen("vocabs_updated", () => this.updateFilterCounts());
+    this.listen("auth_changed", () => this.rebindElement());
+
+    // Обновляем счетчики и UI при изменении состояния (фильтров и т.д.)
+    // Используем кастомное событие, так как фильтры меняются часто
+    document.addEventListener("state-changed", () => {
+      this.updateFilterCounts();
+    });
+
+    const toggle = () => {
+      this.togglePanel();
+    };
+
+    const overlay = document.getElementById("filter-panel-overlay");
+    if (overlay) {
+      this.addEvent(overlay, "click", toggle);
+    }
+  }
+
+  /**
+   * Toggles visibility of the filter panel.
+   */
+  public togglePanel = () => {
+    toggleFilterPanel();
+  };
+
+  private rebindElement() {
+    if (!this.element.id || !document.body.contains(this.element)) {
+      const el = document.getElementById("filter-panel");
+      if (el) this.element = el;
+    }
+  }
+
+  // Основной рендер, обновляющий активные классы кнопок
+  public render(): void {
+    // Placeholder: В текущей архитектуре классы кнопок обновляются императивно
+
+    console.info("FiltersComponent render() called");
+
+    // в функциях handleTopicSelection и т.д.
+  }
+
+  public updateFilterCounts() {
+    // Ищем все кнопки фильтров (и в level-grid, и в status-grid)
+    if (!this.element.id) this.rebindElement();
+    const buttons = document.querySelectorAll<HTMLButtonElement>(".filter-chip");
+    if (buttons.length === 0) return;
+
+    // Используем requestAnimationFrame, чтобы не блокировать UI при открытии панели
+    requestAnimationFrame(() => {
+      const counts: Record<string, number> = {
+        all: 0,
+        "★★★": 0,
+        "★★☆": 0,
+        "★☆☆": 0,
+        favorites: 0,
+        mistakes: 0,
+      };
+
+      const type = state.currentType;
+      // Используем кэшированный список слов для текущего типа
+      const words = getWordsByType(type);
+
+      // Используем классический цикл for для максимальной производительности
+      for (let i = 0; i < words.length; i++) {
+        const word = words[i];
+        counts.all++;
+
+        if (word.level && counts[word.level] !== undefined) {
+          counts[word.level]++;
+        }
+        if (state.favorites.has(word.id)) {
+          counts.favorites++;
+        }
+        if (state.mistakes.has(word.id)) {
+          counts.mistakes++;
+        }
+      }
+
+      buttons.forEach((btn) => {
+        const filterValue = btn.dataset.value;
+        if (filterValue && counts[filterValue] !== undefined) {
+          const count = counts[filterValue];
+
+          let countSpan = btn.querySelector<HTMLElement>(".filter-count");
+          if (!countSpan) {
+            countSpan = document.createElement("span");
+            countSpan.className = "filter-count";
+            btn.appendChild(countSpan);
+          }
+
+          const newText = String(count);
+          if (countSpan.textContent !== newText) {
+            countSpan.textContent = newText;
+            countSpan.classList.remove("pop");
+            void countSpan.offsetWidth; // Force reflow to restart animation
+            countSpan.classList.add("pop");
+          }
+        }
+      });
+    });
+  }
 }
 
 export function setupFilterBehavior() {
@@ -49,8 +172,16 @@ function setupSortButtons() {
   }
 }
 
+// Global Instance (used implicitly via DOM events mostly)
+// But we can init it to setup listeners
+const filtersView = new FiltersComponent();
+export function initFiltersUI() {
+  filtersView.init();
+}
+
 export function toggleFilterPanel() {
   const panel = document.getElementById("filter-panel");
+  console.info("toggling via global function()");
   const overlay = document.getElementById("filter-panel-overlay");
   if (panel) panel.classList.toggle("show");
   if (overlay) overlay.classList.toggle("show");
@@ -105,8 +236,7 @@ function createMultiselectItem(value: string, label: string): HTMLElement {
   itemDiv.style.cursor = "pointer"; // Make it obvious it's clickable
 
   const isChecked =
-    state.currentTopic.includes(value) ||
-    (value === "all" && state.currentTopic.includes("all"));
+    state.currentTopic.includes(value) || (value === "all" && state.currentTopic.includes("all"));
   const icon = getIconForValue(value, "🏷️");
   itemDiv.innerHTML = `<input type="checkbox" ${isChecked ? "checked" : ""}> <span style="margin-right: 6px;">${icon}</span> <span>${escapeHtml(label)}</span>`;
 
@@ -137,15 +267,11 @@ export function populateFilters() {
   if (topicContainer) {
     // Save state before wipe
     let savedScroll = 0;
-    const existingList = topicContainer.querySelector(
-      ".multiselect-scroll-container",
-    );
+    const existingList = topicContainer.querySelector(".multiselect-scroll-container");
     if (existingList) savedScroll = existingList.scrollTop;
 
     let savedSearch = "";
-    const existingSearch = topicContainer.querySelector(
-      "input.search-box",
-    ) as HTMLInputElement;
+    const existingSearch = topicContainer.querySelector("input.search-box") as HTMLInputElement;
     if (existingSearch) savedSearch = existingSearch.value;
 
     topicContainer.innerHTML = "";
@@ -161,9 +287,7 @@ export function populateFilters() {
       const val = (e.target as HTMLInputElement).value.toLowerCase();
       topicContainer.querySelectorAll(".multiselect-item").forEach((el) => {
         const text = el.textContent?.toLowerCase() || "";
-        (el as HTMLElement).style.display = text.includes(val)
-          ? "flex"
-          : "none";
+        (el as HTMLElement).style.display = text.includes(val) ? "flex" : "none";
       });
     };
     topicContainer.appendChild(searchInput);
@@ -219,19 +343,14 @@ export function populateFilters() {
     let searchFilteredItems = allItems;
     if (savedSearch) {
       const val = savedSearch.toLowerCase();
-      searchFilteredItems = allItems.filter((item) =>
-        item.label.toLowerCase().includes(val),
-      );
+      searchFilteredItems = allItems.filter((item) => item.label.toLowerCase().includes(val));
     }
 
     const renderVisibleItems = () => {
       const scrollTop = listContainer.scrollTop;
       const viewportHeight = listContainer.clientHeight;
 
-      const startIndex = Math.max(
-        0,
-        Math.floor(scrollTop / VIRTUAL_ITEM_HEIGHT) - VIRTUAL_BUFFER,
-      );
+      const startIndex = Math.max(0, Math.floor(scrollTop / VIRTUAL_ITEM_HEIGHT) - VIRTUAL_BUFFER);
       const visibleItemsCount = Math.ceil(viewportHeight / VIRTUAL_ITEM_HEIGHT);
       const endIndex = Math.min(
         searchFilteredItems.length,
@@ -253,9 +372,7 @@ export function populateFilters() {
     // Override input handler to update virtual list
     searchInput.oninput = (e) => {
       const val = (e.target as HTMLInputElement).value.toLowerCase();
-      searchFilteredItems = allItems.filter((item) =>
-        item.label.toLowerCase().includes(val),
-      );
+      searchFilteredItems = allItems.filter((item) => item.label.toLowerCase().includes(val));
       sizer.style.height = `${searchFilteredItems.length * VIRTUAL_ITEM_HEIGHT}px`;
       listContainer.scrollTop = 0;
       renderVisibleItems();
@@ -276,10 +393,7 @@ function populateCategoryFilter() {
   if (catBtn) {
     const valEl = catBtn.querySelector(".fs-value");
     let currentLabel = "Все категории";
-    if (
-      !state.currentCategory.includes("all") &&
-      state.currentCategory.length > 0
-    ) {
+    if (!state.currentCategory.includes("all") && state.currentCategory.length > 0) {
       currentLabel = `Выбрано: ${state.currentCategory.length}`;
     }
     if (valEl) valEl.textContent = currentLabel;
@@ -290,15 +404,11 @@ function populateCategoryFilter() {
   if (catContainer) {
     // Save state
     let savedScroll = 0;
-    const existingList = catContainer.querySelector(
-      ".multiselect-scroll-container",
-    );
+    const existingList = catContainer.querySelector(".multiselect-scroll-container");
     if (existingList) savedScroll = existingList.scrollTop;
 
     let savedSearch = "";
-    const existingSearch = catContainer.querySelector(
-      "input.search-box",
-    ) as HTMLInputElement;
+    const existingSearch = catContainer.querySelector("input.search-box") as HTMLInputElement;
     if (existingSearch) savedSearch = existingSearch.value;
 
     catContainer.innerHTML = "";
@@ -381,19 +491,14 @@ function populateCategoryFilter() {
     let searchFilteredItems = allItems;
     if (savedSearch) {
       const val = savedSearch.toLowerCase();
-      searchFilteredItems = allItems.filter((item) =>
-        item.label.toLowerCase().includes(val),
-      );
+      searchFilteredItems = allItems.filter((item) => item.label.toLowerCase().includes(val));
     }
 
     const renderVisibleItems = () => {
       const scrollTop = listContainer.scrollTop;
       const viewportHeight = listContainer.clientHeight;
 
-      const startIndex = Math.max(
-        0,
-        Math.floor(scrollTop / VIRTUAL_ITEM_HEIGHT) - VIRTUAL_BUFFER,
-      );
+      const startIndex = Math.max(0, Math.floor(scrollTop / VIRTUAL_ITEM_HEIGHT) - VIRTUAL_BUFFER);
       const visibleItemsCount = Math.ceil(viewportHeight / VIRTUAL_ITEM_HEIGHT);
       const endIndex = Math.min(
         searchFilteredItems.length,
@@ -414,9 +519,7 @@ function populateCategoryFilter() {
 
     searchInput.oninput = () => {
       const val = searchInput.value.toLowerCase();
-      searchFilteredItems = allItems.filter((item) =>
-        item.label.toLowerCase().includes(val),
-      );
+      searchFilteredItems = allItems.filter((item) => item.label.toLowerCase().includes(val));
       sizer.style.height = `${searchFilteredItems.length * VIRTUAL_ITEM_HEIGHT}px`;
       listContainer.scrollTop = 0;
       renderVisibleItems();
@@ -465,10 +568,7 @@ function createCategoryItem(value: string, label: string): HTMLElement {
 
 export function setTypeFilter(type: string, btn: HTMLElement) {
   state.currentType = type;
-  document
-    .querySelectorAll("#type-filters button")
-    .forEach((b) => b.classList.remove("active"));
-  if (btn) btn.classList.add("active");
+  setActiveButton("#type-filters", btn);
   populateFilters();
   updateFilterCounts();
   document.dispatchEvent(new CustomEvent("state-changed"));
@@ -476,15 +576,13 @@ export function setTypeFilter(type: string, btn: HTMLElement) {
 
 export function setStarFilter(star: string, btn: HTMLElement) {
   state.currentStar = star;
-  // Сбрасываем активный класс у всех кнопок фильтрации (и уровни, и статусы)
-  document
-    .querySelectorAll(".filter-chip")
-    .forEach((b) => b.classList.remove("active"));
+  const container = btn.parentElement || document;
+  container.querySelectorAll(".filter-chip").forEach((b) => b.classList.remove("active"));
   btn.classList.add("active");
   document.dispatchEvent(new CustomEvent("state-changed"));
 }
 
-export function resetFilters() {
+export function resetFilters(): void {
   state.currentType = "word";
   state.currentStar = "all";
   state.currentTopic = ["all"];
@@ -506,62 +604,23 @@ export function resetFilters() {
   showToast("Фильтры сброшены");
 }
 
+// Deprecated: Now handled by FiltersComponent
 export function updateFilterCounts() {
-  // Ищем все кнопки фильтров (и в level-grid, и в status-grid)
-  const buttons = document.querySelectorAll<HTMLButtonElement>(".filter-chip");
-  if (buttons.length === 0) return;
+  if (filtersView) {
+    filtersView.updateFilterCounts();
+  }
+}
 
-  // Используем requestAnimationFrame, чтобы не блокировать UI при открытии панели
-  requestAnimationFrame(() => {
-    const counts: Record<string, number> = {
-      all: 0,
-      "★★★": 0,
-      "★★☆": 0,
-      "★☆☆": 0,
-      favorites: 0,
-      mistakes: 0,
-    };
+function setActiveButton(containerSelector: string, activeButton: HTMLElement) {
+  const container = document.querySelector(containerSelector);
+  if (!container) return;
 
-    const type = state.currentType;
-    // Используем кэшированный список слов для текущего типа
-    const words = getWordsByType(type);
-
-    // Используем классический цикл for для максимальной производительности
-    for (let i = 0; i < words.length; i++) {
-      const word = words[i];
-      counts.all++;
-
-      if (word.level && counts[word.level] !== undefined) {
-        counts[word.level]++;
-      }
-      if (state.favorites.has(word.id)) {
-        counts.favorites++;
-      }
-      if (state.mistakes.has(word.id)) {
-        counts.mistakes++;
-      }
-    }
-
-    buttons.forEach((btn) => {
-      const filterValue = btn.dataset.value;
-      if (filterValue && counts[filterValue] !== undefined) {
-        const count = counts[filterValue];
-
-        let countSpan = btn.querySelector<HTMLElement>(".filter-count");
-        if (!countSpan) {
-          countSpan = document.createElement("span");
-          countSpan.className = "filter-count";
-          btn.appendChild(countSpan);
-        }
-
-        const newText = String(count);
-        if (countSpan.textContent !== newText) {
-          countSpan.textContent = newText;
-          countSpan.classList.remove("pop");
-          void countSpan.offsetWidth; // Force reflow to restart animation
-          countSpan.classList.add("pop");
-        }
-      }
-    });
+  const buttons = container.querySelectorAll<HTMLElement>(".segment-btn");
+  buttons.forEach((btn) => {
+    btn.classList.remove("active");
   });
+
+  if (activeButton) {
+    activeButton.classList.add("active");
+  }
 }

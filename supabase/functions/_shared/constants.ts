@@ -1,6 +1,8 @@
 export const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  // DELETE нужен delete-user, GET — admin-функции, POST — остальные вызовы.
+  "Access-Control-Allow-Methods": "GET, POST, DELETE, OPTIONS",
 };
 
 // Имена таблиц Supabase
@@ -16,12 +18,39 @@ export const DB_TABLES = {
   AI_CACHE: "ai_cache",
   ARTICLES: "articles",
   USER_FAVORITE_QUOTES: "user_favorite_quotes",
+  FEEDBACK_REPORTS: "feedback_reports",
+  PROFILES: "profiles",
 };
 
 // Имена бакетов Supabase Storage
 export const DB_BUCKETS = {
   AUDIO: "audio-files",
   IMAGES: "image-files",
+  FEEDBACK_ATTACHMENTS: "feedback_attachments",
+};
+
+/** Хосты, от которых мы разрешаем скачивать изображения (защита от SSRF). */
+export const ALLOWED_IMAGE_HOSTS = new Set([
+  "cdn.pixabay.com",
+  "pixabay.com",
+  "images.pexels.com",
+  "images.unsplash.com",
+  "plus.unsplash.com",
+]);
+
+/** Лимиты входных данных и время ожидания внешних AI-вызовов. */
+export const LIMITS = {
+  MAX_WORDS_PER_REQUEST: 20,
+  MAX_WORD_LENGTH: 60,
+  MAX_IMAGE_BYTES: 3 * 1024 * 1024,
+  MAX_IMAGE_BASE64_LENGTH: 4 * 1024 * 1024,
+  MAX_QUESTION_LENGTH: 2000,
+  MAX_ANSWER_LENGTH: 8000,
+  MAX_FEEDBACK_TITLE_LENGTH: 200,
+  MAX_FEEDBACK_DESCRIPTION_LENGTH: 4000,
+  MAX_FEEDBACK_ATTACHMENTS: 3,
+  MAX_FEEDBACK_ATTACHMENT_BYTES: 2 * 1024 * 1024,
+  AI_TIMEOUT_MS: 45_000,
 };
 
 // Статусы заявок на слова
@@ -48,7 +77,6 @@ export const FUNCTION_NAMES = {
   GENERATE_WORD_DATA: "generate-word-data",
   REGENERATE_IMAGE: "regenerate-image",
   PROCESS_WORD_REQUEST: "process-word-request",
-  AI_TEACHER: "ai-teacher",
   CHECK_ESSAY: "check-essay",
   // Новые функции
   GENERATE_MEDIA: "generate-media-for-word",
@@ -74,32 +102,39 @@ export const TTS_VOICES = {
 // Базовые URL для внешних API
 export const API_URLS = {
   // Google TTS больше не используется, заменен на Edge TTS
-  EDGE_TTS: "wss://speech.platform.bing.com/consumer/speech/synthesize/readaloud/edge/v1?TrustedClientToken=6A5AA1D4EAFF4E9FB37E23D68491D6F4",
+  EDGE_TTS:
+    "wss://speech.platform.bing.com/consumer/speech/synthesize/readaloud/edge/v1?TrustedClientToken=6A5AA1D4EAFF4E9FB37E23D68491D6F4",
   PIXABAY: "https://pixabay.com/api/",
   UNSPLASH: "https://api.unsplash.com/search/photos",
   PEXELS: "https://api.pexels.com/v1/search",
   GEMINI_IMAGE_GEN_BASE: "https://generativelanguage.googleapis.com/v1beta/models/",
 };
 
-// Действия для функции ai-teacher
-export const AI_TEACHER_ACTIONS = {
-  EXPLAIN_GRAMMAR: "explain-grammar",
-  GENERATE_EXAMPLES: "generate-examples",
-  GENERATE_SYNONYMS: "generate-synonyms",
-};
-
 // Списки для валидации в AI промптах
 export const VALID_TOPICS = [
-  "일상생활 (Повседневная жизнь)", "음식 (Еда)", "여행 (Путешествия)",
-  "교육 (Образование)", "직장 (Работа)", "건강 (Здоровье)",
-  "자연 (Природа)", "인간관계 (Отношения)", "쇼핑 (Покупки)",
-  "문화 (Культура)", "정치/경제 (Политика/Экономика)", "기타 (Другое)",
+  "일상생활 (Повседневная жизнь)",
+  "음식 (Еда)",
+  "여행 (Путешествия)",
+  "교육 (Образование)",
+  "직장 (Работа)",
+  "건강 (Здоровье)",
+  "자연 (Природа)",
+  "인간관계 (Отношения)",
+  "쇼핑 (Покупки)",
+  "문화 (Культура)",
+  "정치/경제 (Политика/Экономика)",
+  "기타 (Другое)",
 ];
 
 export const VALID_CATEGORIES = [
-  "명사 (Существительные)", "동사 (Глаголы)", "형용사 (Прилагательные)",
-  "부사 (Наречия)", "조사 (Частицы)", "관용구 (Идиомы)",
-  "문구 (Фразы)", "문법 (Грамматика)",
+  "명사 (Существительные)",
+  "동사 (Глаголы)",
+  "형용사 (Прилагательные)",
+  "부사 (Наречия)",
+  "조사 (Частицы)",
+  "관용구 (Идиомы)",
+  "문구 (Фразы)",
+  "문법 (Грамматика)",
 ];
 
 // Константы для фоновых задач

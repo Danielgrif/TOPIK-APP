@@ -1,10 +1,11 @@
 /* eslint-disable no-console */
-import { state } from "../core/state.ts";
+import { state, notify } from "../core/state.ts";
 import { showToast, speak } from "../utils/utils.ts";
 import { scheduleSaveState } from "../core/db.ts";
 import { openConfirm } from "./ui_modal.ts";
 import { LS_KEYS } from "../core/constants.ts";
 import { RARE_THEMES, SHOP_ITEMS } from "../core/shop_data.ts";
+import { BaseComponent } from "./BaseComponent.ts";
 
 const THEME_PALETTES: Record<
   string,
@@ -229,81 +230,218 @@ function updateSettingsTimestamp() {
   localStorage.setItem("settings_updated_at", String(state.settingsUpdatedAt));
 }
 
+// --- Component Class ---
+
+class SettingsComponent extends BaseComponent {
+  constructor() {
+    // We attach to profile-modal because it contains all settings
+    super("profile-modal");
+  }
+
+  protected setupStateSubscriptions(): void {
+    // Re-render UI whenever settings change
+    this.listen("settings_updated", () => {
+      this.render();
+    });
+  }
+
+  public render(): void {
+    if (!this.element.id || !document.body.contains(this.element)) {
+      const el = document.getElementById("profile-modal");
+      if (el) this.element = el;
+    }
+    const darkModeCheckbox = document.getElementById("dark-mode-toggle-switch") as HTMLInputElement;
+    const autoThemeCheckbox = document.getElementById(
+      "auto-theme-toggle-switch",
+    ) as HTMLInputElement;
+    const autoThemeTimes = document.getElementById("auto-theme-times");
+    const autoThemeStartInput = document.getElementById("auto-theme-start") as HTMLInputElement;
+    const autoThemeEndInput = document.getElementById("auto-theme-end") as HTMLInputElement;
+
+    const hanjaCheckbox = document.getElementById("hanja-setting-check") as HTMLInputElement;
+    const musicCheckbox = document.getElementById("background-music-check") as HTMLInputElement;
+    const autoUpdateCheckbox = document.getElementById("auto-update-check") as HTMLInputElement;
+    const speedSlider = document.getElementById("speed-slider") as HTMLInputElement;
+    const speedVal = document.getElementById("speed-val");
+    const musicVolumeSlider = document.getElementById(
+      "background-music-volume-slider",
+    ) as HTMLInputElement;
+
+    this.ensureExtraInfoSetting();
+    const extraInfoCheckbox = document.getElementById("show-extra-info-check") as HTMLInputElement;
+
+    // Dark Mode & Auto Theme Logic
+    if (darkModeCheckbox) {
+      darkModeCheckbox.checked = state.darkMode;
+      const row = darkModeCheckbox.closest(".setting-item") as HTMLElement;
+      const label = row?.querySelector(".setting-label");
+
+      if (state.autoTheme) {
+        darkModeCheckbox.disabled = true;
+        if (row) row.style.opacity = "0.5";
+        if (label) label.textContent = "Ночной режим (Авто)";
+      } else {
+        darkModeCheckbox.disabled = false;
+        if (row) row.style.opacity = "1";
+        if (label) label.textContent = "Ночной режим";
+      }
+    }
+
+    if (autoThemeCheckbox) autoThemeCheckbox.checked = state.autoTheme;
+    if (autoThemeTimes) autoThemeTimes.style.display = state.autoTheme ? "flex" : "none";
+    if (autoThemeStartInput) autoThemeStartInput.value = String(state.autoThemeStart);
+    if (autoThemeEndInput) autoThemeEndInput.value = String(state.autoThemeEnd);
+
+    if (hanjaCheckbox) hanjaCheckbox.checked = state.hanjaMode;
+    if (musicCheckbox) musicCheckbox.checked = state.backgroundMusicEnabled;
+    if (autoUpdateCheckbox) autoUpdateCheckbox.checked = state.autoUpdate;
+    if (extraInfoCheckbox) extraInfoCheckbox.checked = state.showQuizExtraInfo;
+
+    if (speedSlider) speedSlider.value = String(state.audioSpeed);
+    if (speedVal) speedVal.textContent = state.audioSpeed + "x";
+
+    if (musicVolumeSlider) {
+      musicVolumeSlider.value = String(state.backgroundMusicVolume);
+    }
+
+    this.updateMusicUI();
+    this.updateVoiceUI();
+    this.updateThemePickerUI();
+    this.updateTrashRetentionUI();
+  }
+
+  private ensureExtraInfoSetting() {
+    if (document.getElementById("show-extra-info-check")) return;
+
+    const hanjaSetting = document.getElementById("hanja-setting-check");
+    if (hanjaSetting) {
+      const row = hanjaSetting.closest(".setting-item");
+      if (row && row.parentNode) {
+        const newRow = document.createElement("label");
+        newRow.className = "setting-item";
+        newRow.innerHTML = `
+                <div class="setting-left">
+                    <div class="setting-icon">ℹ️</div>
+                    <div class="setting-label">Доп. информация в квизе</div>
+                </div>
+                <div class="setting-right">
+                    <label class="switch">
+                        <input type="checkbox" id="show-extra-info-check" data-action="toggle-extra-info">
+                        <span class="slider"></span>
+                    </label>
+                </div>
+            `;
+        row.parentNode.insertBefore(newRow, row.nextSibling);
+      }
+    }
+  }
+
+  private updateVoiceUI() {
+    const container = document.getElementById("voice-selection");
+    if (container) {
+      container.querySelectorAll(".segment-btn").forEach((btn) => {
+        if (btn.getAttribute("data-value") === state.currentVoice) {
+          btn.classList.add("active");
+        } else {
+          btn.classList.remove("active");
+        }
+      });
+    }
+  }
+
+  private updateMusicUI() {
+    const volSlider = document.getElementById("background-music-volume-slider") as HTMLInputElement;
+    if (volSlider) {
+      volSlider.disabled = !state.backgroundMusicEnabled;
+      volSlider.style.opacity = state.backgroundMusicEnabled ? "1" : "0.5";
+      volSlider.style.cursor = state.backgroundMusicEnabled ? "pointer" : "not-allowed";
+    }
+  }
+
+  private updateThemePickerUI() {
+    const container = document.getElementById("theme-picker-container");
+    if (!container) return;
+
+    const allThemes = [
+      { id: "theme_default", name: "Стандарт", value: "purple", price: 0 },
+      ...SHOP_ITEMS.filter((item) => item.type === "theme"),
+      ...RARE_THEMES,
+    ];
+
+    container.innerHTML = ""; // Clear before re-rendering
+
+    allThemes.forEach((theme) => {
+      const isRare = RARE_THEMES.some((rt) => rt.id === theme.id);
+      const isPurchased = state.purchasedItems.includes(theme.id) || (theme.price === 0 && !isRare);
+      const isActive = state.themeColor === theme.value;
+
+      const btn = document.createElement("button");
+      btn.className = "color-option";
+      if (isActive) btn.classList.add("active");
+      btn.dataset.value = theme.value;
+      btn.title = theme.name;
+
+      if (isPurchased) {
+        btn.dataset.action = "set-accent";
+      } else {
+        btn.classList.add("locked");
+        btn.style.opacity = "0.6";
+        btn.style.filter = "grayscale(1)";
+        if (isRare) {
+          btn.innerHTML = `<span style="font-size: 16px;">?</span>`;
+          btn.title = `${theme.name} (редкая награда)`;
+          btn.onclick = (e) => {
+            e.stopPropagation();
+            showToast("🎁 Эту тему можно найти в Таинственной коробке (День 7)!");
+          };
+        } else {
+          const buyBtn = document.createElement("button");
+          buyBtn.className = "buy-theme-btn";
+          buyBtn.innerHTML = "💰";
+          buyBtn.title = "Купить в магазине";
+          buyBtn.onclick = (e) => {
+            e.stopPropagation();
+            import("./ui_shop.ts").then((shop) => {
+              shop.openShopModal();
+              setTimeout(() => shop.switchShopTab("theme"), 100);
+            });
+          };
+          btn.appendChild(buyBtn);
+          btn.title = `${theme.name} (в магазине)`;
+        }
+      }
+      container.appendChild(btn);
+    });
+  }
+
+  private updateTrashRetentionUI() {
+    const container = document.getElementById("trash-retention-options");
+    if (container) {
+      container.querySelectorAll(".segment-btn").forEach((btn) => {
+        btn.classList.toggle(
+          "active",
+          btn.getAttribute("data-value") === String(state.trashRetentionDays),
+        );
+      });
+    }
+  }
+}
+
+// Global instance
+export let settingsView: SettingsComponent | null = null;
+
+export function initSettingsView() {
+  settingsView = new SettingsComponent();
+  settingsView.init();
+}
+
 /**
  * Synchronizes all settings UI elements with the current state.
  * Handles dependencies like disabling Dark Mode toggle when Auto Theme is on.
  */
+// Deprecated: Handled by SettingsComponent
 export function updateSettingsUI() {
-  const darkModeCheckbox = document.getElementById(
-    "dark-mode-toggle-switch",
-  ) as HTMLInputElement;
-  const autoThemeCheckbox = document.getElementById(
-    "auto-theme-toggle-switch",
-  ) as HTMLInputElement;
-  const autoThemeTimes = document.getElementById("auto-theme-times");
-  const autoThemeStartInput = document.getElementById(
-    "auto-theme-start",
-  ) as HTMLInputElement;
-  const autoThemeEndInput = document.getElementById(
-    "auto-theme-end",
-  ) as HTMLInputElement;
-
-  const hanjaCheckbox = document.getElementById(
-    "hanja-setting-check",
-  ) as HTMLInputElement;
-  const musicCheckbox = document.getElementById(
-    "background-music-check",
-  ) as HTMLInputElement;
-  const autoUpdateCheckbox = document.getElementById(
-    "auto-update-check",
-  ) as HTMLInputElement;
-  const speedSlider = document.getElementById(
-    "speed-slider",
-  ) as HTMLInputElement;
-  const speedVal = document.getElementById("speed-val");
-  const musicVolumeSlider = document.getElementById(
-    "background-music-volume-slider",
-  ) as HTMLInputElement;
-
-  // Dark Mode & Auto Theme Logic
-  if (darkModeCheckbox) {
-    darkModeCheckbox.checked = state.darkMode;
-    const row = darkModeCheckbox.closest(".setting-item") as HTMLElement;
-    const label = row?.querySelector(".setting-label");
-
-    if (state.autoTheme) {
-      darkModeCheckbox.disabled = true;
-      if (row) row.style.opacity = "0.5";
-      if (label) label.textContent = "Ночной режим (Авто)";
-    } else {
-      darkModeCheckbox.disabled = false;
-      if (row) row.style.opacity = "1";
-      if (label) label.textContent = "Ночной режим";
-    }
-  }
-
-  if (autoThemeCheckbox) autoThemeCheckbox.checked = state.autoTheme;
-  if (autoThemeTimes)
-    autoThemeTimes.style.display = state.autoTheme ? "flex" : "none";
-  if (autoThemeStartInput)
-    autoThemeStartInput.value = String(state.autoThemeStart);
-  if (autoThemeEndInput) autoThemeEndInput.value = String(state.autoThemeEnd);
-
-  if (hanjaCheckbox) hanjaCheckbox.checked = state.hanjaMode;
-  if (musicCheckbox) musicCheckbox.checked = state.backgroundMusicEnabled;
-  if (autoUpdateCheckbox) autoUpdateCheckbox.checked = state.autoUpdate;
-
-  if (speedSlider) speedSlider.value = String(state.audioSpeed);
-  if (speedVal) speedVal.textContent = state.audioSpeed + "x";
-
-  if (musicVolumeSlider) {
-    musicVolumeSlider.value = String(state.backgroundMusicVolume);
-  }
-
-  updateMusicUI(); // Updates music slider state
-  updateVoiceUI();
-  updateThemePickerUI();
-  updateTrashRetentionUI();
+  if (settingsView) settingsView.render();
 }
 
 /**
@@ -313,7 +451,20 @@ export function updateSettingsUI() {
 export function toggleHanjaMode(el: HTMLInputElement) {
   state.hanjaMode = el.checked;
   localStorage.setItem(LS_KEYS.HANJA_MODE, String(state.hanjaMode));
+  notify("settings_updated", { hanjaMode: state.hanjaMode });
   document.dispatchEvent(new CustomEvent("state-changed"));
+  updateSettingsTimestamp();
+  scheduleSaveState();
+}
+
+/**
+ * Toggles showing extra info (synonyms/antonyms) in quiz.
+ * @param {HTMLInputElement} el - The checkbox element.
+ */
+export function toggleShowQuizExtraInfo(el: HTMLInputElement) {
+  state.showQuizExtraInfo = el.checked;
+  localStorage.setItem(LS_KEYS.SHOW_QUIZ_EXTRA_INFO, String(state.showQuizExtraInfo));
+  notify("settings_updated", { showQuizExtraInfo: state.showQuizExtraInfo });
   updateSettingsTimestamp();
   scheduleSaveState();
 }
@@ -329,6 +480,7 @@ export function setVoice(voice: string) {
   localStorage.setItem(LS_KEYS.VOICE_PREF, state.currentVoice);
   updateVoiceUI();
   showToast(`Голос: ${voice === "female" ? "Женский" : "Мужской"}`);
+  notify("settings_updated", { currentVoice: state.currentVoice });
   updateSettingsTimestamp();
   scheduleSaveState();
 
@@ -347,17 +499,9 @@ export function setVoice(voice: string) {
 /**
  * Updates the voice selection UI (segment control).
  */
+// Deprecated: Handled by SettingsComponent
 export function updateVoiceUI() {
-  const container = document.getElementById("voice-selection");
-  if (container) {
-    container.querySelectorAll(".segment-btn").forEach((btn) => {
-      if (btn.getAttribute("data-value") === state.currentVoice) {
-        btn.classList.add("active");
-      } else {
-        btn.classList.remove("active");
-      }
-    });
-  }
+  if (settingsView) settingsView.render();
 }
 
 /**
@@ -369,6 +513,7 @@ export function setAudioSpeed(val: string | number) {
   localStorage.setItem(LS_KEYS.AUDIO_SPEED, String(state.audioSpeed));
   const el = document.getElementById("speed-val");
   if (el) el.textContent = state.audioSpeed + "x";
+  notify("settings_updated", { audioSpeed: state.audioSpeed });
   updateSettingsTimestamp();
   scheduleSaveState();
 }
@@ -382,6 +527,7 @@ export function setTtsVolume(val: string | number) {
   localStorage.setItem(LS_KEYS.TTS_VOLUME, String(state.ttsVolume));
   const el = document.getElementById("tts-volume-val");
   if (el) el.textContent = `${Math.round(state.ttsVolume * 100)}%`;
+  notify("settings_updated", { ttsVolume: state.ttsVolume });
   updateSettingsTimestamp();
   scheduleSaveState();
 }
@@ -404,7 +550,7 @@ export function toggleAutoTheme(el: HTMLInputElement) {
     showToast(`Авто-тема: ${state.autoTheme ? "ВКЛ" : "ВЫКЛ"}`);
   }
 
-  updateSettingsUI();
+  notify("settings_updated", { autoTheme: state.autoTheme });
   updateSettingsTimestamp();
   scheduleSaveState();
 }
@@ -415,6 +561,7 @@ export function setAutoThemeStart(val: string) {
   hour = Math.max(0, Math.min(23, hour));
   state.autoThemeStart = hour;
   localStorage.setItem(LS_KEYS.AUTO_THEME_START, String(hour));
+  notify("settings_updated", { autoThemeStart: hour });
   checkAutoTheme();
   updateSettingsTimestamp();
   scheduleSaveState();
@@ -426,6 +573,7 @@ export function setAutoThemeEnd(val: string) {
   hour = Math.max(0, Math.min(23, hour));
   state.autoThemeEnd = hour;
   localStorage.setItem(LS_KEYS.AUTO_THEME_END, String(hour));
+  notify("settings_updated", { autoThemeEnd: hour });
   checkAutoTheme();
   updateSettingsTimestamp();
   scheduleSaveState();
@@ -446,11 +594,9 @@ export function checkAutoTheme(): boolean {
     localStorage.setItem(LS_KEYS.DARK_MODE, String(state.darkMode));
     applyTheme();
     showToast(`Авто-тема: ${isNight ? "Ночь 🌙" : "День ☀️"}`);
-    updateSettingsUI();
+    notify("settings_updated", { darkMode: state.darkMode });
     return true;
   }
-  // Ensure UI is in sync (e.g. if modal is open)
-  updateSettingsUI();
   return false;
 }
 
@@ -496,7 +642,7 @@ export function toggleDarkMode(el?: HTMLInputElement) {
   localStorage.setItem(LS_KEYS.DARK_MODE, String(state.darkMode));
   applyTheme();
 
-  updateSettingsUI();
+  notify("settings_updated", { darkMode: state.darkMode });
   updateSettingsTimestamp();
   scheduleSaveState();
 }
@@ -509,6 +655,7 @@ export function toggleAutoUpdate(el: HTMLInputElement) {
   state.autoUpdate = el.checked;
   localStorage.setItem(LS_KEYS.AUTO_UPDATE, String(state.autoUpdate));
   showToast(`Автообновление: ${state.autoUpdate ? "ВКЛ" : "ВЫКЛ"}`);
+  notify("settings_updated", { autoUpdate: state.autoUpdate });
   updateSettingsTimestamp();
   scheduleSaveState();
 }
@@ -553,6 +700,7 @@ export function setAccentColor(colorKey: string) {
   state.themeColor = colorKey;
   localStorage.setItem(LS_KEYS.THEME_COLOR, state.themeColor);
   applyAccentColor();
+  notify("settings_updated", { themeColor: state.themeColor });
   updateSettingsTimestamp();
   scheduleSaveState();
 }
@@ -586,15 +734,10 @@ export function applyAccentColor() {
   target.setProperty("--text-tertiary", palette.textTertiary);
 
   // Update active state in UI if selector exists
-  document
-    .querySelectorAll(".color-option, .stats-color-btn")
-    .forEach((btn) => {
-      if (btn instanceof HTMLElement)
-        btn.classList.toggle(
-          "active",
-          btn.getAttribute("data-value") === state.themeColor,
-        );
-    });
+  document.querySelectorAll(".color-option, .stats-color-btn").forEach((btn) => {
+    if (btn instanceof HTMLElement)
+      btn.classList.toggle("active", btn.getAttribute("data-value") === state.themeColor);
+  });
 }
 
 /**
@@ -628,61 +771,9 @@ export function previewAccentColor(colorKey: string) {
 /**
  * Updates the theme picker UI to lock unpurchased themes.
  */
+// Deprecated: Handled by SettingsComponent
 export function updateThemePickerUI() {
-  const container = document.getElementById("theme-picker-container");
-  if (!container) return;
-
-  const allThemes = [
-    { id: "theme_default", name: "Стандарт", value: "purple", price: 0 },
-    ...SHOP_ITEMS.filter((item) => item.type === "theme"),
-    ...RARE_THEMES,
-  ];
-
-  container.innerHTML = ""; // Clear before re-rendering
-
-  allThemes.forEach((theme) => {
-    const isRare = RARE_THEMES.some((rt) => rt.id === theme.id);
-    const isPurchased =
-      state.purchasedItems.includes(theme.id) || (theme.price === 0 && !isRare);
-    const isActive = state.themeColor === theme.value;
-
-    const btn = document.createElement("button");
-    btn.className = "color-option";
-    if (isActive) btn.classList.add("active");
-    btn.dataset.value = theme.value;
-    btn.title = theme.name;
-
-    if (isPurchased) {
-      btn.dataset.action = "set-accent";
-    } else {
-      btn.classList.add("locked");
-      btn.style.opacity = "0.6";
-      btn.style.filter = "grayscale(1)";
-      if (isRare) {
-        btn.innerHTML = `<span style="font-size: 16px;">?</span>`;
-        btn.title = `${theme.name} (редкая награда)`;
-        btn.onclick = (e) => {
-          e.stopPropagation();
-          showToast("🎁 Эту тему можно найти в Таинственной коробке (День 7)!");
-        };
-      } else {
-        const buyBtn = document.createElement("button");
-        buyBtn.className = "buy-theme-btn";
-        buyBtn.innerHTML = "💰";
-        buyBtn.title = "Купить в магазине";
-        buyBtn.onclick = (e) => {
-          e.stopPropagation();
-          import("./ui_shop.ts").then((shop) => {
-            shop.openShopModal();
-            setTimeout(() => shop.switchShopTab("theme"), 100);
-          });
-        };
-        btn.appendChild(buyBtn);
-        btn.title = `${theme.name} (в магазине)`;
-      }
-    }
-    container.appendChild(btn);
-  });
+  if (settingsView) settingsView.render();
 }
 
 /**
@@ -693,22 +784,19 @@ export function toggleFocusMode() {
   applyFocusMode();
   showToast(`Режим фокусировки: ${state.focusMode ? "ВКЛ" : "ВЫКЛ"}`);
   applyBackgroundMusic();
+  notify("settings_updated", { focusMode: state.focusMode });
   updateSettingsTimestamp();
 
   // Перерисовываем сетку, чтобы применить новую высоту карточек
   if (state.viewMode !== "list") {
     const grid = document.getElementById("vocabulary-grid");
     const oldScroll = grid ? grid.scrollTop : 0;
-    const oldHeight = state.focusMode
-      ? 400
-      : Math.floor(window.innerHeight * 0.75);
+    const oldHeight = state.focusMode ? 400 : Math.floor(window.innerHeight * 0.75);
 
     document.dispatchEvent(new CustomEvent("state-changed"));
 
     if (grid && oldScroll > 0) {
-      const newHeight = state.focusMode
-        ? Math.floor(window.innerHeight * 0.75)
-        : 400;
+      const newHeight = state.focusMode ? Math.floor(window.innerHeight * 0.75) : 400;
       // Корректируем скролл пропорционально изменению высоты
       grid.scrollTop = oldScroll * (newHeight / oldHeight);
     }
@@ -738,16 +826,12 @@ export function applyFocusMode() {
  * @param {HTMLInputElement} [el] - The checkbox element.
  */
 export function toggleBackgroundMusic(el?: HTMLInputElement) {
-  state.backgroundMusicEnabled = el
-    ? el.checked
-    : !state.backgroundMusicEnabled;
-  localStorage.setItem(
-    LS_KEYS.MUSIC_ENABLED,
-    String(state.backgroundMusicEnabled),
-  );
+  state.backgroundMusicEnabled = el ? el.checked : !state.backgroundMusicEnabled;
+  localStorage.setItem(LS_KEYS.MUSIC_ENABLED, String(state.backgroundMusicEnabled));
   updateMusicUI();
   applyBackgroundMusic();
   showToast(`Музыка: ${state.backgroundMusicEnabled ? "ВКЛ" : "ВЫКЛ"}`);
+  notify("settings_updated", { backgroundMusicEnabled: state.backgroundMusicEnabled });
   updateSettingsTimestamp();
   scheduleSaveState();
 }
@@ -755,17 +839,9 @@ export function toggleBackgroundMusic(el?: HTMLInputElement) {
 /**
  * Updates the music UI state (disables volume slider if music is off).
  */
+// Deprecated: Handled by SettingsComponent
 export function updateMusicUI() {
-  const volSlider = document.getElementById(
-    "background-music-volume-slider",
-  ) as HTMLInputElement;
-  if (volSlider) {
-    volSlider.disabled = !state.backgroundMusicEnabled;
-    volSlider.style.opacity = state.backgroundMusicEnabled ? "1" : "0.5";
-    volSlider.style.cursor = state.backgroundMusicEnabled
-      ? "pointer"
-      : "not-allowed";
-  }
+  if (settingsView) settingsView.render();
 }
 
 let activePlayerId = "a";
@@ -779,12 +855,8 @@ let currentFadeOutPlayer: HTMLAudioElement | null = null; // Ссылка на �
  * @param {boolean} [forcePlay=false] - If true, forces play regardless of state.backgroundMusicEnabled.
  */
 export function applyBackgroundMusic(forcePlay: boolean = false) {
-  const playerA = document.getElementById(
-    "music-player-a",
-  ) as HTMLAudioElement | null;
-  const playerB = document.getElementById(
-    "music-player-b",
-  ) as HTMLAudioElement | null;
+  const playerA = document.getElementById("music-player-a") as HTMLAudioElement | null;
+  const playerB = document.getElementById("music-player-b") as HTMLAudioElement | null;
   if (!playerA || !playerB) return;
 
   const activePlayer = activePlayerId === "a" ? playerA : playerB;
@@ -794,12 +866,7 @@ export function applyBackgroundMusic(forcePlay: boolean = false) {
   if (!hasInteracted && state.backgroundMusicEnabled && forcePlay) {
     hasInteracted = true; // Флаг, чтобы это сработало только один раз
     if (activePlayer.volume < state.backgroundMusicVolume) {
-      crossfade(
-        activePlayer,
-        null,
-        state.backgroundMusicVolume,
-        activePlayer.volume,
-      );
+      crossfade(activePlayer, null, state.backgroundMusicVolume, activePlayer.volume);
     }
   }
 
@@ -815,8 +882,7 @@ export function applyBackgroundMusic(forcePlay: boolean = false) {
   }
 
   const targetTrack = state.MUSIC_TRACKS.find((t) => t.id === trackId);
-  if (!targetTrack)
-    return console.warn(`Музыкальный трек для ID "${trackId}" не найден.`);
+  if (!targetTrack) return console.warn(`Музыкальный трек для ID "${trackId}" не найден.`);
   const targetTrackFilename = targetTrack.filename;
 
   // FIX: Используем относительный путь для совместимости с разными окружениями
@@ -830,10 +896,7 @@ export function applyBackgroundMusic(forcePlay: boolean = false) {
 
   // Если трек не меняется, просто убеждаемся, что он играет
   // FIX: Декодируем src, так как браузер кодирует пробелы (%20), а в имени файла их нет
-  if (
-    decodeURIComponent(activePlayer.src).includes(targetTrackFilename) &&
-    !activePlayer.paused
-  ) {
+  if (decodeURIComponent(activePlayer.src).includes(targetTrackFilename) && !activePlayer.paused) {
     activePlayer.volume = state.backgroundMusicVolume; // Обновляем громкость на всякий случай
     return;
   }
@@ -856,21 +919,15 @@ export function applyBackgroundMusic(forcePlay: boolean = false) {
 
           // Fallback: Пробуем найти любой другой рабочий трек, если текущий не грузится
           const fallbackTrack =
-            state.MUSIC_TRACKS.find(
-              (t) => t.id !== trackId && t.id === "default",
-            ) || state.MUSIC_TRACKS[0];
+            state.MUSIC_TRACKS.find((t) => t.id !== trackId && t.id === "default") ||
+            state.MUSIC_TRACKS[0];
           if (fallbackTrack && fallbackTrack.id !== trackId) {
             console.log("Attempting fallback track:", fallbackTrack.name);
             inactivePlayer.src = `./audio/${encodeURIComponent(fallbackTrack.filename)}`;
             inactivePlayer
               .play()
               .then(() => {
-                crossfade(
-                  inactivePlayer,
-                  activePlayer,
-                  state.backgroundMusicVolume,
-                  0,
-                );
+                crossfade(inactivePlayer, activePlayer, state.backgroundMusicVolume, 0);
                 activePlayerId = activePlayerId === "a" ? "b" : "a";
               })
               .catch((err) => console.warn("Fallback failed:", err));
@@ -911,9 +968,7 @@ export function duckBackgroundMusic(duck: boolean) {
     activePlayerId === "a" ? "music-player-a" : "music-player-b",
   ) as HTMLAudioElement;
   if (player) {
-    const target = duck
-      ? state.backgroundMusicVolume * 0.2
-      : state.backgroundMusicVolume;
+    const target = duck ? state.backgroundMusicVolume * 0.2 : state.backgroundMusicVolume;
     player.volume = target;
   }
 }
@@ -942,8 +997,7 @@ export function crossfade(
 
   let stepCount = 0;
   const totalSteps = 20;
-  const initialFadeInVol =
-    startVolume !== undefined ? startVolume : fadeInPlayer.volume;
+  const initialFadeInVol = startVolume !== undefined ? startVolume : fadeInPlayer.volume;
   const initialFadeOutVol = fadeOutPlayer ? fadeOutPlayer.volume : 0;
   currentFadeOutPlayer = fadeOutPlayer;
 
@@ -952,12 +1006,10 @@ export function crossfade(
     const progress = stepCount / totalSteps;
 
     // Рассчитываем текущую громкость на основе прогресса (линейная интерполяция)
-    fadeInPlayer.volume =
-      initialFadeInVol + (finalVolume - initialFadeInVol) * progress;
+    fadeInPlayer.volume = initialFadeInVol + (finalVolume - initialFadeInVol) * progress;
     if (fadeOutPlayer) {
       // Цель для fadeOut всегда 0
-      fadeOutPlayer.volume =
-        initialFadeOutVol + (0 - initialFadeOutVol) * progress;
+      fadeOutPlayer.volume = initialFadeOutVol + (0 - initialFadeOutVol) * progress;
     }
 
     if (stepCount >= totalSteps) {
@@ -978,13 +1030,11 @@ export function crossfade(
  */
 export function setBackgroundMusicVolume(val: string | number) {
   state.backgroundMusicVolume = typeof val === "string" ? parseFloat(val) : val;
-  localStorage.setItem(
-    LS_KEYS.MUSIC_VOLUME,
-    String(state.backgroundMusicVolume),
-  );
+  localStorage.setItem(LS_KEYS.MUSIC_VOLUME, String(state.backgroundMusicVolume));
   const el = document.getElementById("background-music-volume-val");
   if (el) el.textContent = `${Math.round(state.backgroundMusicVolume * 100)}%`;
   // FIX: Передаем true, чтобы музыка включилась, если была выключена, но громкость меняют
+  notify("settings_updated", { backgroundMusicVolume: state.backgroundMusicVolume });
   applyBackgroundMusic(true);
   updateSettingsTimestamp();
   scheduleSaveState();
@@ -1009,6 +1059,7 @@ export function resetAllSettings() {
       LS_KEYS.QUIZ_DIFFICULTY,
       LS_KEYS.QUIZ_TOPIC,
       LS_KEYS.QUIZ_CATEGORY,
+      LS_KEYS.SHOW_QUIZ_EXTRA_INFO,
     ];
 
     settingsKeys.forEach((key) => localStorage.removeItem(key));
@@ -1027,8 +1078,10 @@ export function resetAllSettings() {
       focusMode: false,
       viewMode: "grid",
       settingsUpdatedAt: Date.now(),
+      showQuizExtraInfo: true,
     });
 
+    notify("settings_updated"); // Notify all
     scheduleSaveState(50);
 
     showToast("⚙️ Настройки сброшены. Перезагрузка...");
@@ -1043,24 +1096,16 @@ export function setTrashRetention(days: string | number) {
   state.trashRetentionDays = retentionDays;
 
   updateTrashRetentionUI();
+  notify("settings_updated", { trashRetentionDays: state.trashRetentionDays });
 
-  showToast(
-    `Срок хранения в корзине: ${retentionDays === 365 ? "1 год" : `${retentionDays} дн.`}`,
-  );
+  showToast(`Срок хранения в корзине: ${retentionDays === 365 ? "1 год" : `${retentionDays} дн.`}`);
   updateSettingsTimestamp();
   scheduleSaveState();
 }
 
+// Deprecated: Handled by SettingsComponent
 export function updateTrashRetentionUI() {
-  const container = document.getElementById("trash-retention-options");
-  if (container) {
-    container.querySelectorAll(".segment-btn").forEach((btn) => {
-      btn.classList.toggle(
-        "active",
-        btn.getAttribute("data-value") === String(state.trashRetentionDays),
-      );
-    });
-  }
+  if (settingsView) settingsView.render();
 }
 
 export function resetOnboarding() {

@@ -2,75 +2,90 @@ import { state } from "../core/state.ts";
 import { openModal, closeModal } from "./ui_modal.ts";
 import { escapeHtml } from "../utils/utils.ts";
 import { setStarFilter } from "./ui_filters.ts";
+import { BaseComponent } from "./BaseComponent.ts";
 
-export function openMistakesModal() {
-  const modalId = "mistakes-modal";
-  let modal = document.getElementById(modalId);
+class MistakesComponent extends BaseComponent {
+  constructor() {
+    super("mistakes-modal");
+  }
 
-  if (!modal) {
-    // Create modal if it doesn't exist
+  public show() {
+    if (!this.element.id || !document.body.contains(this.element)) {
+      const el = document.getElementById("mistakes-modal");
+      if (el) this.element = el;
+    }
+    this.ensureStructure();
+    openModal("mistakes-modal");
+    this.render();
+  }
+
+  private ensureStructure() {
+    if (!this.element.id || !document.body.contains(this.element)) {
+      const el = document.getElementById("mistakes-modal");
+      if (el) this.element = el;
+    }
+    let modal = document.getElementById("mistakes-modal");
+    if (modal) {
+      this.element = modal;
+      return;
+    }
+
     modal = document.createElement("div");
-    modal.id = modalId;
+    modal.id = "mistakes-modal";
     modal.className = "modal";
-    modal.setAttribute("role", "dialog");
-    modal.setAttribute("aria-modal", "true");
-    modal.setAttribute("data-close-modal", modalId);
-
+    modal.setAttribute("data-close-modal", "mistakes-modal");
     modal.innerHTML = `
       <div class="modal-content">
         <div class="modal-header">
           <h3>⚠️ Анализ ошибок</h3>
           <div class="header-actions">
-            <button class="btn btn-icon close-modal-btn" data-close-modal="${modalId}" aria-label="Закрыть">✕</button>
+            <button class="btn btn-icon close-modal-btn" data-close-modal="mistakes-modal" aria-label="Закрыть">✕</button>
           </div>
         </div>
-        <div id="mistakes-content"></div>
+        <div id="mistakes-content" class="modal-body-container"></div>
       </div>
     `;
     document.body.appendChild(modal);
+    this.element = modal;
   }
 
-  renderMistakesContent();
-  openModal(modalId);
-}
+  public render(): void {
+    const container = document.getElementById("mistakes-content");
+    if (!container) return;
+    container.scrollTop = 0;
 
-function renderMistakesContent() {
-  const container = document.getElementById("mistakes-content");
-  if (!container) return;
-  container.scrollTop = 0;
+    // Optimization: O(N) scan instead of O(N*M)
+    const words = state.dataStore.filter((w) => state.mistakes.has(w.id));
 
-  // Optimization: O(N) scan instead of O(N*M)
-  const words = state.dataStore.filter((w) => state.mistakes.has(w.id));
-
-  if (words.length === 0) {
-    container.innerHTML = `
+    if (words.length === 0) {
+      container.innerHTML = `
       <div style="text-align: center; padding: 40px; color: var(--text-sub);">
         <div style="font-size: 48px; margin-bottom: 15px;">🎉</div>
         <div style="font-size: 18px; font-weight: bold;">Ошибок нет!</div>
         <div style="font-size: 14px; margin-top: 5px;">Вы отлично справляетесь.</div>
       </div>
     `;
-    return;
-  }
+      return;
+    }
 
-  const totalMistakes = words.length;
+    const totalMistakes = words.length;
 
-  // Aggregation
-  const byTopic: Record<string, number> = Object.create(null);
-  const byPart: Record<string, number> = Object.create(null);
+    // Aggregation
+    const byTopic: Record<string, number> = Object.create(null);
+    const byPart: Record<string, number> = Object.create(null);
 
-  words.forEach((w) => {
-    const topic = w.topic || w.topic_ru || w.topic_kr || "Other";
-    const part = w.category || w.category_ru || w.category_kr || "Other";
+    words.forEach((w) => {
+      const topic = w.topic || w.topic_ru || w.topic_kr || "Other";
+      const part = w.category || w.category_ru || w.category_kr || "Other";
 
-    byTopic[topic] = (byTopic[topic] || 0) + 1;
-    byPart[part] = (byPart[part] || 0) + 1;
-  });
+      byTopic[topic] = (byTopic[topic] || 0) + 1;
+      byPart[part] = (byPart[part] || 0) + 1;
+    });
 
-  const sortedTopics = Object.entries(byTopic).sort((a, b) => b[1] - a[1]);
-  const sortedParts = Object.entries(byPart).sort((a, b) => b[1] - a[1]);
+    const sortedTopics = Object.entries(byTopic).sort((a, b) => b[1] - a[1]);
+    const sortedParts = Object.entries(byPart).sort((a, b) => b[1] - a[1]);
 
-  const html = `
+    const html = `
     <div style="display: flex; gap: 10px; margin-bottom: 20px;">
       <div class="stat-card-primary" style="flex: 1; border-bottom: 3px solid var(--danger);">
         <div class="stat-value-primary">${totalMistakes}</div>
@@ -147,7 +162,14 @@ function renderMistakesContent() {
     </div>
   `;
 
-  container.innerHTML = html;
+    container.innerHTML = html;
+  }
+}
+
+const mistakesView = new MistakesComponent();
+
+export function openMistakesModal() {
+  mistakesView.show();
 }
 
 export function startMistakeQuiz() {

@@ -21,6 +21,21 @@ import leaderboardHtml from "../html/modals/leaderboard.html?raw";
 import readingHtml from "../html/modals/reading.html?raw";
 import writingHtml from "../html/modals/writing.html?raw";
 import listeningHtml from "../html/modals/listening.html?raw";
+import feedbackHtml from "../html/modals/feedback.html?raw";
+import adminHtml from "../html/modals/admin.html?raw";
+import { initWritingUI } from "./ui_writing.ts";
+import { initListeningUI } from "./ui_listening.ts";
+import { initFiltersUI } from "./ui_filters.ts";
+import { BaseComponent } from "./BaseComponent.ts";
+// Импорты ради побочного эффекта: создают синглтоны компонентов до вызова initAll().
+import "./ui_feedback.ts";
+import "./ui_admin.ts";
+import "./ui_leaderboard.ts";
+import "./ui_trash.ts";
+import "./ui_mistakes.ts";
+import "./ui_reading.ts";
+import "./ui_quotes.ts";
+import "./ui_failed_requests.ts";
 
 /**
  * Загружает HTML-компоненты (модальные окна) и вставляет их в DOM.
@@ -70,14 +85,23 @@ export function injectComponents(): void {
     readingHtml,
     writingHtml,
     listeningHtml,
+    feedbackHtml,
+    adminHtml,
   ].join("\n");
 
   // Вставляем в конец body
   if (document.body) {
     document.body.appendChild(container);
+
+    // Инициализация модулей с явными точками входа после вставки HTML
+    initWritingUI();
+    initListeningUI();
+    initFiltersUI();
+
+    // Остальные компоненты создают синглтоны при импорте, но никогда не вызывали .init().
+    // Повторно инициализировать уже готовые компоненты не нужно (защита в BaseComponent).
+    BaseComponent.initAll();
   } else {
-    console.error(
-      "❌ document.body is null, cannot append injected components",
-    );
+    console.error("❌ document.body is null, cannot append injected components");
   }
 }

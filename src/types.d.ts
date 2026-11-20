@@ -8,11 +8,7 @@ declare global {
 
     /** Supabase Client injected via CDN */
     supabase: {
-      createClient: (
-        url: string,
-        key: string,
-        options?: object,
-      ) => SupabaseClient;
+      createClient: (url: string, key: string, options?: object) => SupabaseClient;
     };
 
     /** Canvas Confetti library */
@@ -44,8 +40,10 @@ declare global {
     checkPronunciation: (
       word: string,
       btn?: HTMLElement,
-      callback?: (score: number, text: string, audioUrl?: string) => void,
+      callback?: (score: number, text: string, audioUrl?: string, diffHtml?: string) => void,
       canvas?: HTMLCanvasElement,
+      onInterim?: (text: string) => void,
+      onVolume?: (volume: number) => void,
     ) => void;
     setBackgroundMusicVolume: (volume: string | number) => void;
     scheduleSaveState: () => void;
@@ -86,6 +84,7 @@ declare global {
     buyItem: (id: string, btn?: HTMLElement) => void;
     claimDailyReward: (btn?: HTMLElement) => void;
     switchShopTab: (tab: string) => void;
+    openFeedbackModal: () => void;
   }
 }
 

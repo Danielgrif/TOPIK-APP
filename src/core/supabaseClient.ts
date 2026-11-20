@@ -1,14 +1,19 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createClient } from "@supabase/supabase-js";
+
+declare global {
+  interface Window {
+    isSessionExpired?: boolean;
+  }
+}
+
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_KEY;
 
 if (!SUPABASE_URL || !SUPABASE_KEY) {
   if (!SUPABASE_URL) console.warn("⚠️ VITE_SUPABASE_URL не найден в .env");
   if (!SUPABASE_KEY) console.warn("⚠️ VITE_SUPABASE_KEY не найден в .env");
-  console.warn(
-    "⚠️ Supabase credentials not found in .env. Using offline mock mode.",
-  );
+  console.warn("⚠️ Supabase credentials not found in .env. Using offline mock mode.");
 }
 
 // Обертка для fetch с таймаутом
@@ -20,12 +25,7 @@ const fetchWithRetries = async (
   const initialDelay = 1500;
 
   // Безопасное получение URL из строки, Request или URL объекта
-  const url =
-    typeof input === "string"
-      ? input
-      : "url" in input
-        ? input.url
-        : input.toString();
+  const url = typeof input === "string" ? input : "url" in input ? input.url : input.toString();
 
   let timeout = 10000; // Оптимизация: 10 сек (было 20), чтобы успеть сделать больше попыток при сбоях
   let retries = defaultRetries;
@@ -55,11 +55,7 @@ const fetchWithRetries = async (
       }
 
       id = setTimeout(() => {
-        console.warn(
-          `Supabase request timed out after ${timeout / 1000}s for`,
-          url,
-          init,
-        );
+        console.warn(`Supabase request timed out after ${timeout / 1000}s for`, url, init);
         controller.abort();
       }, timeout);
 
@@ -70,6 +66,11 @@ const fetchWithRetries = async (
         //console.log("📤 Fetching:", url, init);
         signal: controller.signal,
       });
+
+      if (!response) {
+        // Fetch itself failed, before even getting headers
+        throw new Error("Fetch failed: No response received.");
+      }
 
       if (id) {
         clearTimeout(id);
@@ -82,11 +83,23 @@ const fetchWithRetries = async (
         // Это предотвращает "зависание" внутри console.warn, если .text() выполняется долго.
         const errorBody = await response
           .text()
-          .catch(
-            () =>
-              `{"error": "Could not read error body", "code": "${response.status}"}`,
-          );
-        console.warn(`Client error ${response.status} for ${url}`, errorBody);
+          .catch(() => `{"error": "Could not read error body", "code": "${response.status}"}`);
+
+        // --- Улучшенная обработка истекшей сессии ---
+        // Если токен недействителен, отправляем событие, на которое отреагирует UI.
+        if (
+          response.status === 401 &&
+          (errorBody.includes("Invalid JWT") || errorBody.includes("expired"))
+        ) {
+          // Используем флаг, чтобы избежать многократного вызова при одновременных сбоях API
+          if (!window.isSessionExpired) {
+            window.isSessionExpired = true;
+            console.warn("☠️ Invalid or expired JWT detected. Dispatching session-expired event.");
+            document.dispatchEvent(new CustomEvent("session-expired"));
+          }
+        }
+
+        console.warn(`Client error: ${response.status} for ${url}`, errorBody);
         // Возвращаем новый Response, так как тело исходного уже прочитано.
         // Это гарантирует, что последующие обработчики (внутри supabase-js) смогут снова прочитать тело.
         const newResponse = new Response(errorBody, {
@@ -99,11 +112,15 @@ const fetchWithRetries = async (
       // Повторяем попытку при серверных ошибках (5xx), которые могут быть временными
       if (!response.ok && response.status >= 500) {
         const body = await response.text();
+
         throw new Error(`Server error: ${response.status}: ${body}`);
       }
 
       return response;
     } catch (error: unknown) {
+      // Log the full error for debugging purposes.
+      console.error("Fetch with retries error:", error);
+
       if (id) {
         clearTimeout(id);
         id = undefined;
@@ -117,21 +134,19 @@ const fetchWithRetries = async (
       if (i < retries - 1) {
         const delay = initialDelay * Math.pow(2, i);
         console.warn(
-          `[Retry ${i + 1}/${retries}] Request failed. Retrying in ${delay}ms...`,
+          `[Retry ${i + 1}/${retries}] Request failed with "${(error as Error).message}". Retrying in ${delay}ms...`,
           error,
           init,
         );
         await new Promise((resolve) => setTimeout(resolve, delay));
       } else {
-        console.error(
-          `[Final Retry Failed] Request failed after ${retries} attempts.`,
-        );
+        console.error(`[Final Retry Failed] Request failed after ${retries} attempts.`);
+
         throw error; // Пробрасываем последнюю ошибку
       }
     }
   }
-  // Этот код не должен быть достижим, но нужен для TypeScript
-  throw new Error("Fetch with retries failed unexpectedly.");
+  throw new Error("Fetch with retries failed: Maximum retries exceeded.");
 };
 
 export const client: SupabaseClient =
@@ -140,9 +155,23 @@ export const client: SupabaseClient =
         global: {
           fetch: fetchWithRetries,
         },
+        auth: {
+          autoRefreshToken: true,
+          persistSession: true,
+          detectSessionInUrl: true,
+        },
         realtime: {
-          worker: true,
+          // Увеличиваем таймаут подключения сокета до 20 секунд
+          timeout: 20000,
+          // Более агрессивный heartbeat для поддержания соединения
           heartbeatIntervalMs: 15000,
+          // Кастомная логика переподключения с экспоненциальной задержкой
+          reconnectAfterMs: (tries: number) => {
+            const delay = [2000, 5000, 10000][tries - 1] || 10000;
+            // eslint-disable-next-line no-console
+            console.log(`[Realtime] Попытка переподключения #${tries} через ${delay}ms...`);
+            return delay;
+          },
         },
       })
     : ({
@@ -158,9 +187,28 @@ export const client: SupabaseClient =
           upsert: () => Promise.resolve({ data: null, error: null }),
         }),
         auth: {
-          getUser: () => Promise.resolve({ data: { user: null }, error: null }),
-          getSession: () =>
-            Promise.resolve({ data: { session: null }, error: null }),
+          getUser: () =>
+            Promise.resolve({
+              data: {
+                user: {
+                  id: "mock-user-id",
+                  app_metadata: {},
+                  aud: "authenticated",
+                  confirmation_sent_at: null,
+                  created_at: "2024-05-05T00:00:00Z",
+                  email: "mock@example.com",
+                  email_confirmed_at: "2024-05-05T00:00:00Z",
+                  identities: [],
+                  last_sign_in_at: "2024-05-05T00:00:00Z",
+                  phone: "",
+                  role: "authenticated",
+                  updated_at: "2024-05-05T00:00:00Z",
+                  user_metadata: {},
+                },
+              },
+              error: null,
+            }),
+          getSession: () => Promise.resolve({ data: { session: null }, error: null }),
           signInWithPassword: () =>
             Promise.resolve({
               data: { user: null, session: null },
@@ -170,12 +218,31 @@ export const client: SupabaseClient =
           onAuthStateChange: () => ({
             data: { subscription: { unsubscribe: () => {} } },
           }),
-          signInWithOAuth: () =>
-            Promise.resolve({ error: { message: "Offline mode" } }),
-          resetPasswordForEmail: () =>
-            Promise.resolve({ error: { message: "Offline mode" } }),
+          signInWithOAuth: () => Promise.resolve({ error: { message: "Offline mode" } }),
+
+          resetPasswordForEmail: () => Promise.resolve({ error: { message: "Offline mode" } }),
+
           updateUser: () =>
-            Promise.resolve({ error: { message: "Offline mode" } }),
+            Promise.resolve({
+              data: {
+                user: {
+                  id: "mock-user-id",
+                  app_metadata: {},
+                  aud: "authenticated",
+                  confirmation_sent_at: null,
+                  created_at: "2024-05-05T00:00:00Z",
+                  email: "mock@example.com",
+                  email_confirmed_at: "2024-05-05T00:00:00Z",
+                  identities: [],
+                  last_sign_in_at: "2024-05-05T00:00:00Z",
+                  phone: "",
+                  role: "authenticated",
+                  updated_at: "2024-05-05T00:00:00Z",
+                  user_metadata: {},
+                },
+              },
+              error: null,
+            }),
         },
         rpc: () => Promise.resolve({ data: null, error: null }),
         functions: {

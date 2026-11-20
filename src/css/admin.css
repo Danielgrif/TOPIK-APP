@@ -1,0 +1,104 @@
+.admin-reports-container {
+  max-height: 70vh;
+  overflow-y: auto;
+  padding: 15px;
+}
+
+.admin-report-card {
+  background: var(--surface-2);
+  border-radius: 12px;
+  padding: 15px;
+  margin-bottom: 15px;
+  border: 1px solid var(--border-color);
+  transition: all 0.2s ease;
+}
+
+.admin-report-card:hover {
+  border-color: var(--primary);
+}
+
+.admin-report-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 10px;
+}
+
+.admin-report-title {
+  font-weight: 700;
+  font-size: 16px;
+}
+
+.admin-report-meta {
+  display: flex;
+  gap: 15px;
+  font-size: 12px;
+  color: var(--text-sub);
+  margin-top: 5px;
+}
+
+.admin-report-body {
+  font-size: 14px;
+  line-height: 1.6;
+  margin-bottom: 15px;
+  max-height: 100px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.admin-report-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.admin-status-select {
+  background: var(--surface-3);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 6px 10px;
+  font-size: 13px;
+  color: var(--text-main);
+}
+
+.priority-badge {
+  padding: 4px 8px;
+  border-radius: 8px;
+  font-size: 11px;
+  font-weight: bold;
+  color: white;
+}
+
+.priority-low {
+  background: #2ecc71;
+}
+.priority-medium {
+  background: #3498db;
+}
+.priority-high {
+  background: #f39c12;
+}
+.priority-urgent {
+  background: #e74c3c;
+}
+
+.status-badge {
+  padding: 4px 8px;
+  border-radius: 8px;
+  font-size: 11px;
+  font-weight: bold;
+}
+
+.status-open {
+  background: #3498db;
+  color: white;
+}
+.status-in_progress {
+  background: #f39c12;
+  color: white;
+}
+.status-fixed,
+.status-closed {
+  background: #95a5a6;
+  color: white;
+}

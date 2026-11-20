@@ -14,12 +14,14 @@ export const LS_KEYS = {
   SESSIONS: "sessions_v5",
   ACHIEVEMENTS: "achievements_v5",
   DIRTY_IDS: "dirty_ids_v1",
+  SYNC_OUTBOX: "sync_outbox_v1",
   CUSTOM_WORDS: "custom_words_v1",
   FAVORITE_QUOTES: "favorite_quotes_v1",
   TRASH_RETENTION: "trash_retention_v1",
   PURCHASED_ITEMS: "purchased_items_v1",
   VOCAB_CACHE: "vocabulary_cache_v1",
   VOCAB_VERSION: "vocabulary_version",
+  LAST_VOCAB_SYNC: "last_vocab_sync_v1",
   SEARCH_HISTORY: "search_history_v1",
   WORD_REQUESTS: "word_requests_state_v1",
   STUDY_GOAL: "study_goal_v1",
@@ -44,8 +46,11 @@ export const LS_KEYS = {
   QUIZ_DIFFICULTY: "quiz_difficulty_v1",
   QUIZ_TOPIC: "quiz_topic_v1",
   QUIZ_CATEGORY: "quiz_category_v1",
+  SHOW_QUIZ_EXTRA_INFO: "show_quiz_extra_info_v1",
   // Резервное копирование
   SAFETY_BACKUP: "safety_backup_v1",
+  WRITING_DRAFT: "writing_draft_v1",
+  WRITING_HISTORY: "writing_history_v1",
 };
 
 // Имена таблиц Supabase
@@ -65,6 +70,7 @@ export const DB_TABLES = {
 export const DB_BUCKETS = {
   AUDIO: "audio-files",
   IMAGES: "image-files",
+  FEEDBACK_ATTACHMENTS: "feedback_attachments",
 };
 
 // Статусы заявок на слова

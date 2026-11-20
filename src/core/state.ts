@@ -11,11 +11,32 @@ import {
 import { createLocalBackup } from "./backup.ts";
 import { LS_KEYS } from "./constants.ts";
 
+// --- Observer Pattern (Pub/Sub) ---
+export type StateEvent =
+  | "stats_updated"
+  | "settings_updated"
+  | "vocabs_updated"
+  | "auth_changed"
+  | "sync_changed"
+  | string;
+
+type Listener = (event: StateEvent, payload?: unknown) => void;
+const listeners = new Set<Listener>();
+
+export const subscribe = (listener: Listener) => {
+  listeners.add(listener);
+  return () => listeners.delete(listener);
+};
+
+export const notify = (event: StateEvent, payload?: unknown) =>
+  listeners.forEach((l) => l(event, payload));
+// ----------------------------------
+
 export interface Session {
   date: string;
   duration: number;
   wordsReviewed: number;
-  accuracy: number;
+  accuracy: number | null;
   platform?: string; // Пример нового поля
 }
 
@@ -32,6 +53,25 @@ export interface WordRequestState {
 }
 
 export interface AppState {
+  state: {
+    xp: number;
+    level: number;
+    sprintRecord: number;
+    survivalRecord: number;
+    coins: number;
+    streakFreeze: number;
+    lastDailyReward: null;
+    dailyRewardStreak: number;
+    achievements: never[];
+    survivalHealth: number;
+    lastFreezeDate: null;
+    timeFreeze: number;
+    skipQuestion: number;
+    fiftyFifty: number;
+    weeklyXp: number;
+    league: string;
+    lastWeekId: string;
+  };
   dataStore: Word[];
   filteredData: Word[]; // Кэш отфильтрованных слов для рендерера
   searchResults: Word[] | null;
@@ -49,6 +89,10 @@ export interface AppState {
   studyGoal: StudyGoal;
   favoriteQuotes: Quote[];
   dirtyWordIds: Set<string | number>;
+
+  streakCount: number;
+  lastDate: string | null;
+
   trashRetentionDays: number;
   selectMode: boolean;
   selectedWords: Set<string | number>;
@@ -80,6 +124,7 @@ export interface AppState {
   quizDifficulty: string;
   quizTopic: string;
   quizCategory: string;
+  showQuizExtraInfo: boolean;
 
   isSyncing: boolean;
 
@@ -108,6 +153,7 @@ export const state: AppState = {
   filteredData: [],
   searchResults: null,
   userStats: {
+    sprintTimer: 60,
     xp: 0,
     level: 1,
     sprintRecord: 0,
@@ -137,6 +183,8 @@ export const state: AppState = {
   searchHistory: [],
   customWords: [],
   studyGoal: { type: "words", target: 10 },
+  streakCount: 0, // add
+  lastDate: null, // add
   favoriteQuotes: [],
   dirtyWordIds: new Set(),
   trashRetentionDays: 30,
@@ -152,14 +200,11 @@ export const state: AppState = {
   hanjaMode: safeGetItem(LS_KEYS.HANJA_MODE) === "true",
   currentVoice: safeGetItem(LS_KEYS.VOICE_PREF) || "female",
   audioSpeed:
-    safeGetItem(LS_KEYS.AUDIO_SPEED) !== null
-      ? Number(safeGetItem(LS_KEYS.AUDIO_SPEED))
-      : 0.9,
+    safeGetItem(LS_KEYS.AUDIO_SPEED) !== null ? Number(safeGetItem(LS_KEYS.AUDIO_SPEED)) : 0.9,
   darkMode:
     safeGetItem(LS_KEYS.DARK_MODE) !== null
       ? safeGetItem(LS_KEYS.DARK_MODE) === "true"
-      : window.matchMedia &&
-          window.matchMedia("(prefers-color-scheme: dark)").matches
+      : window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches
         ? true
         : false,
   focusMode: false, // Отключаем сохранение состояния при перезагрузке
@@ -173,18 +218,12 @@ export const state: AppState = {
       ? Number(safeGetItem(LS_KEYS.AUTO_THEME_START))
       : 20,
   autoThemeEnd:
-    safeGetItem(LS_KEYS.AUTO_THEME_END) !== null
-      ? Number(safeGetItem(LS_KEYS.AUTO_THEME_END))
-      : 6,
+    safeGetItem(LS_KEYS.AUTO_THEME_END) !== null ? Number(safeGetItem(LS_KEYS.AUTO_THEME_END)) : 6,
   backgroundMusicEnabled: safeGetItem(LS_KEYS.MUSIC_ENABLED) === "true",
   backgroundMusicVolume:
-    safeGetItem(LS_KEYS.MUSIC_VOLUME) !== null
-      ? Number(safeGetItem(LS_KEYS.MUSIC_VOLUME))
-      : 0.3,
+    safeGetItem(LS_KEYS.MUSIC_VOLUME) !== null ? Number(safeGetItem(LS_KEYS.MUSIC_VOLUME)) : 0.3,
   ttsVolume:
-    safeGetItem(LS_KEYS.TTS_VOLUME) !== null
-      ? Number(safeGetItem(LS_KEYS.TTS_VOLUME))
-      : 1.0,
+    safeGetItem(LS_KEYS.TTS_VOLUME) !== null ? Number(safeGetItem(LS_KEYS.TTS_VOLUME)) : 1.0,
 
   MUSIC_TRACKS: [
     {
@@ -206,6 +245,7 @@ export const state: AppState = {
   quizDifficulty: safeGetItem(LS_KEYS.QUIZ_DIFFICULTY) || "all",
   quizTopic: safeGetItem(LS_KEYS.QUIZ_TOPIC) || "all",
   quizCategory: safeGetItem(LS_KEYS.QUIZ_CATEGORY) || "all",
+  showQuizExtraInfo: safeGetItem(LS_KEYS.SHOW_QUIZ_EXTRA_INFO) !== "false", // Default true
 
   isSyncing: false,
 
@@ -216,6 +256,25 @@ export const state: AppState = {
   currentUser: null,
   networkPing: null,
   settingsUpdatedAt: 0,
+  state: {
+    xp: 0,
+    level: 0,
+    sprintRecord: 0,
+    survivalRecord: 0,
+    coins: 0,
+    streakFreeze: 0,
+    lastDailyReward: null,
+    dailyRewardStreak: 0,
+    achievements: [],
+    survivalHealth: 0,
+    lastFreezeDate: null,
+    timeFreeze: 0,
+    skipQuestion: 0,
+    fiftyFifty: 0,
+    weeklyXp: 0,
+    league: "",
+    lastWeekId: "",
+  },
 };
 
 try {
@@ -335,8 +394,8 @@ try {
                   const totalWords = existing.wordsReviewed + s.wordsReviewed;
                   const weightedAcc =
                     totalWords > 0
-                      ? (existing.accuracy * existing.wordsReviewed +
-                          s.accuracy * s.wordsReviewed) /
+                      ? ((existing.accuracy || 0) * existing.wordsReviewed +
+                          (s.accuracy || 0) * s.wordsReviewed) /
                         totalWords
                       : existing.accuracy;
 
@@ -383,10 +442,7 @@ try {
     try {
       return JSON.parse(val) as T;
     } catch (e) {
-      console.warn(
-        `⚠️ Corrupted data for key "${key}". Resetting to default.`,
-        e,
-      );
+      console.warn(`⚠️ Corrupted data for key "${key}". Resetting to default.`, e);
       return def;
     }
   };
@@ -407,12 +463,9 @@ try {
     completed: false,
     streak: 0,
   });
-  if (state.dailyChallenge.lastDate === undefined)
-    state.dailyChallenge.lastDate = null;
-  if (state.dailyChallenge.completed === undefined)
-    state.dailyChallenge.completed = false;
-  if (state.dailyChallenge.streak === undefined)
-    state.dailyChallenge.streak = 0;
+  if (state.dailyChallenge.lastDate === undefined) state.dailyChallenge.lastDate = null;
+  if (state.dailyChallenge.completed === undefined) state.dailyChallenge.completed = false;
+  if (state.dailyChallenge.streak === undefined) state.dailyChallenge.streak = 0;
   state.searchHistory = load(LS_KEYS.SEARCH_HISTORY, []);
   state.customWords = load(LS_KEYS.CUSTOM_WORDS, []);
   state.wordRequests = load(LS_KEYS.WORD_REQUESTS, []);
@@ -431,11 +484,7 @@ try {
       const isValid =
         Array.isArray(parsed) &&
         parsed.every(
-          (item: Word) =>
-            item &&
-            typeof item === "object" &&
-            "id" in item &&
-            "word_kr" in item,
+          (item: Word) => item && typeof item === "object" && "id" in item && "word_kr" in item,
         );
 
       if (isValid) {
@@ -460,22 +509,24 @@ try {
   state.quizTopic = localStorage.getItem(LS_KEYS.QUIZ_TOPIC) || "all";
   state.quizCategory = localStorage.getItem(LS_KEYS.QUIZ_CATEGORY) || "all";
 
-  if (state.userStats.sprintRecord === undefined)
-    state.userStats.sprintRecord = 0;
-  if (state.userStats.survivalRecord === undefined)
-    state.userStats.survivalRecord = 0;
+  // Нормализация загруженных чисел: битые/отрицательные значения из старого
+  // кэша или облака иначе ломали расчёт уровней.
+  const clampNonNegative = (value: unknown, fallback = 0): number =>
+    typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : fallback;
+  state.userStats.level = Math.max(1, Math.floor(clampNonNegative(state.userStats.level, 1)));
+  state.userStats.xp = clampNonNegative(state.userStats.xp);
+  if (state.userStats.sprintRecord === undefined) state.userStats.sprintRecord = 0;
+  if (state.userStats.survivalRecord === undefined) state.userStats.survivalRecord = 0;
   if (state.userStats.coins === undefined) state.userStats.coins = 0;
-  if (state.userStats.streakFreeze === undefined)
-    state.userStats.streakFreeze = 0;
-  if (state.userStats.lastDailyReward === undefined)
-    state.userStats.lastDailyReward = null;
-  if (state.userStats.dailyRewardStreak === undefined)
-    state.userStats.dailyRewardStreak = 0;
-  if (state.userStats.survivalHealth === undefined)
-    state.userStats.survivalHealth = 0;
+  state.userStats.sprintRecord = clampNonNegative(state.userStats.sprintRecord);
+  state.userStats.survivalRecord = clampNonNegative(state.userStats.survivalRecord);
+  state.userStats.coins = clampNonNegative(state.userStats.coins);
+  if (state.userStats.streakFreeze === undefined) state.userStats.streakFreeze = 0;
+  if (state.userStats.lastDailyReward === undefined) state.userStats.lastDailyReward = null;
+  if (state.userStats.dailyRewardStreak === undefined) state.userStats.dailyRewardStreak = 0;
+  if (state.userStats.survivalHealth === undefined) state.userStats.survivalHealth = 0;
   if (state.userStats.timeFreeze === undefined) state.userStats.timeFreeze = 0;
-  if (state.userStats.skipQuestion === undefined)
-    state.userStats.skipQuestion = 0;
+  if (state.userStats.skipQuestion === undefined) state.userStats.skipQuestion = 0;
   if (state.userStats.fiftyFifty === undefined) state.userStats.fiftyFifty = 0;
   if (state.userStats.weeklyXp === undefined) state.userStats.weeklyXp = 0;
   if (state.userStats.league === undefined) state.userStats.league = "Bronze";

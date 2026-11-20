@@ -30,9 +30,7 @@ export function openHanjaModal(char: string) {
         ? w.word_hanja
             .split("")
             .map((c) =>
-              c === char
-                ? `<span class="highlight">${escapeHtml(c)}</span>`
-                : escapeHtml(c),
+              c === char ? `<span class="highlight">${escapeHtml(c)}</span>` : escapeHtml(c),
             )
             .join("")
         : "";

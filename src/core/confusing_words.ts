@@ -3,9 +3,7 @@ import { levenshtein } from "../utils/utils.ts";
 import { Word } from "../types/index.ts";
 
 export function findConfusingWords(): Word[][] {
-  const words = state.dataStore.filter(
-    (w) => w.type === "word" && w.word_kr.length > 1,
-  );
+  const words = state.dataStore.filter((w) => w.type === "word" && w.word_kr.length > 1);
   const groups: Word[][] = [];
   const used = new Set<string | number>();
 

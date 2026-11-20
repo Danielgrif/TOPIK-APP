@@ -12,16 +12,29 @@
 <div id="welcome-overlay" class="level-up-overlay welcome-overlay">
   <div class="level-up-content welcome-content">
     <div class="welcome-header-group">
-        <div class="welcome-icon">👋</div>
-        <h2 class="level-up-title" id="welcome-greeting">С возвращением!</h2>
-        <p class="welcome-subtitle">Рады видеть вас, <strong id="welcome-username">Гость</strong>!</p>
+      <div class="welcome-icon">👋</div>
+      <h2 class="level-up-title" id="welcome-greeting">С возвращением!</h2>
+      <p class="welcome-subtitle">Рады видеть вас, <strong id="welcome-username">Гость</strong>!</p>
     </div>
-    
+
     <div id="welcome-quote" class="welcome-quote-container"></div>
-    
+
     <button class="welcome-btn" data-action="close-welcome">
-        <span>Поехали</span>
-        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
+      <span>Поехали</span>
+      <svg
+        xmlns="http://www.w3.org/2000/svg"
+        width="24"
+        height="24"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="2.5"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+      >
+        <path d="M5 12h14" />
+        <path d="m12 5 7 7-7 7" />
+      </svg>
     </button>
   </div>
 </div>
@@ -33,7 +46,7 @@
 
 <!-- PWA Install Banner -->
 <div id="install-banner">
-  <img src="/app-logo.svg" alt="App Logo" class="install-banner-logo">
+  <img src="/app-logo.svg" alt="App Logo" class="install-banner-logo" />
   <div class="install-banner-text">
     <strong>Установить приложение</strong>
     <span>Для быстрого доступа и работы офлайн</span>
@@ -46,11 +59,13 @@
 
 <!-- Bulk Actions Bar -->
 <div id="bulk-bar" class="bulk-bar">
-    <div class="bulk-count">Выбрано: <span id="bulk-count-val">0</span></div>
-    <div class="bulk-actions">
-        <button class="btn-icon" title="Добавить в список" data-action="bulk-list">📂</button>
-        <button class="btn-icon" title="Переместить" data-action="bulk-move">🏷️</button>
-        <button class="btn-icon" title="Удалить" data-action="bulk-delete" style="color: var(--danger);">🗑️</button>
-        <button class="btn-icon" title="Выбрать все" data-action="bulk-select-all">✅</button>
-    </div>
+  <div class="bulk-count">Выбрано: <span id="bulk-count-val">0</span></div>
+  <div class="bulk-actions">
+    <button class="btn-icon" title="Добавить в список" data-action="bulk-list">📂</button>
+    <button class="btn-icon" title="Переместить" data-action="bulk-move">🏷️</button>
+    <button class="btn-icon" title="Удалить" data-action="bulk-delete" style="color: var(--danger)">
+      🗑️
+    </button>
+    <button class="btn-icon" title="Выбрать все" data-action="bulk-select-all">✅</button>
+  </div>
 </div>

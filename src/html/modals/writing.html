@@ -1,43 +1,281 @@
 <!-- Writing AI Modal -->
 <div id="writing-modal" class="modal">
-  <div class="modal-content" style="max-width: 700px; height: 90vh; display: flex; flex-direction: column;">
+  <div
+    class="modal-content"
+    style="max-width: 700px; height: 90vh; display: flex; flex-direction: column"
+  >
     <div class="modal-header">
-      <h3>✍️ TOPIK Writing AI</h3>
-      <button class="btn-icon close-modal-btn" data-close-modal="writing-modal" aria-label="Закрыть">✕</button>
-    </div>
-    <div class="modal-body" style="flex: 1; display: flex; flex-direction: column; gap: 15px; overflow-y: auto;">
-      
-      <!-- Task Selection -->
-      <div class="segment-control" id="writing-task-selector">
-        <button class="segment-btn active" data-task="51">Задание 51</button>
-        <button class="segment-btn" data-task="52">Задание 52</button>
-        <button class="segment-btn" data-task="53">Задание 53</button>
-        <button class="segment-btn" data-task="54">Задание 54</button>
-      </div>
-
-      <!-- Question Input -->
-      <div class="input-group">
-        <label class="form-label">Вопрос / Тема / Описание графика</label>
-        <textarea id="writing-question" class="auth-input" rows="3" placeholder="Введите текст задания или описание графика..."></textarea>
-      </div>
-
-      <!-- Answer Input -->
-      <div class="input-group" style="flex: 1; display: flex; flex-direction: column;">
-        <label class="form-label">Ваш ответ <span id="char-count" style="float: right; font-weight: normal; opacity: 0.7;">0 знаков</span></label>
-        <textarea id="writing-answer" class="auth-input" style="flex: 1; resize: none; min-height: 200px;" placeholder="Напишите ваш ответ здесь..."></textarea>
-      </div>
-
-      <!-- Action -->
-      <button id="check-writing-btn" class="btn btn-quiz" style="width: 100%;">✨ Проверить с AI</button>
-
-      <!-- Result Area (Hidden by default) -->
-      <div id="writing-result" style="display: none; background: var(--surface-2); padding: 15px; border-radius: 16px; margin-top: 10px;">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
-            <h4 style="margin: 0;">Результат</h4>
-            <span id="writing-score" class="shop-points"></span>
+      <div style="display: flex; align-items: center; gap: 10px">
+        <h3>✍️ TOPIK Writing AI</h3>
+        <div
+          id="writing-timer-box"
+          style="
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            background: var(--surface-3);
+            padding: 4px 8px;
+            border-radius: 12px;
+            margin-left: 5px;
+            border: 1px solid var(--border-color);
+          "
+        >
+          <span
+            id="writing-timer-display"
+            style="
+              font-weight: 700;
+              font-family: monospace;
+              font-size: 14px;
+              width: 45px;
+              text-align: center;
+              color: var(--text-main);
+            "
+            >--:--</span
+          >
+          <button
+            id="writing-timer-toggle"
+            style="
+              width: 24px;
+              height: 24px;
+              font-size: 12px;
+              border: none;
+              background: transparent;
+              cursor: pointer;
+              border-radius: 50%;
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              color: var(--primary);
+            "
+          >
+            ▶️
+          </button>
         </div>
-        <div id="writing-feedback-content"></div>
+        <button
+          id="writing-history-btn"
+          class="btn-icon"
+          style="width: 32px; height: 32px; font-size: 16px"
+          title="История проверок"
+        >
+          🕒
+        </button>
+        <button
+          id="writing-focus-btn"
+          class="btn-icon"
+          style="width: 32px; height: 32px; font-size: 16px"
+          title="Режим фокусировки"
+        >
+          👁️
+        </button>
+        <button
+          id="writing-font-size-btn"
+          class="btn-icon"
+          style="width: 32px; height: 32px; font-size: 14px; font-weight: 700"
+          title="Размер шрифта"
+        >
+          Aa
+        </button>
+        <button
+          id="writing-expand-btn"
+          class="btn-icon"
+          style="width: 32px; height: 32px; font-size: 16px"
+          title="На весь экран"
+        >
+          ⤢
+        </button>
       </div>
+      <button
+        class="btn-icon close-modal-btn"
+        data-close-modal="writing-modal"
+        aria-label="Закрыть"
+      >
+        ✕
+      </button>
+    </div>
+    <div class="modal-body" style="flex: 1; overflow-y: auto">
+      <!-- Editor View -->
+      <div id="writing-editor-view" style="display: flex; flex-direction: column; gap: 15px">
+        <!-- Task Selection -->
+        <div class="segment-control" id="writing-task-selector">
+          <button class="segment-btn active" data-task="51">Задание 51</button>
+          <button class="segment-btn" data-task="52">Задание 52</button>
+          <button class="segment-btn" data-task="53">Задание 53</button>
+          <button class="segment-btn" data-task="54">Задание 54</button>
+        </div>
+
+        <!-- Question Input -->
+        <div id="writing-question-container" class="input-group">
+          <div
+            style="
+              display: flex;
+              justify-content: space-between;
+              align-items: center;
+              margin-bottom: 8px;
+            "
+          >
+            <label class="form-label" style="margin-bottom: 0"
+              >Вопрос / Тема / Описание графика</label
+            >
+            <button
+              id="writing-img-btn"
+              class="btn-text"
+              style="font-size: 12px; padding: 4px 8px; background: var(--surface-3)"
+            >
+              📷 Фото
+            </button>
+          </div>
+          <textarea
+            id="writing-question"
+            class="auth-input"
+            rows="3"
+            placeholder="Введите текст задания или описание графика..."
+          ></textarea>
+          <div
+            id="writing-img-preview"
+            style="display: none; margin-top: 10px; position: relative; width: fit-content"
+          >
+            <img
+              id="writing-question-img"
+              src=""
+              style="
+                max-height: 150px;
+                border-radius: 8px;
+                border: 1px solid var(--border-color);
+                display: block;
+              "
+            />
+            <button
+              id="remove-writing-img"
+              style="
+                position: absolute;
+                top: -8px;
+                right: -8px;
+                background: var(--danger);
+                color: white;
+                border: 2px solid var(--surface-1);
+                border-radius: 50%;
+                width: 24px;
+                height: 24px;
+                font-size: 12px;
+                cursor: pointer;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+              "
+            >
+              ✕
+            </button>
+          </div>
+          <input type="file" id="writing-file-input" accept="image/*" style="display: none" />
+        </div>
+
+        <!-- Answer Input -->
+        <div class="input-group" style="flex: 1; display: flex; flex-direction: column">
+          <label class="form-label"
+            >Ваш ответ
+            <span id="char-count" style="float: right; font-weight: normal; opacity: 0.7"
+              >0 знаков</span
+            ></label
+          >
+          <textarea
+            id="writing-answer"
+            class="auth-input"
+            style="flex: 1; resize: none; min-height: 200px"
+            placeholder="Напишите ваш ответ здесь..."
+          ></textarea>
+        </div>
+
+        <!-- Action -->
+        <button id="check-writing-btn" class="btn btn-quiz" style="width: 100%">
+          ✨ Проверить с AI
+        </button>
+
+        <!-- Result Area (Hidden by default) -->
+        <div
+          id="writing-result"
+          style="
+            display: none;
+            background: var(--surface-2);
+            padding: 15px;
+            border-radius: 16px;
+            margin-top: 10px;
+          "
+        >
+          <div
+            style="
+              display: flex;
+              justify-content: space-between;
+              align-items: center;
+              margin-bottom: 10px;
+            "
+          >
+            <h4 style="margin: 0">Результат</h4>
+            <span id="writing-score" class="shop-points"></span>
+          </div>
+          <div id="writing-feedback-content"></div>
+        </div>
+      </div>
+
+      <!-- History View -->
+      <div id="writing-history-view" style="display: none; flex-direction: column; gap: 15px">
+        <div style="display: flex; justify-content: space-between; align-items: center">
+          <button id="back-to-editor-btn" class="btn-text">← Назад к редактору</button>
+          <button
+            id="clear-writing-history-btn"
+            class="btn-text"
+            style="color: var(--danger); display: none"
+          >
+            🗑️ Очистить
+          </button>
+        </div>
+        <div
+          id="writing-history-filters"
+          style="display: flex; gap: 8px; overflow-x: auto; padding-bottom: 2px"
+        >
+          <button class="history-filter-btn active" data-filter="all">Все</button>
+          <button
+            class="history-filter-btn"
+            data-filter="favorites"
+            title="Избранное"
+            style="color: var(--gold)"
+          >
+            ★
+          </button>
+          <button class="history-filter-btn" data-filter="51">51</button>
+          <button class="history-filter-btn" data-filter="52">52</button>
+          <button class="history-filter-btn" data-filter="53">53</button>
+          <button class="history-filter-btn" data-filter="54">54</button>
+        </div>
+        <div
+          id="writing-history-list"
+          style="display: flex; flex-direction: column; gap: 10px"
+        ></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- OCR Edit Modal (Nested or separate) -->
+<div id="ocr-edit-modal" class="modal" style="z-index: 2100">
+  <div class="modal-content" style="max-width: 500px">
+    <div class="modal-header">
+      <h3>📝 Проверка текста</h3>
+      <button class="btn-icon close-modal-btn" data-close-modal="ocr-edit-modal">✕</button>
+    </div>
+    <div class="modal-body" style="padding: 20px">
+      <p style="margin-bottom: 10px; color: var(--text-sub); font-size: 14px">
+        Отредактируйте распознанный текст перед вставкой:
+      </p>
+      <textarea
+        id="ocr-edit-textarea"
+        class="auth-input"
+        rows="8"
+        style="width: 100%; resize: vertical; margin-bottom: 20px"
+      ></textarea>
+      <button id="ocr-confirm-btn" class="btn btn-quiz" style="width: 100%">
+        Вставить в поле вопроса
+      </button>
     </div>
   </div>
 </div>
