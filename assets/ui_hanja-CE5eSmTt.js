@@ -1,0 +1,5 @@
+import{a as c,g as e,h as m}from"./index-BmGu2LOk.js";import"./vendor-supabase-GG-Sp6Hl.js";import"./vendor-confetti-oQXWb4Lk.js";import"./vendor-charts-IK6Vv9H5.js";function u(o){const a=document.getElementById("hanja-list"),i=document.getElementById("hanja-title");if(!a||!i)return;i.textContent=`Иероглиф "${o}"`,a.innerHTML="",a.scrollTop=0;const l=c.dataStore.filter(n=>n.word_hanja&&n.word_hanja.includes(o));if(l.length===0)a.innerHTML='<div style="grid-column: 1/-1; text-align:center; padding:20px; color:var(--text-sub);">Нет других слов с этим иероглифом.</div>';else{const n=document.createDocumentFragment();l.forEach(t=>{const d=document.createElement("div");d.className="hanja-word-card";const s=t.word_hanja?t.word_hanja.split("").map(r=>r===o?`<span class="highlight">${e(r)}</span>`:e(r)).join(""):"";d.innerHTML=`
+                <div class="hanja-card-word">${e(t.word_kr)}</div>
+                <div class="hanja-card-hanja">${s}</div>
+                <div class="hanja-card-trans">${e(t.translation)}</div>
+            `,n.appendChild(d)}),a.appendChild(n)}m("hanja-modal")}export{u as openHanjaModal};

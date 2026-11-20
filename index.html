@@ -1,17 +1,31 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="ru">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta
+      name="description"
+      content="TOPIK Master Pro - приложение для подготовки к экзамену TOPIK по корейскому языку. Изучайте слова, грамматику и тренируйтесь."
+    />
     <title>TOPIK II - Master Pro 2026</title>
-    <link rel="manifest" href="manifest.json">
-    <link rel="icon" href="/app-logo.svg" type="image/svg+xml">
-    <meta name="theme-color" content="#6c5ce7">
-    <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css" />
+    <link rel="icon" href="/app-logo.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="https://cdn-icons-png.flaticon.com/512/570/570973.png" />
+    <meta name="theme-color" content="#6c5ce7" />
+    <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin />
+    <link
+      rel="preload"
+      href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard-dynamic-subset.min.css"
+      as="style"
+      onload="
+        this.onload = null;
+        this.rel = 'stylesheet';
+      "
+    />
+    <noscript
+      ><link
+        rel="stylesheet"
+        href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard-dynamic-subset.min.css"
+    /></noscript>
     <audio id="music-player-a" loop preload="auto"></audio>
     <audio id="music-player-b" loop preload="auto"></audio>
     <style>
@@ -42,7 +56,10 @@
       /* Preloader Styles */
       #loading-overlay {
         position: fixed;
-        top: 0; left: 0; width: 100%; height: 100%;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
         background: #f5f3ff;
         z-index: 9999;
         display: flex;
@@ -52,9 +69,15 @@
         animation: bgPulse 6s ease-in-out infinite alternate;
       }
       @keyframes bgPulse {
-        0% { background-color: #f5f3ff; }
-        50% { background-color: #e0e7ff; }
-        100% { background-color: #ede9fe; }
+        0% {
+          background-color: #f5f3ff;
+        }
+        50% {
+          background-color: #e0e7ff;
+        }
+        100% {
+          background-color: #ede9fe;
+        }
       }
       .spinner-wrapper {
         position: relative;
@@ -81,27 +104,43 @@
         height: 65%;
         object-fit: contain;
         animation: logoPopIn 0.8s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
-        filter: drop-shadow(0 20px 40px rgba(0,0,0,0.3));
+        filter: drop-shadow(0 20px 40px rgba(0, 0, 0, 0.3));
       }
-      @keyframes spin { 100% { transform: rotate(360deg); } }
+      @keyframes spin {
+        100% {
+          transform: rotate(360deg);
+        }
+      }
       @keyframes logoPopIn {
-        from { opacity: 0; transform: scale(0.5); }
-        to { opacity: 1; transform: scale(1); }
+        from {
+          opacity: 0;
+          transform: scale(0.5);
+        }
+        to {
+          opacity: 1;
+          transform: scale(1);
+        }
       }
 
       @media (prefers-color-scheme: dark) {
-        #loading-overlay { 
-            background: #1e1b4b;
-            animation: bgPulseDark 6s ease-in-out infinite alternate;
+        #loading-overlay {
+          background: #1e1b4b;
+          animation: bgPulseDark 6s ease-in-out infinite alternate;
         }
         @keyframes bgPulseDark {
-            0% { background-color: #1e1b4b; }
-            50% { background-color: #312e81; }
-            100% { background-color: #2e1065; }
+          0% {
+            background-color: #1e1b4b;
+          }
+          50% {
+            background-color: #312e81;
+          }
+          100% {
+            background-color: #2e1065;
+          }
         }
-        .loader-circle { 
-            border-color: rgba(55, 48, 163, 0.4); 
-            border-top-color: #a78bfa; 
+        .loader-circle {
+          border-color: rgba(55, 48, 163, 0.4);
+          border-top-color: #a78bfa;
         }
       }
 
@@ -121,23 +160,40 @@
         display: none;
         align-items: center;
         gap: 8px;
-        box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
         backdrop-filter: blur(4px);
         pointer-events: none;
         border: 1px solid rgba(255, 255, 255, 0.1);
       }
       #offline-indicator.visible {
         display: flex;
-        animation: slideUpFade 0.3s ease-out, offlinePulse 2s infinite;
+        animation:
+          slideUpFade 0.3s ease-out,
+          offlinePulse 2s infinite;
       }
       @keyframes slideUpFade {
-        from { opacity: 0; transform: translate(-50%, 10px); }
-        to { opacity: 1; transform: translate(-50%, 0); }
+        from {
+          opacity: 0;
+          transform: translate(-50%, 10px);
+        }
+        to {
+          opacity: 1;
+          transform: translate(-50%, 0);
+        }
       }
       @keyframes offlinePulse {
-        0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4); border-color: rgba(239, 68, 68, 0.4); }
-        70% { box-shadow: 0 0 0 10px rgba(239, 68, 68, 0); border-color: rgba(239, 68, 68, 1); }
-        100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); border-color: rgba(239, 68, 68, 0.4); }
+        0% {
+          box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4);
+          border-color: rgba(239, 68, 68, 0.4);
+        }
+        70% {
+          box-shadow: 0 0 0 10px rgba(239, 68, 68, 0);
+          border-color: rgba(239, 68, 68, 1);
+        }
+        100% {
+          box-shadow: 0 0 0 0 rgba(239, 68, 68, 0);
+          border-color: rgba(239, 68, 68, 0.4);
+        }
       }
 
       /* Onboarding Styles */
@@ -173,11 +229,12 @@
       }
 
       #onboarding-focus-border {
-        transition: x 0.4s cubic-bezier(0.2, 0.8, 0.2, 1), 
-                    y 0.4s cubic-bezier(0.2, 0.8, 0.2, 1), 
-                    width 0.4s cubic-bezier(0.2, 0.8, 0.2, 1), 
-                    height 0.4s cubic-bezier(0.2, 0.8, 0.2, 1),
-                    rx 0.4s;
+        transition:
+          x 0.4s cubic-bezier(0.2, 0.8, 0.2, 1),
+          y 0.4s cubic-bezier(0.2, 0.8, 0.2, 1),
+          width 0.4s cubic-bezier(0.2, 0.8, 0.2, 1),
+          height 0.4s cubic-bezier(0.2, 0.8, 0.2, 1),
+          rx 0.4s;
         stroke: var(--primary);
         stroke-width: 3;
         fill: none;
@@ -191,7 +248,7 @@
         border-radius: 24px;
         width: 320px;
         max-width: 90vw;
-        box-shadow: 0 20px 50px rgba(0,0,0,0.3);
+        box-shadow: 0 20px 50px rgba(0, 0, 0, 0.3);
         transition: all 0.4s cubic-bezier(0.2, 0.8, 0.2, 1);
         z-index: 10001;
         border: 1px solid var(--border-color);
@@ -281,34 +338,97 @@
         align-items: center;
         justify-content: space-between;
         gap: 15px;
-        box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
         z-index: 900;
         transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
         width: 90%;
         max-width: 400px;
       }
-      .bulk-bar.visible { transform: translateX(-50%) translateY(0); }
-      .bulk-count { font-weight: 800; font-size: 16px; color: var(--primary); white-space: nowrap; }
-      .bulk-actions { display: flex; gap: 8px; }
-      
+      .bulk-bar.visible {
+        transform: translateX(-50%) translateY(0);
+      }
+      .bulk-count {
+        font-weight: 800;
+        font-size: 16px;
+        color: var(--primary);
+        white-space: nowrap;
+      }
+      .bulk-actions {
+        display: flex;
+        gap: 8px;
+      }
+
       .select-checkbox {
-        position: absolute; top: 10px; left: 10px; width: 24px; height: 24px;
-        border-radius: 50%; border: 2px solid var(--text-sub); background: var(--surface-1);
-        z-index: 20; display: none; align-items: center; justify-content: center;
+        position: absolute;
+        top: 10px;
+        left: 10px;
+        width: 24px;
+        height: 24px;
+        border-radius: 50%;
+        border: 2px solid var(--text-sub);
+        background: var(--surface-1);
+        z-index: 20;
+        display: none;
+        align-items: center;
+        justify-content: center;
         transition: transform 0.2s;
       }
-      .card.select-mode .select-checkbox, .list-item-wrapper.select-mode .select-checkbox { display: flex; }
-      .card.selected, .list-item-wrapper.selected .list-item { border-color: var(--primary); background: var(--surface-2); }
-      .card.selected .select-checkbox, .list-item-wrapper.selected .select-checkbox {
-        background: var(--primary); border-color: var(--primary); color: white;
+      .card.select-mode .select-checkbox,
+      .list-item-wrapper.select-mode .select-checkbox {
+        display: flex;
+      }
+      .card.selected,
+      .list-item-wrapper.selected .list-item {
+        border-color: var(--primary);
+        background: var(--surface-2);
+      }
+      .card.selected .select-checkbox,
+      .list-item-wrapper.selected .select-checkbox {
+        background: var(--primary);
+        border-color: var(--primary);
+        color: white;
       }
     </style>
-  </head>
+    <script type="module" crossorigin src="/assets/index-BmGu2LOk.js"></script>
+    <link rel="modulepreload" crossorigin href="/assets/vendor-supabase-GG-Sp6Hl.js">
+    <link rel="modulepreload" crossorigin href="/assets/vendor-confetti-oQXWb4Lk.js">
+    <link rel="modulepreload" crossorigin href="/assets/vendor-charts-IK6Vv9H5.js">
+    <link rel="stylesheet" crossorigin href="/assets/index-Cc2fZ-KO.css">
+  <link rel="manifest" href="/manifest.webmanifest"></head>
   <body>
     <script>
-      window.onerror = function(msg, url, line, col, error) {
+      window.onerror = function (msg, url, line, col, error) {
         console.error("Global Error (Inline):", msg, url, line, error);
       };
+
+      // Глобальный перехватчик для починки сломанных изображений (например, аватара в хедере)
+      window.addEventListener(
+        "error",
+        function (event) {
+          var target = event.target;
+          if (target && target.tagName === "IMG") {
+            // Если картинка в хедере сломалась (например, нет аватара), заменяем на лого
+            if (
+              target.closest("header") ||
+              target.id === "header-avatar" ||
+              target.classList.contains("header-logo")
+            ) {
+              if (target.dataset.fallback) return;
+              target.dataset.fallback = "true";
+              // Ставим логотип приложения
+              target.src = "/app-logo.svg";
+            }
+            // Если аватар в списке лидеров сломался, ставим заглушку
+            else if (target.closest(".lb-avatar")) {
+              if (target.dataset.fallback) return;
+              target.dataset.fallback = "true";
+              event.stopPropagation(); // Отменяем inline-обработчик, который скрывает картинку
+              target.src = "/app-logo.svg";
+            }
+          }
+        },
+        true,
+      ); // useCapture=true обязательно, так как событие error не всплывает
     </script>
 
     <!-- Preloader with Logo -->
@@ -321,37 +441,36 @@
 
     <!-- Main App Wrapper -->
     <div id="app-container">
-    
-    <!-- Exit Focus Mode Button -->
-    <button id="exit-focus-btn" class="btn" data-action="toggle-focus">✕ Выйти из фокуса</button>
+      <!-- Exit Focus Mode Button -->
+      <button id="exit-focus-btn" class="btn" data-action="toggle-focus">✕ Выйти из фокуса</button>
 
-    <!-- Toast Notifications -->
-    <div id="toast-container"></div>
+      <!-- Toast Notifications -->
+      <div id="toast-container" role="status" aria-live="polite" aria-atomic="true"></div>
 
-    <!-- Offline Indicator -->
-    <div id="offline-indicator" style="z-index: 21005;">
-      <span>📡</span> <span>Вы офлайн</span>
-    </div>
-
-    <!-- Critical Error Overlay -->
-    <div id="error-overlay">
-      <div>
-        <h2>Ошибка Supabase</h2>
-        <p id="error-msg"></p>
-        <button class="btn" data-action="reload">Обновить</button>
+      <!-- Offline Indicator -->
+      <div id="offline-indicator" style="z-index: 21005">
+        <span>📡</span> <span>Вы офлайн</span>
       </div>
+
+      <!-- Critical Error Overlay -->
+      <div id="error-overlay">
+        <div>
+          <h2>Ошибка Supabase</h2>
+          <p id="error-msg"></p>
+          <button class="btn" data-action="reload">Обновить</button>
+        </div>
+      </div>
+
+      <!-- Main Header (Injected via component_loader.ts) -->
+
+      <!-- Main Content Area -->
+      <main id="main-content">
+        <!-- Toolbar (Injected via component_loader.ts) -->
+
+        <div id="vocabulary-grid" class="grid"></div>
+      </main>
     </div>
-
-    <!-- Main Header (Injected via component_loader.ts) -->
-
-    <!-- Main Content Area -->
-    <main id="main-content">
-
-      <!-- Toolbar (Injected via component_loader.ts) -->
-
-      <div id="vocabulary-grid" class="grid"></div>
-    </main>
-    </div> <!-- End of #app-container -->
+    <!-- End of #app-container -->
 
     <!-- Partials, Modals, and Overlays are injected here via component_loader.ts -->
 
@@ -362,6 +481,5 @@
     <label for="import-file" class="visually-hidden">Импорт данных из файла</label>
     <input type="file" id="import-file" name="import-file" style="display: none" />
 
-    <script type="module" src="/src/app.ts"></script>
   </body>
 </html>

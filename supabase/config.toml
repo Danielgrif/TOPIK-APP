@@ -1,4 +1,0 @@
-project_id = "gscnfituczfkrdeanzsw"
-
-[functions.regenerate-image]
-verify_jwt = false
