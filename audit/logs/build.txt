@@ -1,0 +1,5 @@
+﻿
+> topik-ii-master-pro@1.0.0 build
+> tsc && vite build
+
+src/app.ts(149,1): error TS6133: 'setSyncState' is declared but its value is never read.

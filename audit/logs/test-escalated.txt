@@ -1,0 +1,13 @@
+﻿
+ RUN  v4.1.0 C:/Users/demir/OneDrive/Рабочий стол/TOPIK APP
+
+ ✓ src/core/scheduler.test.ts (12 tests) 30ms
+ ✓ src/core/session.test.ts (6 tests) 19ms
+ ✓ src/core/stats.test.ts (9 tests) 30ms
+ ✓ src/core/db.test.ts (2 tests) 17ms
+
+ Test Files  4 passed (4)
+      Tests  29 passed (29)
+   Start at  12:25:26
+   Duration  10.83s (transform 4.15s, setup 1.16s, import 3.37s, tests 96ms, environment 2ms)
+

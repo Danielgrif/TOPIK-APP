@@ -6,7 +6,7 @@ import { DB_TABLES, LS_KEYS } from "./constants.ts";
 /**
  * Updates the visual sync state in the UI.
  */
-const setSyncState = (status: "syncing" | "success" | "error" | "offline") => {
+export const setSyncState = (status: "syncing" | "success" | "error" | "offline") => {
   const el = document.getElementById("sync-status");
   if (!el) return;
   el.className = `sync-status ${status}`;

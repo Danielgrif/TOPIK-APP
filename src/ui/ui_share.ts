@@ -1,6 +1,7 @@
 import { state } from "../core/state.ts";
 import { showToast } from "../utils/utils.ts";
-import { calculateOverallAccuracy, getXPForNextLevel } from "../core/stats.ts";
+import { calculateOverallAccuracy } from "../core/stats.ts";
+import { getXPForNextLevel } from "../core/xp.ts";
 
 const THEMES: Record<string, string[]> = {
   purple: ["#6c5ce7", "#a29bfe"],

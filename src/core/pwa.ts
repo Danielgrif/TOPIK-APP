@@ -74,8 +74,10 @@ export function initPWA(): void {
     let refreshing = false;
     navigator.serviceWorker.addEventListener("controllerchange", () => {
       if (refreshing) return;
-      window.location.reload();
       refreshing = true;
+      // Автоматическая перезагрузка при смене контроллера SW отключена,
+      // чтобы избежать неожиданной перезагрузки страницы при первом запуске.
+      // Если нужно, пользователь может обновить страницу вручную.
     });
 
     navigator.serviceWorker.addEventListener("message", (event: MessageEvent) => {

@@ -55,10 +55,10 @@ function validateUserStats(stats: unknown): boolean {
  * Schedules a save of the application state to localStorage and Supabase (debounced).
  * @param delay The delay in milliseconds before saving (default: 300ms).
  */
-export function scheduleSaveState(delay: number = 300) {
+export function scheduleSaveState(delay: number = 300): void {
   if (_saveTimer) clearTimeout(_saveTimer);
   _saveTimer = window.setTimeout(() => {
-    immediateSaveState();
+    saveAllState();
     _saveTimer = null;
     syncGlobalStats();
   }, delay);
@@ -68,45 +68,14 @@ export function scheduleSaveState(delay: number = 300) {
  * Immediately saves the current application state to localStorage.
  * Also performs validation before saving.
  */
-export function immediateSaveState() {
+export function immediateSaveState(): void {
   try {
     // Валидация перед сохранением, чтобы не записать мусор
     if (!validateUserStats(state.userStats)) {
       console.warn("⚠️ State validation failed. Aborting save to protect localStorage.");
       return;
     }
-
-    localStorage.setItem(LS_KEYS.DB_VERSION, String(CURRENT_DB_VERSION));
-    localStorage.setItem(LS_KEYS.USER_STATS, JSON.stringify(state.userStats));
-    localStorage.setItem(LS_KEYS.LEARNED, JSON.stringify([...state.learned]));
-    localStorage.setItem(LS_KEYS.MISTAKES, JSON.stringify([...state.mistakes]));
-    localStorage.setItem(LS_KEYS.FAVORITES, JSON.stringify([...state.favorites]));
-    localStorage.setItem(LS_KEYS.WORD_HISTORY, JSON.stringify(state.wordHistory));
-    localStorage.setItem(LS_KEYS.STREAK, JSON.stringify(state.streak));
-    localStorage.setItem(LS_KEYS.SESSIONS, JSON.stringify(state.sessions));
-    localStorage.setItem(LS_KEYS.ACHIEVEMENTS, JSON.stringify(state.achievements));
-    localStorage.setItem(LS_KEYS.DIRTY_IDS, JSON.stringify([...state.dirtyWordIds]));
-    localStorage.setItem(LS_KEYS.CUSTOM_WORDS, JSON.stringify(state.customWords));
-    localStorage.setItem(LS_KEYS.WORD_REQUESTS, JSON.stringify(state.wordRequests));
-    localStorage.setItem(LS_KEYS.FAVORITE_QUOTES, JSON.stringify(state.favoriteQuotes));
-    localStorage.setItem(LS_KEYS.DAILY_CHALLENGE, JSON.stringify(state.dailyChallenge));
-    localStorage.setItem(LS_KEYS.TRASH_RETENTION, String(state.trashRetentionDays));
-    localStorage.setItem(LS_KEYS.PURCHASED_ITEMS, JSON.stringify(state.purchasedItems));
-    localStorage.setItem(LS_KEYS.TTS_VOLUME, String(state.ttsVolume));
-    localStorage.setItem(LS_KEYS.VOCAB_VERSION, VOCABULARY_CACHE_VERSION);
-
-    // IndexedDB — основной источник словаря (нет 5MB-лимита).
-    // Версия пишется рядом, чтобы при загрузке можно было выбрать свежую копию.
-    if (state.dataStore && state.dataStore.length > 0) {
-      void setIdbItem(LS_KEYS.VOCAB_CACHE, state.dataStore);
-      void setIdbItem(LS_KEYS.VOCAB_VERSION, VOCABULARY_CACHE_VERSION);
-      // Устаревший localStorage-кэш оставляем только как fallback для старых сессий.
-      try {
-        localStorage.setItem(LS_KEYS.VOCAB_CACHE, JSON.stringify(state.dataStore));
-      } catch {
-        // QuotaExceededError: IndexedDB уже содержит данные
-      }
-    }
+    saveAllState();
   } catch (e: unknown) {
     console.error("Save error:", e);
     const error = e as { name?: string };
@@ -764,4 +733,180 @@ export async function isDatabaseActive(timeout: number = 5000): Promise<boolean>
   } catch {
     return false;
   }
+}
+
+// ============================================================================
+// Сохранение по доменам (разделение God Object saveState)
+// Каждая функция отвечает за свою зону ответственности.
+// ============================================================================
+
+/** Сохранение пользовательской статистики (XP, уровень, монеты, лига, стили, достижения) */
+export function saveUserStats(): void {
+  try {
+    if (!validateUserStats(state.userStats)) {
+      console.warn("⚠️ State validation failed. Aborting userStats save.");
+      return;
+    }
+    localStorage.setItem(LS_KEYS.USER_STATS, JSON.stringify(state.userStats));
+  } catch (e) {
+    console.error("Save userStats error:", e);
+  }
+}
+
+/** Сохранение множеств: learned, mistakes, favorites */
+export function saveWordSets(): void {
+  try {
+    localStorage.setItem(LS_KEYS.LEARNED, JSON.stringify([...state.learned]));
+    localStorage.setItem(LS_KEYS.MISTAKES, JSON.stringify([...state.mistakes]));
+    localStorage.setItem(LS_KEYS.FAVORITES, JSON.stringify([...state.favorites]));
+  } catch (e) {
+    console.error("Save wordSets error:", e);
+  }
+}
+
+/** Сохранение истории слов (wordHistory) */
+export function saveWordHistory(): void {
+  try {
+    localStorage.setItem(LS_KEYS.WORD_HISTORY, JSON.stringify(state.wordHistory));
+  } catch (e) {
+    console.error("Save wordHistory error:", e);
+  }
+}
+
+/** Сохранение сессий */
+export function saveSessions(): void {
+  try {
+    localStorage.setItem(LS_KEYS.SESSIONS, JSON.stringify(state.sessions));
+  } catch (e) {
+    console.error("Save sessions error:", e);
+  }
+}
+
+/** Сохранение achievements */
+export function saveAchievements(): void {
+  try {
+    localStorage.setItem(LS_KEYS.ACHIEVEMENTS, JSON.stringify(state.achievements));
+  } catch (e) {
+    console.error("Save achievements error:", e);
+  }
+}
+
+/** Сохранение dirtyWordIds */
+export function saveDirtyWordIds(): void {
+  try {
+    localStorage.setItem(LS_KEYS.DIRTY_IDS, JSON.stringify([...state.dirtyWordIds]));
+  } catch (e) {
+    console.error("Save dirtyWordIds error:", e);
+  }
+}
+
+/** Сохранение customWords */
+export function saveCustomWords(): void {
+  try {
+    localStorage.setItem(LS_KEYS.CUSTOM_WORDS, JSON.stringify(state.customWords));
+  } catch (e) {
+    console.error("Save customWords error:", e);
+  }
+}
+
+/** Сохранение wordRequests */
+export function saveWordRequests(): void {
+  try {
+    localStorage.setItem(LS_KEYS.WORD_REQUESTS, JSON.stringify(state.wordRequests));
+  } catch (e) {
+    console.error("Save wordRequests error:", e);
+  }
+}
+
+/** Сохранение favoriteQuotes */
+export function saveFavoriteQuotes(): void {
+  try {
+    localStorage.setItem(LS_KEYS.FAVORITE_QUOTES, JSON.stringify(state.favoriteQuotes));
+  } catch (e) {
+    console.error("Save favoriteQuotes error:", e);
+  }
+}
+
+/** Сохранение dailyChallenge */
+export function saveDailyChallenge(): void {
+  try {
+    localStorage.setItem(LS_KEYS.DAILY_CHALLENGE, JSON.stringify(state.dailyChallenge));
+  } catch (e) {
+    console.error("Save dailyChallenge error:", e);
+  }
+}
+
+/** Сохранение trashRetentionDays */
+export function saveTrashRetentionDays(): void {
+  try {
+    localStorage.setItem(LS_KEYS.TRASH_RETENTION, String(state.trashRetentionDays));
+  } catch (e) {
+    console.error("Save trashRetentionDays error:", e);
+  }
+}
+
+/** Сохранение purchasedItems */
+export function savePurchasedItems(): void {
+  try {
+    localStorage.setItem(LS_KEYS.PURCHASED_ITEMS, JSON.stringify(state.purchasedItems));
+  } catch (e) {
+    console.error("Save purchasedItems error:", e);
+  }
+}
+
+/** Сохранение ttsVolume */
+export function saveTtsVolume(): void {
+  try {
+    localStorage.setItem(LS_KEYS.TTS_VOLUME, String(state.ttsVolume));
+  } catch (e) {
+    console.error("Save ttsVolume error:", e);
+  }
+}
+
+/** Сохранение VOCAB_VERSION */
+export function saveVocabVersion(): void {
+  try {
+    localStorage.setItem(LS_KEYS.VOCAB_VERSION, String(CURRENT_DB_VERSION));
+  } catch (e) {
+    console.error("Save vocabVersion error:", e);
+  }
+}
+
+/** Сохранение VOCAB_CACHE (IndexedDB + localStorage fallback) */
+export function saveVocabCache(): void {
+  try {
+    if (state.dataStore && state.dataStore.length > 0) {
+      void setIdbItem(LS_KEYS.VOCAB_CACHE, state.dataStore);
+      void setIdbItem(LS_KEYS.VOCAB_VERSION, VOCABULARY_CACHE_VERSION);
+      try {
+        localStorage.setItem(LS_KEYS.VOCAB_CACHE, JSON.stringify(state.dataStore));
+      } catch {
+        // QuotaExceededError: IndexedDB уже содержит данные
+      }
+    }
+  } catch (e) {
+    console.error("Save vocabCache error:", e);
+  }
+}
+
+/**
+ * Сохранение всего состояния (все домены).
+ * Вызывается при необходимости полного сохранения.
+ */
+export function saveAllState(): void {
+  saveUserStats();
+  saveWordSets();
+  saveWordHistory();
+  saveSessions();
+  saveAchievements();
+  saveDirtyWordIds();
+  saveCustomWords();
+  saveWordRequests();
+  saveFavoriteQuotes();
+  saveDailyChallenge();
+  saveTrashRetentionDays();
+  savePurchasedItems();
+  saveTtsVolume();
+  saveVocabVersion();
+  saveVocabCache();
 }

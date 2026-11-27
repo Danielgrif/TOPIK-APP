@@ -1,5 +1,0 @@
-# Основные зависимости для утилит и скриптов обслуживания
-# после миграции на Edge Functions
-supabase
-python-dotenv
-google-genai

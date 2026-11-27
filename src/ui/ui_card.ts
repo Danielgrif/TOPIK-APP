@@ -9,6 +9,7 @@ import { showToast, promiseWithTimeout } from "../utils/utils.ts";
 import { openModal, closeModal } from "./ui_modal.ts";
 import { ensureSessionStarted } from "../core/session.ts";
 import { DB_BUCKETS } from "../core/constants.ts";
+import { prefetchNextImages, prefetchNextAudio } from "./card-prefetch.ts";
 
 // --- Virtual Scroll Constants (for List View) ---
 const ITEM_HEIGHT_LIST = 82;
@@ -334,8 +335,8 @@ function renderVisibleGridItems(params: {
 
   content.replaceChildren(...newNodes);
 
-  prefetchNextImages(endIndex, 4);
-  prefetchNextAudio(endIndex, 2);
+  prefetchNextImages(currentFilteredData, endIndex);
+  prefetchNextAudio(currentFilteredData, endIndex);
 }
 
 function initVirtualScroll(grid: HTMLElement) {
@@ -396,8 +397,8 @@ function renderVisibleListItems(params: { target: HTMLElement; sourceData: Word[
   });
   content.replaceChildren(...newNodes);
 
-  prefetchNextImages(endIndex, 4);
-  prefetchNextAudio(endIndex, 2);
+  prefetchNextImages(currentFilteredData, endIndex);
+  prefetchNextAudio(currentFilteredData, endIndex);
 }
 
 export function setupLongPress(el: HTMLElement, itemId: string | number) {
@@ -435,38 +436,6 @@ export function setupLongPress(el: HTMLElement, itemId: string | number) {
   el.addEventListener("mousedown", start);
   el.addEventListener("mouseup", clear);
   el.addEventListener("mouseleave", clear);
-}
-
-function prefetchNextImages(startIndex: number, count: number = 5) {
-  const data = currentFilteredData;
-  for (let i = 0; i < count; i++) {
-    const idx = startIndex + i;
-    if (idx < data.length) {
-      const item = data[idx];
-      if (item.image) {
-        const img = new Image();
-        img.src = item.image;
-      }
-    }
-  }
-}
-
-function prefetchNextAudio(startIndex: number, count: number = 3) {
-  const data = currentFilteredData;
-  for (let i = 0; i < count; i++) {
-    const idx = startIndex + i;
-    if (idx < data.length) {
-      const item = data[idx];
-      let url = item.audio_url;
-      if (state.currentVoice === "male" && item.audio_male) url = item.audio_male;
-
-      if (url) {
-        const audio = new Audio();
-        audio.src = url;
-        audio.preload = "metadata";
-      }
-    }
-  }
 }
 
 export async function openImagePicker(item: Word, btn: HTMLElement) {

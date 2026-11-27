@@ -1,0 +1,91 @@
+﻿
+ RUN  v4.1.0 C:/Users/demir/OneDrive/Рабочий стол/TOPIK APP
+      Coverage enabled with v8
+
+ ✓ src/core/scheduler.test.ts (12 tests) 34ms
+ ✓ src/core/session.test.ts (6 tests) 20ms
+ ✓ src/core/stats.test.ts (9 tests) 62ms
+ ✓ src/core/db.test.ts (2 tests) 24ms
+
+ Test Files  4 passed (4)
+      Tests  29 passed (29)
+   Start at  12:26:45
+   Duration  11.25s (transform 2.51s, setup 654ms, import 2.57s, tests 140ms, environment 3ms)
+
+ % Coverage report from v8
+-------------------|---------|----------|---------|---------|-------------------
+File               | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s 
+-------------------|---------|----------|---------|---------|-------------------
+All files          |    1.87 |     2.05 |    1.15 |    2.03 |                   
+ src               |       0 |        0 |       0 |       0 |                   
+  app.ts           |       0 |        0 |       0 |       0 | 2-1646            
+  sw.ts            |       0 |        0 |       0 |       0 | 21-206            
+  types.d.ts       |       0 |        0 |       0 |       0 |                   
+ src/core          |    7.42 |     7.84 |    4.68 |    8.04 |                   
+  associations.ts  |       0 |        0 |       0 |       0 | 5-84              
+  auth.ts          |       0 |        0 |       0 |       0 | 20-905            
+  auth_service.ts  |       0 |        0 |       0 |       0 | 5-105             
+  backup.ts        |   34.61 |       25 |      50 |    37.5 | 27-28,35-36,41-59 
+  ...tions_data.ts |       0 |      100 |       0 |       0 | 9-16              
+  ...sing_words.ts |       0 |        0 |       0 |       0 | 6-42              
+  constants.ts     |     100 |      100 |     100 |     100 |                   
+  db.ts            |       0 |        0 |       0 |       0 | 10-911            
+  env.ts           |       0 |        0 |     100 |       0 | 1-5               
+  network.ts       |       0 |        0 |       0 |       0 | 15-175            
+  pwa.ts           |       0 |        0 |       0 |       0 | 15-117            
+  renderer.ts      |       0 |        0 |       0 |       0 | 18-606            
+  scheduler.ts     |   70.88 |    66.66 |   66.66 |   72.22 | 44,114-153        
+  session.ts       |       0 |        0 |       0 |       0 | 6-153             
+  shop_data.ts     |       0 |      100 |     100 |       0 | 3-91              
+  speech.ts        |       0 |        0 |       0 |       0 | 32-295            
+  state.ts         |   51.05 |    47.33 |   46.15 |   59.25 | ...46,478-498,535 
+  stats.ts         |   10.51 |        9 |    6.74 |   11.13 | ...1340,1390-1475 
+  storage_idb.ts   |       0 |        0 |       0 |       0 | 6-75              
+  ...baseClient.ts |       0 |        0 |       0 |       0 | 10-260            
+  sync.ts          |       0 |        0 |       0 |       0 | 9-207             
+  ui_sync.ts       |       0 |        0 |       0 |       0 | 1-41              
+  ...w_bindings.ts |       0 |        0 |       0 |       0 | 48-135            
+  xp.ts            |     100 |      100 |     100 |     100 |                   
+ src/ui            |       0 |        0 |       0 |       0 |                   
+  BaseComponent.ts |       0 |        0 |       0 |       0 | 5-138             
+  ...ent_loader.ts |       0 |        0 |       0 |       0 | 45-105            
+  index.ts         |       0 |        0 |       0 |       0 |                   
+  keyboard.ts      |       0 |        0 |       0 |       0 | 9-231             
+  quiz.ts          |       0 |        0 |       0 |       0 | 20-1600           
+  ...des_config.ts |       0 |        0 |       0 |       0 | 39-359            
+  ...strategies.ts |       0 |        0 |       0 |       0 | 21-1108           
+  ui.ts            |       0 |        0 |       0 |       0 | 21-261            
+  ui_admin.ts      |       0 |        0 |       0 |       0 | 21-157            
+  ui_animations.ts |       0 |        0 |       0 |       0 | 5-87              
+  ui_bulk.ts       |       0 |        0 |       0 |       0 | 9-417             
+  ui_card.ts       |       0 |        0 |       0 |       0 | 14-827            
+  ...ollections.ts |       0 |        0 |       0 |       0 | 16-786            
+  ...stom_words.ts |       0 |        0 |       0 |       0 | 17-1136           
+  ui_data.ts       |       0 |        0 |       0 |       0 | 27-315            
+  ui_edit_word.ts  |       0 |        0 |       0 |       0 | 8-264             
+  ...d_requests.ts |       0 |        0 |       0 |       0 | 10-182            
+  ui_feedback.ts   |       0 |        0 |       0 |       0 | 21-361            
+  ui_filters.ts    |       0 |        0 |       0 |       0 | 6-624             
+  ui_grammar.ts    |       0 |        0 |       0 |       0 | 6-26              
+  ui_hanja.ts      |       0 |        0 |       0 |       0 | 7-48              
+  ...teractions.ts |       0 |        0 |       0 |       0 | 9-241             
+  ...eaderboard.ts |       0 |        0 |       0 |       0 | 14-319            
+  ui_listening.ts  |       0 |        0 |       0 |       0 | 10-294            
+  ui_mistakes.ts   |       0 |        0 |       0 |       0 | 9-184             
+  ui_modal.ts      |       0 |        0 |       0 |       0 | 8-232             
+  ui_onboarding.ts |       0 |        0 |       0 |       0 | 9-797             
+  ui_quotes.ts     |       0 |        0 |       0 |       0 | 9-54              
+  ui_reading.ts    |       0 |        0 |       0 |       0 | 10-161            
+  ui_retry.ts      |       0 |        0 |       0 |       0 | 18-147            
+  ui_review.ts     |       0 |        0 |       0 |       0 | 12-175            
+  ui_settings.ts   |       0 |        0 |       0 |       0 | 25-1114           
+  ui_share.ts      |       0 |        0 |       0 |       0 | 6-179             
+  ui_shop.ts       |       0 |        0 |       0 |       0 | 13-494            
+  ui_trash.ts      |       0 |        0 |       0 |       0 | 10-267            
+  ui_writing.ts    |       0 |        0 |       0 |       0 | 9-883             
+ src/utils         |       0 |        0 |       0 |       0 |                   
+  hangul.ts        |       0 |        0 |       0 |       0 | 2-295             
+  utils.ts         |       0 |        0 |       0 |       0 | 7-742             
+ src/workers       |       0 |        0 |       0 |       0 |                   
+  searchWorker.ts  |       0 |        0 |       0 |       0 | 7-29              
+-------------------|---------|----------|---------|---------|-------------------

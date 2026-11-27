@@ -3,6 +3,7 @@ import { showToast, playTone, showComboEffect } from "../utils/utils.ts";
 import { showLevelUpAnimation, showAchievementUnlocked } from "../ui/ui_animations.ts";
 import { Scheduler } from "./scheduler.ts";
 import { scheduleSaveState } from "./db.ts";
+import { getXPForNextLevel } from "./xp.ts";
 import confetti from "canvas-confetti";
 import { Chart, TooltipItem, ScriptableContext } from "chart.js";
 export const LEAGUES = [
@@ -15,20 +16,7 @@ export const LEAGUES = [
   "Grandmaster",
   "Challenger",
 ];
-export function getXPForNextLevel(lvl: number) {
-  // Было: 100 + lvl * 50 (Линейная)
-  // Стало: 100 * (lvl ^ 1.2) (Слегка экспоненциальная, сложнее на высоких уровнях)
-  // level = 0 давал порог 0 и бесконечный цикл в addXP — жёстко клампим минимум.
-  return Math.floor(100 * Math.pow(Math.max(1, lvl), 1.2));
-}
-export function getTotalXP(level: number, currentXP: number) {
-  let total = currentXP;
-  for (let i = 1; i < level; i++) {
-    total += getXPForNextLevel(i);
-  }
-  return total;
-}
-function getCurrentWeekId() {
+export function getCurrentWeekId() {
   const d = new Date();
   d.setHours(0, 0, 0, 0);
   d.setDate(d.getDate() + 4 - (d.getDay() || 7));

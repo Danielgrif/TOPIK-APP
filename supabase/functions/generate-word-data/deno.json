@@ -4,7 +4,6 @@
     "@supabase/supabase-js": "npm:@supabase/supabase-js@2",
     "@google/generative-ai": "npm:@google/generative-ai@0.22.0",
     "zod": "npm:zod@3",
-    "zod": "npm:zod@3.23.8",
     "imagescript": "https://deno.land/x/imagescript@1.2.15/mod.ts",
     "shared/": "../_shared/"
   }

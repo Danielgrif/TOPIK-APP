@@ -1,0 +1,14 @@
+﻿
+C:\Users\demir\OneDrive\Рабочий стол\TOPIK APP\src\app.ts
+  149:10  warning  'setSyncState' is defined but never used. Allowed unused vars must match /^_/u  @typescript-eslint/no-unused-vars
+
+C:\Users\demir\OneDrive\Рабочий стол\TOPIK APP\src\core\network.ts
+  104:11  warning  Unexpected console statement. Only these console methods are allowed: warn, error, info  no-console
+  177:2   error    Insert `⏎`                                                                               prettier/prettier
+
+C:\Users\demir\OneDrive\Рабочий стол\TOPIK APP\src\core\xp.ts
+  26:2  error  Insert `⏎`  prettier/prettier
+
+✖ 4 problems (2 errors, 2 warnings)
+  2 errors and 0 warnings potentially fixable with the `--fix` option.
+

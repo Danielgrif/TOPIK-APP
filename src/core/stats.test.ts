@@ -34,8 +34,8 @@ describe("getXPForNextLevel", () => {
   });
 });
 
-import { getXPForNextLevel, getTotalXP, addXP, checkWeeklyReset, LEAGUES } from "./stats.ts";
-
+import { addXP, checkWeeklyReset, LEAGUES } from "./stats.ts";
+import { getXPForNextLevel, getTotalXP } from "./xp.ts";
 describe("getTotalXP", () => {
   it("возвращает текущий XP для level=1", () => {
     expect(getTotalXP(1, 50)).toBe(50);

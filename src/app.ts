@@ -4,7 +4,6 @@ console.log("🚀 App starting...");
 import "./css/style.css";
 import { client } from "./core/supabaseClient.ts";
 import { state } from "./core/state.ts";
-import { syncGlobalStats } from "./core/sync.ts";
 import { initPWA } from "./core/pwa.ts";
 import { setupWindowBindings } from "./core/window_bindings.ts";
 import { injectComponents } from "./ui/component_loader.ts";
@@ -141,25 +140,8 @@ import type { Session } from "@supabase/supabase-js";
 import { collectionsState } from "./core/collections_data.ts";
 
 /**
- * Updates the visual sync state in the UI.
- * @param status The current synchronization status.
+ * Обновляет визуальное состояние подключения к БД.
  */
-const setSyncState = (status: "syncing" | "synced" | "error" | "offline") => {
-  const el = document.getElementById("sync-status");
-  if (!el) return;
-  el.className = `sync-status ${status}`;
-  const icons: Record<string, string> = {
-    syncing: "⏳",
-    synced: "✅",
-    error: "❌",
-    offline: "📡",
-  };
-  el.textContent = icons[status] || "";
-};
-
-let currentQuote: Quote | null = null;
-let welcomeAudioTimeout: number | null = null;
-
 function ensureErrorOverlay() {
   if (!document.getElementById("error-overlay")) {
     const div = document.createElement("div");
@@ -169,6 +151,8 @@ function ensureErrorOverlay() {
     }
   }
 }
+let welcomeAudioTimeout: number | null = null;
+let currentQuote: Quote | null = null;
 
 function performWelcomeClose() {
   cancelSpeech(); // FIX: Отменяем любые отложенные или текущие звуки
@@ -1102,74 +1086,15 @@ function showWelcomeScreen(user?: User) {
   }
 }
 
-function updateDbStatus(status: "active" | "waking" | "error") {
-  const el = document.getElementById("db-status-indicator");
-  if (!el) return;
-  el.classList.remove("active", "waking", "error");
-  el.classList.add(status);
-  if (status === "active") el.title = "🟢 База данных активна";
-  if (status === "waking") el.title = "🟡 Подключение к базе...";
-  if (status === "error") el.title = "🔴 Нет соединения с базой";
-}
+/**
+ * Обновляет визуальное состояние подключения к БД.
+ */
+import { updateDbStatus } from "./core/network.ts";
 
-function setupNetworkListeners() {
-  let indicator = document.getElementById("offline-indicator");
-  if (!indicator) {
-    indicator = document.createElement("div");
-    indicator.id = "offline-indicator";
-    indicator.textContent = "📡 Нет подключения к интернету";
-    document.body.appendChild(indicator);
-  }
-
-  const updateStatus = () => {
-    if (navigator.onLine) {
-      indicator?.classList.remove("visible");
-    } else {
-      indicator?.classList.add("visible");
-    }
-  };
-
-  window.addEventListener("online", () => {
-    updateStatus();
-    showToast("🌐 Соединение восстановлено");
-    setSyncState("syncing"); // Показываем, что пытаемся синхронизироваться
-    // Принудительно восстанавливаем Realtime соединение при появлении сети
-    client.realtime.connect();
-    updateDbStatus("waking");
-    isDatabaseActive(5000).then((active) => updateDbStatus(active ? "active" : "error"));
-    syncGlobalStats();
-    // Запускаем синхронизацию сохраненных заявок
-    import("./ui/ui_retry.ts").then((m) => m.syncOfflineRequests());
-  });
-  window.addEventListener("offline", () => {
-    updateStatus();
-    showToast("📡 Вы перешли в офлайн режим");
-    updateDbStatus("error");
-    setSyncState("offline");
-  });
-
-  // Слушаем изменения качества соединения (Network Information API)
-  // @ts-expect-error Navigator connection API is experimental
-  if (navigator.connection) {
-    // @ts-expect-error Navigator connection API is experimental
-    const conn = navigator.connection;
-    conn.addEventListener("change", () => {
-      // Если интернет стал хорошим (3g или 4g) и не включена экономия данных
-      if (!conn.saveData && ["3g", "4g"].includes(conn.effectiveType)) {
-        if (navigator.serviceWorker.controller) {
-          console.log("📶 Connection improved. Processing download queue...");
-          navigator.serviceWorker.controller.postMessage({
-            type: "PROCESS_DOWNLOAD_QUEUE",
-          });
-          showToast("📶 Интернет улучшился. Докачиваем файлы...");
-        }
-      }
-    });
-  }
-
-  // Initial check
-  updateStatus();
-}
+/**
+ * Инициализирует сетевые слушатели: онлайн/офлайн, качество соединения.
+ */
+import { setupNetworkListeners } from "./core/network.ts";
 
 function setupRealtimeUpdates() {
   const newWordsBuffer: Word[] = [];
